@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@monaco-editor/react": "^4.7.0",
+    "@supabase/supabase-js": "^2.97.0",
     "@vladmandic/face-api": "^1.7.15",
     "jspdf": "^4.2.0",
     "next": "16.1.6",

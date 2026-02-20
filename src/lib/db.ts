@@ -1,14 +1,28 @@
-import fs from 'fs/promises';
-import path from 'path';
-import crypto from 'crypto';
+/**
+ * Deep-Check · Database layer
+ * Backed by Supabase (schema: deepcheck)
+ * All server-side — never import this from client components.
+ */
 
-// ─── Paths ────────────────────────────────────────────────────────────────────
-const DATA_DIR        = path.join(process.cwd(), 'data');
-const DB_PATH         = path.join(DATA_DIR, 'assessments.json');
-const PROFILES_PATH   = path.join(DATA_DIR, 'enrollment_profiles.json');
-const APIKEYS_PATH    = path.join(DATA_DIR, 'api_keys.json');
+import { createClient } from '@supabase/supabase-js'
+import crypto from 'crypto'
 
-// ─── Assessment ───────────────────────────────────────────────────────────────
+// ─── Supabase client (server-side only) ───────────────────────────────────────
+
+const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!
+const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY
+    ?? process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+
+function getClient() {
+    if (!SUPABASE_URL || !SUPABASE_KEY) {
+        throw new Error('Missing Supabase env vars: NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY')
+    }
+    return createClient(SUPABASE_URL, SUPABASE_KEY, {
+        auth: { persistSession: false },
+    })
+}
+
+// ─── Types ────────────────────────────────────────────────────────────────────
 
 export interface Assessment {
     id: string
@@ -20,7 +34,7 @@ export interface Assessment {
     alerts: string[]
     evidence: { timestamp: string; image: string; reason: string }[]
     lastEvent: string
-    // Extended biometric fields
+    // Extended biometric
     livenessScore?: number
     aiRisk?: number
     keystrokeCount?: number
@@ -29,71 +43,26 @@ export interface Assessment {
     autoFlagged?: boolean
     // Enrollment comparison
     enrollmentProfileId?: string
-    identityMatchScore?: number   // 0-100: how well session matches enrolled profile
+    identityMatchScore?: number
     // Certificate
-    sessionHash?: string          // SHA-256 of session data
+    sessionHash?: string
     certificateIssued?: boolean
     // API integration
-    externalRef?: string          // ID from external platform (LMS, ATS)
+    externalRef?: string
     webhookDelivered?: boolean
 }
-
-export async function getAssessments(): Promise<Assessment[]> {
-    try {
-        const data = await fs.readFile(DB_PATH, 'utf-8')
-        return JSON.parse(data)
-    } catch {
-        return []
-    }
-}
-
-export async function saveAssessment(assessment: Assessment): Promise<void> {
-    const assessments = await getAssessments()
-    const index = assessments.findIndex(a => a.id === assessment.id)
-    if (index !== -1) {
-        assessments[index] = assessment
-    } else {
-        assessments.push(assessment)
-    }
-    await fs.mkdir(DATA_DIR, { recursive: true })
-    await fs.writeFile(DB_PATH, JSON.stringify(assessments, null, 2), 'utf-8')
-}
-
-export async function getAssessmentById(id: string): Promise<Assessment | null> {
-    const assessments = await getAssessments()
-    return assessments.find(a => a.id === id) ?? null
-}
-
-export async function initDb() {
-    await fs.mkdir(DATA_DIR, { recursive: true })
-    try { await fs.access(DB_PATH) } catch {
-        const initialData: Assessment[] = [
-            { id: '1', candidateName: 'Alex Rivera',   role: 'Senior React Dev',     date: '2026-02-18', score: 98, status: 'passed',  alerts: [], evidence: [], lastEvent: 'Session completed' },
-            { id: '2', candidateName: 'Jordan Smith',  role: 'Fullstack Engineer',   date: '2026-02-18', score: 94, status: 'passed',  alerts: [], evidence: [], lastEvent: 'Session completed' },
-            { id: '3', candidateName: 'Maria Garcia',  role: 'Backend Engineer',     date: '2026-02-17', score: 62, status: 'flagged', alerts: ['[14:30] Tab Switch Detected', '[14:35] Large Paste Detected'], evidence: [], lastEvent: 'Flagged for multiple violations' },
-        ]
-        await fs.writeFile(DB_PATH, JSON.stringify(initialData, null, 2), 'utf-8')
-    }
-}
-
-// ─── Enrollment Profiles ──────────────────────────────────────────────────────
 
 export type EnrollmentContext = 'prose_es' | 'prose_en' | 'code_python' | 'code_js' | 'code_general'
 
 export interface KeystrokeProfile {
-    // Global stats
     flightMean: number
     flightStd: number
     holdMean: number
     holdStd: number
-    // Digram pairs (key-to-key latencies for frequent combos)
     digrams: Record<string, { mean: number; std: number; count: number }>
-    // Entropy of flight-time histogram
     entropy: number
-    // WPM range observed during enrollment
     wpmMin: number
     wpmMax: number
-    // Keystroke count used for calibration
     sampleSize: number
 }
 
@@ -103,50 +72,180 @@ export interface EnrollmentProfile {
     candidateEmail: string
     context: EnrollmentContext
     createdAt: string
-    expiresAt: string          // Profiles expire after 90 days
+    expiresAt: string
     profile: KeystrokeProfile
-    enrollmentHash: string     // SHA-256 of the profile for tamper detection
+    enrollmentHash: string
 }
 
-async function getProfiles(): Promise<EnrollmentProfile[]> {
-    try {
-        const data = await fs.readFile(PROFILES_PATH, 'utf-8')
-        return JSON.parse(data)
-    } catch {
-        return []
+export interface ApiKey {
+    key: string
+    name: string
+    createdAt: string
+    lastUsed?: string
+    active: boolean
+    permissions: ('read' | 'write' | 'webhook')[]
+    webhookUrl?: string
+}
+
+// ─── Row ↔ Type mappers ───────────────────────────────────────────────────────
+
+function rowToAssessment(row: any): Assessment {
+    return {
+        id:                   row.id,
+        candidateName:        row.candidate_name,
+        role:                 row.role,
+        date:                 typeof row.date === 'string' ? row.date : new Date(row.date).toISOString().split('T')[0],
+        score:                row.score,
+        status:               row.status,
+        alerts:               Array.isArray(row.alerts) ? row.alerts : (row.alerts ?? []),
+        evidence:             Array.isArray(row.evidence) ? row.evidence : (row.evidence ?? []),
+        lastEvent:            row.last_event,
+        livenessScore:        row.liveness_score ?? undefined,
+        aiRisk:               row.ai_risk ?? undefined,
+        keystrokeCount:       row.keystroke_count ?? undefined,
+        tabSwitchCount:       row.tab_switch_count ?? undefined,
+        gazeEventCount:       row.gaze_event_count ?? undefined,
+        autoFlagged:          row.auto_flagged ?? undefined,
+        enrollmentProfileId:  row.enrollment_profile_id ?? undefined,
+        identityMatchScore:   row.identity_match_score ?? undefined,
+        sessionHash:          row.session_hash ?? undefined,
+        certificateIssued:    row.certificate_issued ?? undefined,
+        externalRef:          row.external_ref ?? undefined,
+        webhookDelivered:     row.webhook_delivered ?? undefined,
     }
 }
 
-async function saveProfiles(profiles: EnrollmentProfile[]): Promise<void> {
-    await fs.mkdir(DATA_DIR, { recursive: true })
-    await fs.writeFile(PROFILES_PATH, JSON.stringify(profiles, null, 2), 'utf-8')
+function assessmentToRow(a: Assessment) {
+    return {
+        id:                     a.id,
+        candidate_name:         a.candidateName,
+        role:                   a.role,
+        date:                   a.date,
+        score:                  a.score,
+        status:                 a.status,
+        alerts:                 a.alerts,
+        evidence:               a.evidence,
+        last_event:             a.lastEvent,
+        liveness_score:         a.livenessScore ?? null,
+        ai_risk:                a.aiRisk ?? null,
+        keystroke_count:        a.keystrokeCount ?? null,
+        tab_switch_count:       a.tabSwitchCount ?? null,
+        gaze_event_count:       a.gazeEventCount ?? null,
+        auto_flagged:           a.autoFlagged ?? null,
+        enrollment_profile_id:  a.enrollmentProfileId ?? null,
+        identity_match_score:   a.identityMatchScore ?? null,
+        session_hash:           a.sessionHash ?? null,
+        certificate_issued:     a.certificateIssued ?? null,
+        external_ref:           a.externalRef ?? null,
+        webhook_delivered:      a.webhookDelivered ?? null,
+    }
 }
 
-export async function saveEnrollmentProfile(profile: EnrollmentProfile): Promise<void> {
-    const profiles = await getProfiles()
-    const idx = profiles.findIndex(p => p.id === profile.id)
-    if (idx !== -1) profiles[idx] = profile
-    else profiles.push(profile)
-    await saveProfiles(profiles)
+function rowToProfile(row: any): EnrollmentProfile {
+    return {
+        id:               row.id,
+        candidateName:    row.candidate_name,
+        candidateEmail:   row.candidate_email,
+        context:          row.context as EnrollmentContext,
+        createdAt:        row.created_at,
+        expiresAt:        row.expires_at,
+        profile:          row.profile as KeystrokeProfile,
+        enrollmentHash:   row.enrollment_hash,
+    }
+}
+
+function profileToRow(ep: EnrollmentProfile) {
+    return {
+        id:               ep.id,
+        candidate_name:   ep.candidateName,
+        candidate_email:  ep.candidateEmail,
+        context:          ep.context,
+        created_at:       ep.createdAt,
+        expires_at:       ep.expiresAt,
+        profile:          ep.profile,
+        enrollment_hash:  ep.enrollmentHash,
+    }
+}
+
+function rowToApiKey(row: any): ApiKey {
+    return {
+        key:         row.key,
+        name:        row.name,
+        createdAt:   row.created_at,
+        lastUsed:    row.last_used ?? undefined,
+        active:      row.active,
+        permissions: row.permissions ?? [],
+        webhookUrl:  row.webhook_url ?? undefined,
+    }
+}
+
+// ─── Assessments ──────────────────────────────────────────────────────────────
+
+export async function getAssessments(): Promise<Assessment[]> {
+    const sb = getClient()
+    const { data, error } = await sb
+        .from('dc_assessments')
+        .select('*')
+        .order('created_at', { ascending: false })
+    if (error) { console.error('[db] getAssessments:', error.message); return [] }
+    return (data ?? []).map(rowToAssessment)
+}
+
+export async function getAssessmentById(id: string): Promise<Assessment | null> {
+    const sb = getClient()
+    const { data, error } = await sb
+        .from('dc_assessments')
+        .select('*')
+        .eq('id', id)
+        .single()
+    if (error) return null
+    return data ? rowToAssessment(data) : null
+}
+
+export async function saveAssessment(assessment: Assessment): Promise<void> {
+    const sb = getClient()
+    const row = assessmentToRow(assessment)
+    const { error } = await sb
+        .from('dc_assessments')
+        .upsert(row, { onConflict: 'id' })
+    if (error) throw new Error(`[db] saveAssessment: ${error.message}`)
+}
+
+// ─── Enrollment Profiles ──────────────────────────────────────────────────────
+
+export async function saveEnrollmentProfile(ep: EnrollmentProfile): Promise<void> {
+    const sb = getClient()
+    const { error } = await sb
+        .from('dc_enrollment_profiles')
+        .upsert(profileToRow(ep), { onConflict: 'id' })
+    if (error) throw new Error(`[db] saveEnrollmentProfile: ${error.message}`)
 }
 
 export async function getProfileById(id: string): Promise<EnrollmentProfile | null> {
-    const profiles = await getProfiles()
-    return profiles.find(p => p.id === id) ?? null
+    const sb = getClient()
+    const { data, error } = await sb
+        .from('dc_enrollment_profiles')
+        .select('*')
+        .eq('id', id)
+        .single()
+    if (error) return null
+    return data ? rowToProfile(data) : null
 }
 
 export async function getProfileByEmail(email: string): Promise<EnrollmentProfile | null> {
-    const profiles = await getProfiles()
-    // Return most recent non-expired profile for this email
-    const now = new Date()
-    return profiles
-        .filter(p => p.candidateEmail === email && new Date(p.expiresAt) > now)
-        .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0] ?? null
+    const sb = getClient()
+    const { data, error } = await sb
+        .from('dc_enrollment_profiles')
+        .select('*')
+        .eq('candidate_email', email)
+        .gt('expires_at', new Date().toISOString())
+        .order('created_at', { ascending: false })
+        .limit(1)
+    if (error) return null
+    return data && data.length > 0 ? rowToProfile(data[0]) : null
 }
 
 // ─── Identity Match Score ─────────────────────────────────────────────────────
-// Compares a live session keystroke profile against an enrolled baseline.
-// Returns 0-100 (100 = perfect match, <50 = likely different person)
 
 export function computeIdentityMatch(
     live: Partial<KeystrokeProfile>,
@@ -154,31 +253,22 @@ export function computeIdentityMatch(
 ): number {
     const scores: number[] = []
 
-    // Flight time mean similarity (within 30% = good)
     if (live.flightMean !== undefined && baseline.flightMean > 0) {
         const delta = Math.abs(live.flightMean - baseline.flightMean) / baseline.flightMean
         scores.push(Math.max(0, 1 - delta / 0.30) * 100)
     }
-
-    // Flight std similarity (within 40%)
     if (live.flightStd !== undefined && baseline.flightStd > 0) {
         const delta = Math.abs(live.flightStd - baseline.flightStd) / baseline.flightStd
         scores.push(Math.max(0, 1 - delta / 0.40) * 100)
     }
-
-    // Hold time mean similarity (within 35%)
     if (live.holdMean !== undefined && baseline.holdMean > 0) {
         const delta = Math.abs(live.holdMean - baseline.holdMean) / baseline.holdMean
         scores.push(Math.max(0, 1 - delta / 0.35) * 100)
     }
-
-    // Entropy similarity (within 0.5 bits)
     if (live.entropy !== undefined) {
         const delta = Math.abs(live.entropy - baseline.entropy)
         scores.push(Math.max(0, 1 - delta / 0.5) * 100)
     }
-
-    // Digram overlap score
     if (live.digrams && baseline.digrams) {
         const commonKeys = Object.keys(baseline.digrams).filter(k => live.digrams![k])
         if (commonKeys.length > 0) {
@@ -197,23 +287,24 @@ export function computeIdentityMatch(
     return Math.round(scores.reduce((a, b) => a + b, 0) / scores.length)
 }
 
-// ─── Session Hash (SHA-256) ───────────────────────────────────────────────────
-// Creates a tamper-evident fingerprint of the session data
+// ─── Session Hash ─────────────────────────────────────────────────────────────
 
-export function computeSessionHash(assessment: Omit<Assessment, 'sessionHash' | 'certificateIssued'>): string {
+export function computeSessionHash(
+    assessment: Omit<Assessment, 'sessionHash' | 'certificateIssued'>
+): string {
     const payload = JSON.stringify({
-        id: assessment.id,
-        candidateName: assessment.candidateName,
-        role: assessment.role,
-        date: assessment.date,
-        score: assessment.score,
-        status: assessment.status,
-        alertCount: assessment.alerts.length,
-        keystrokeCount: assessment.keystrokeCount,
-        aiRisk: assessment.aiRisk,
-        tabSwitchCount: assessment.tabSwitchCount,
-        gazeEventCount: assessment.gazeEventCount,
-        livenessScore: assessment.livenessScore,
+        id:                 assessment.id,
+        candidateName:      assessment.candidateName,
+        role:               assessment.role,
+        date:               assessment.date,
+        score:              assessment.score,
+        status:             assessment.status,
+        alertCount:         assessment.alerts.length,
+        keystrokeCount:     assessment.keystrokeCount,
+        aiRisk:             assessment.aiRisk,
+        tabSwitchCount:     assessment.tabSwitchCount,
+        gazeEventCount:     assessment.gazeEventCount,
+        livenessScore:      assessment.livenessScore,
         identityMatchScore: assessment.identityMatchScore,
     })
     return crypto.createHash('sha256').update(payload).digest('hex')
@@ -221,52 +312,60 @@ export function computeSessionHash(assessment: Omit<Assessment, 'sessionHash' | 
 
 // ─── API Keys ─────────────────────────────────────────────────────────────────
 
-export interface ApiKey {
-    key: string          // dc_live_xxxxx
-    name: string         // e.g. "Moodle LMS Integration"
-    createdAt: string
-    lastUsed?: string
-    active: boolean
-    permissions: ('read' | 'write' | 'webhook')[]
-    webhookUrl?: string  // Optional webhook endpoint for this key
-}
-
-async function getApiKeys(): Promise<ApiKey[]> {
-    try {
-        const data = await fs.readFile(APIKEYS_PATH, 'utf-8')
-        return JSON.parse(data)
-    } catch {
-        return []
-    }
-}
-
 export async function validateApiKey(key: string): Promise<ApiKey | null> {
-    const keys = await getApiKeys()
-    const found = keys.find(k => k.key === key && k.active)
-    if (found) {
-        // Update lastUsed
-        found.lastUsed = new Date().toISOString()
-        await fs.writeFile(APIKEYS_PATH, JSON.stringify(keys, null, 2), 'utf-8')
-    }
-    return found ?? null
+    const sb = getClient()
+    const { data, error } = await sb
+        .from('dc_api_keys')
+        .select('*')
+        .eq('key', key)
+        .eq('active', true)
+        .single()
+    if (error || !data) return null
+
+    // Update last_used (fire and forget)
+    sb.from('dc_api_keys').update({ last_used: new Date().toISOString() }).eq('key', key)
+
+    return rowToApiKey(data)
 }
 
-export async function createApiKey(name: string, permissions: ApiKey['permissions'], webhookUrl?: string): Promise<ApiKey> {
-    const keys = await getApiKeys()
+export async function createApiKey(
+    name: string,
+    permissions: ApiKey['permissions'],
+    webhookUrl?: string
+): Promise<ApiKey> {
+    const sb = getClient()
     const newKey: ApiKey = {
-        key: `dc_live_${crypto.randomBytes(24).toString('hex')}`,
+        key:         `dc_live_${crypto.randomBytes(24).toString('hex')}`,
         name,
-        createdAt: new Date().toISOString(),
-        active: true,
+        createdAt:   new Date().toISOString(),
+        active:      true,
         permissions,
         webhookUrl,
     }
-    keys.push(newKey)
-    await fs.mkdir(DATA_DIR, { recursive: true })
-    await fs.writeFile(APIKEYS_PATH, JSON.stringify(keys, null, 2), 'utf-8')
+    const { error } = await sb.from('dc_api_keys').insert({
+        key:         newKey.key,
+        name:        newKey.name,
+        created_at:  newKey.createdAt,
+        active:      newKey.active,
+        permissions: newKey.permissions,
+        webhook_url: newKey.webhookUrl ?? null,
+    })
+    if (error) throw new Error(`[db] createApiKey: ${error.message}`)
     return newKey
 }
 
 export async function getApiKeysList(): Promise<ApiKey[]> {
-    return getApiKeys()
+    const sb = getClient()
+    const { data, error } = await sb
+        .from('dc_api_keys')
+        .select('*')
+        .order('created_at', { ascending: false })
+    if (error) return []
+    return (data ?? []).map(rowToApiKey)
+}
+
+// ─── initDb (no-op — schema managed via migrations) ──────────────────────────
+
+export async function initDb(): Promise<void> {
+    // Tables are managed by Supabase migrations. Nothing to do here.
 }

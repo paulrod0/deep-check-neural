@@ -52,7 +52,11 @@ export async function POST(req: NextRequest) {
             expiresAt: ep.expiresAt,
             enrollmentHash,
         })
-    } catch (e) {
-        return NextResponse.json({ success: false, error: 'Server error' }, { status: 500 })
+    } catch (e: any) {
+        console.error('[/api/enrollment] Error:', e?.message ?? e)
+        return NextResponse.json(
+            { success: false, error: e?.message ?? 'Error interno del servidor' },
+            { status: 500 }
+        )
     }
 }
