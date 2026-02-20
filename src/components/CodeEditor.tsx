@@ -74,6 +74,14 @@ const IGNORED_KEYS = new Set([
     'Dead',
 ])
 
+// Keys that are NOT counted in the burst character window.
+// Enter causes Monaco to auto-insert indentation (false content injection) and
+// is naturally repeated when navigating across lines — it should not count toward
+// the "inhuman burst" threshold, which is designed to detect copy-injection.
+const BURST_EXCLUDED_KEYS = new Set([
+    'Enter', 'Backspace', 'Delete', 'Tab',
+])
+
 const isCommandKeystroke = (e: KeyboardEvent): boolean =>
     e.ctrlKey || e.metaKey || e.altKey
 
@@ -348,6 +356,8 @@ export default function CodeEditor({ onBiometricEvent, language = 'typescript' }
     const lastBurstRef         = useRef<number>(0)
     const lastContentLenRef    = useRef<number>(0)
     const lastKeystrokeTimeRef = useRef<number>(0)
+    // Track last Enter press time to suppress auto-indentation false positives
+    const lastEnterTimeRef     = useRef<number>(0)
     // Backspace correction tracking
     const backspaceRecordsRef  = useRef<BackspaceRecord[]>([])
     const lastCharKeyRef       = useRef<{ key: string; releaseTime: number } | null>(null)
@@ -364,20 +374,33 @@ export default function CodeEditor({ onBiometricEvent, language = 'typescript' }
         if (!domNode) return
 
         // ── Content injection detection ───────────────────────────────────────
+        // Grace period logic:
+        //   - Normal typing: 1500ms since last keyup before flagging
+        //   - After Enter: 3000ms grace, because Monaco auto-inserts newline +
+        //     indentation characters (e.g. "    " for a function body) AFTER the
+        //     keyup event fires. This is NOT external injection.
+        //   - Minimum delta to flag: > 10 chars (small deltas = normal auto-indent)
         const contentPollInterval = setInterval(() => {
             const model = editor.getModel()
             if (!model) return
+            const now          = performance.now()
             const currentLen   = model.getValueLength()
             const prevLen      = lastContentLenRef.current
-            const timeSinceKey = performance.now() - lastKeystrokeTimeRef.current
+            const timeSinceKey = now - lastKeystrokeTimeRef.current
+            const timeSinceEnter = now - lastEnterTimeRef.current
 
-            if (currentLen > prevLen + 2 && timeSinceKey > 1500) {
+            // Suppress if Enter was pressed recently (auto-indent grace window)
+            const enterGrace = timeSinceEnter < 3000
+            // Suppress if any key was pressed recently
+            const keyGrace   = timeSinceKey < 1500
+
+            if (!enterGrace && !keyGrace && currentLen > prevLen + 10) {
                 const injected = currentLen - prevLen
                 onBiometricEvent?.({
                     type: 'content_injection',
                     length: injected,
                     detail: `+${injected} chars without typing`,
-                    timestamp: performance.now()
+                    timestamp: now
                 })
             }
             lastContentLenRef.current = currentLen
@@ -402,6 +425,11 @@ export default function CodeEditor({ onBiometricEvent, language = 'typescript' }
 
             const holdTime   = now - pressTime
             lastKeystrokeTimeRef.current = now
+
+            // Track Enter for auto-indentation grace window in content injection detector
+            if (e.key === 'Enter') {
+                lastEnterTimeRef.current = now
+            }
 
             const flightTime = lastReleaseTimeRef.current > 0
                 ? pressTime - lastReleaseTimeRef.current
@@ -452,8 +480,12 @@ export default function CodeEditor({ onBiometricEvent, language = 'typescript' }
                 allFlightsRef.current.push(flightTime)
             }
 
-            // ── Burst window — CHARACTER keys only ────────────────────────────
-            if (e.key !== 'Backspace') {
+            // ── Burst window — printable character keys only ──────────────────
+            // Enter, Backspace, Delete, Tab are excluded:
+            //   - Enter causes Monaco to auto-insert indentation (false +N chars)
+            //   - Backspace/Delete are editing operations, not injection bursts
+            //   - Tab in code editors jumps indent levels, not text injection
+            if (!BURST_EXCLUDED_KEYS.has(e.key)) {
                 charWindowRef.current.push(now)
                 charWindowRef.current = charWindowRef.current.filter(t => now - t < 300)
             }
@@ -626,7 +658,10 @@ export default function CodeEditor({ onBiometricEvent, language = 'typescript' }
             }
 
             // ── Physically impossible gap (< 12ms between char keys) ─────────
-            if (flightTime > 0 && flightTime < 12) {
+            // Only flag for printable characters — Enter/Backspace/Delete are
+            // editing actions that can legitimately follow each other very quickly
+            // (e.g. pressing Enter twice rapidly for paragraph breaks).
+            if (flightTime > 0 && flightTime < 12 && !BURST_EXCLUDED_KEYS.has(e.key)) {
                 const sinceLast = now - lastBurstRef.current
                 if (sinceLast > 2000) {
                     lastBurstRef.current = now
