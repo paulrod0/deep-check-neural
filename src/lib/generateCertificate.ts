@@ -225,7 +225,12 @@ export async function generateCertificatePDF(data: CertificateData): Promise<voi
     doc.setTextColor(80, 90, 110)
     doc.text('Verify this certificate at:', PL, y)
     doc.setTextColor(0, 212, 127)
-    doc.text(`deep-check-two.vercel.app/verify/${data.id}`, PL + 38, y)
+    // Include hash in URL so verifier can auto-check integrity
+    const verifyUrl = `deep-check-two.vercel.app/verify/${data.id}?hash=${data.sessionHash}`
+    doc.text(verifyUrl.slice(0, 80), PL + 38, y)
+    if (verifyUrl.length > 80) {
+        doc.text(verifyUrl.slice(80), PL + 38, y + 4)
+    }
 
     // ── Footer ────────────────────────────────────────────────────────────────
     doc.setFillColor(0, 212, 127)

@@ -154,10 +154,71 @@ function ProgressRing({ pct, size = 80 }: { pct: number; size?: number }) {
     )
 }
 
+// ─── Purpose presets ─────────────────────────────────────────────────────────
+// Maps a use-case type to the best enrollment context + label
+
+const PURPOSE_PRESETS: {
+    id: string
+    icon: string
+    title: string
+    subtitle: string
+    suggestedContext: EnrollmentContext
+    badge?: string
+}[] = [
+    {
+        id: 'university_exam',
+        icon: '🎓',
+        title: 'Examen universitario',
+        subtitle: 'TFG, tesis, ensayo académico o prueba de evaluación continua.',
+        suggestedContext: 'prose_es',
+        badge: 'Educación',
+    },
+    {
+        id: 'certification_en',
+        icon: '📜',
+        title: 'Certificación profesional',
+        subtitle: 'AWS, Microsoft, CFA, PMP u otras certificaciones en inglés.',
+        suggestedContext: 'prose_en',
+        badge: 'Profesional',
+    },
+    {
+        id: 'tech_interview',
+        icon: '💻',
+        title: 'Entrevista técnica de programación',
+        subtitle: 'Live coding, resolución de algoritmos o prueba técnica de empresa.',
+        suggestedContext: 'code_js',
+        badge: 'Tech',
+    },
+    {
+        id: 'legal_doc',
+        icon: '⚖️',
+        title: 'Firma de documento legal',
+        subtitle: 'Contratos, testamentos, poderes notariales u operaciones bancarias.',
+        suggestedContext: 'prose_es',
+        badge: 'LegalTech',
+    },
+    {
+        id: 'journalism',
+        icon: '📰',
+        title: 'Artículo o contenido periodístico',
+        subtitle: 'Certifica que el artículo fue redactado manualmente por un humano.',
+        suggestedContext: 'prose_es',
+        badge: 'Periodismo',
+    },
+    {
+        id: 'custom',
+        icon: '⚙️',
+        title: 'Personalizado',
+        subtitle: 'Elige manualmente el contexto de escritura que mejor se adapte.',
+        suggestedContext: 'prose_es',
+    },
+]
+
 // ─── Main component ───────────────────────────────────────────────────────────
 
 export default function EnrollPage() {
-    const [step, setStep]             = useState<'info' | 'context' | 'typing' | 'done'>('info')
+    const [step, setStep]             = useState<'purpose' | 'info' | 'context' | 'typing' | 'done'>('purpose')
+    const [purposeId, setPurposeId]   = useState('')
     const [name, setName]             = useState('')
     const [email, setEmail]           = useState('')
     const [context, setContext]       = useState<EnrollmentContext>('prose_es')
@@ -284,15 +345,91 @@ export default function EnrollPage() {
         }
     }
 
+    // ── Render: Step 0 — Purpose ─────────────────────────────────────────────
+    if (step === 'purpose') return (
+        <div style={{ minHeight: '100vh', background: 'var(--color-bg)', padding: '40px 20px', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+            {/* Top nav */}
+            <div style={{ width: '100%', maxWidth: '700px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '48px' }}>
+                <Link href="/" style={{ textDecoration: 'none', fontWeight: 700, color: 'var(--color-text)' }}>
+                    Deep-Check<span style={{ color: 'var(--color-primary)' }}>.</span>
+                </Link>
+                <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>Paso 1 de 4</div>
+            </div>
+
+            <div style={{ width: '100%', maxWidth: '700px' }}>
+                <div style={{ marginBottom: '8px', fontSize: '0.72rem', textTransform: 'uppercase', letterSpacing: '0.15em', color: 'var(--color-primary)' }}>Enrollment Biométrico</div>
+                <h1 style={{ fontSize: '1.9rem', marginBottom: '10px' }}>¿Para qué vas a usar Deep-Check?</h1>
+                <p style={{ color: 'var(--color-text-muted)', fontSize: '0.88rem', lineHeight: 1.6, marginBottom: '32px', maxWidth: '520px' }}>
+                    Selecciona el tipo de prueba. El sistema elegirá automáticamente el contexto de escritura más adecuado para construir tu perfil biométrico.
+                </p>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px', marginBottom: '36px' }}>
+                    {PURPOSE_PRESETS.map(p => (
+                        <button
+                            key={p.id}
+                            onClick={() => setPurposeId(p.id)}
+                            style={{
+                                display: 'flex', alignItems: 'flex-start', gap: '14px', padding: '18px 20px',
+                                background: purposeId === p.id ? 'rgba(0,212,127,0.08)' : 'rgba(255,255,255,0.03)',
+                                border: `1.5px solid ${purposeId === p.id ? 'var(--color-primary)' : 'var(--color-border)'}`,
+                                borderRadius: '14px', cursor: 'pointer', textAlign: 'left', transition: 'all 0.15s',
+                            }}
+                        >
+                            <span style={{ fontSize: '1.6rem', flexShrink: 0, lineHeight: 1 }}>{p.icon}</span>
+                            <div style={{ flex: 1 }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+                                    <span style={{ fontWeight: 600, fontSize: '0.9rem' }}>{p.title}</span>
+                                    {p.badge && (
+                                        <span style={{ fontSize: '0.62rem', padding: '2px 7px', borderRadius: '20px', background: purposeId === p.id ? 'rgba(0,212,127,0.15)' : 'rgba(255,255,255,0.07)', color: purposeId === p.id ? 'var(--color-primary)' : 'var(--color-text-muted)', border: `1px solid ${purposeId === p.id ? 'rgba(0,212,127,0.25)' : 'var(--color-border)'}` }}>
+                                            {p.badge}
+                                        </span>
+                                    )}
+                                </div>
+                                <div style={{ fontSize: '0.78rem', color: 'var(--color-text-muted)', lineHeight: 1.5 }}>{p.subtitle}</div>
+                                <div style={{ marginTop: '8px', fontSize: '0.7rem', color: purposeId === p.id ? 'var(--color-primary)' : 'var(--color-text-muted)' }}>
+                                    Contexto: <strong>{p.suggestedContext}</strong>
+                                </div>
+                            </div>
+                        </button>
+                    ))}
+                </div>
+
+                <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                    <button
+                        className="btn btn-primary"
+                        disabled={!purposeId}
+                        onClick={() => {
+                            const preset = PURPOSE_PRESETS.find(p => p.id === purposeId)!
+                            setContext(preset.suggestedContext)
+                            setStep('info')
+                        }}
+                        style={{ opacity: purposeId ? 1 : 0.4, padding: '11px 28px' }}
+                    >
+                        Continuar →
+                    </button>
+                </div>
+            </div>
+        </div>
+    )
+
     // ── Render: Step 1 — Info ─────────────────────────────────────────────────
     if (step === 'info') return (
         <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '40px 20px', background: 'var(--color-bg)' }}>
             <div style={{ width: '100%', maxWidth: '520px', background: 'var(--color-surface)', borderRadius: '24px', border: '1px solid var(--color-border)', padding: '48px 44px' }}>
-                <div style={{ marginBottom: '8px', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.15em', color: 'var(--color-primary)' }}>Deep-Check</div>
-                <h1 style={{ fontSize: '1.8rem', marginBottom: '10px' }}>Enrollment Biométrico</h1>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                    <div style={{ fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.15em', color: 'var(--color-primary)' }}>Deep-Check · Paso 2 de 4</div>
+                    <button onClick={() => setStep('purpose')} style={{ background: 'none', border: 'none', color: 'var(--color-text-muted)', cursor: 'pointer', fontSize: '0.8rem' }}>← Cambiar tipo</button>
+                </div>
+                {purposeId && (
+                    <div style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', padding: '5px 12px', background: 'rgba(0,212,127,0.08)', border: '1px solid rgba(0,212,127,0.2)', borderRadius: '20px', marginBottom: '12px' }}>
+                        <span>{PURPOSE_PRESETS.find(p => p.id === purposeId)?.icon}</span>
+                        <span style={{ fontSize: '0.78rem', color: 'var(--color-primary)' }}>{PURPOSE_PRESETS.find(p => p.id === purposeId)?.title}</span>
+                    </div>
+                )}
+                <h1 style={{ fontSize: '1.8rem', marginBottom: '10px' }}>Tus datos</h1>
                 <p style={{ color: 'var(--color-text-muted)', fontSize: '0.9rem', lineHeight: 1.6, marginBottom: '32px' }}>
-                    Este proceso crea tu <strong style={{ color: 'var(--color-text)' }}>firma de teclado</strong> — un perfil único basado en tu ritmo de escritura.
-                    Una vez enrollado, el sistema puede verificar que eres tú quien escribe durante cada sesión.
+                    Tu <strong style={{ color: 'var(--color-text)' }}>firma de teclado</strong> quedará asociada a estos datos.
+                    El sistema usará el perfil para verificar que eres tú quien escribe en cada sesión futura.
                 </p>
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', marginBottom: '32px' }}>
@@ -334,9 +471,10 @@ export default function EnrollPage() {
     if (step === 'context') return (
         <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '40px 20px', background: 'var(--color-bg)' }}>
             <div style={{ width: '100%', maxWidth: '600px', background: 'var(--color-surface)', borderRadius: '24px', border: '1px solid var(--color-border)', padding: '48px 44px' }}>
-                <h2 style={{ fontSize: '1.5rem', marginBottom: '8px' }}>Elige el contexto de escritura</h2>
+                <div style={{ fontSize: '0.72rem', textTransform: 'uppercase', letterSpacing: '0.15em', color: 'var(--color-primary)', marginBottom: '8px' }}>Paso 3 de 4</div>
+                <h2 style={{ fontSize: '1.5rem', marginBottom: '8px' }}>Confirma el contexto de escritura</h2>
                 <p style={{ color: 'var(--color-text-muted)', fontSize: '0.88rem', marginBottom: '28px' }}>
-                    Tu perfil solo es válido para el tipo de texto en el que te hayas enrollado. Elige el que mejor refleje cómo usarás el sistema.
+                    Basado en tu selección anterior hemos preseleccionado el contexto. Puedes cambiarlo si lo necesitas.
                 </p>
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '32px' }}>
@@ -381,7 +519,7 @@ export default function EnrollPage() {
             {/* Header */}
             <header style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 28px', borderBottom: '1px solid var(--color-border)', background: 'var(--color-surface)' }}>
                 <div>
-                    <div style={{ fontWeight: 700, fontSize: '1rem' }}>Deep-Check <span style={{ color: 'var(--color-primary)' }}>Enrollment</span></div>
+                    <div style={{ fontWeight: 700, fontSize: '1rem' }}>Deep-Check <span style={{ color: 'var(--color-primary)' }}>Enrollment</span> <span style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)', marginLeft: '6px' }}>Paso 4 de 4</span></div>
                     <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>{name} · {ctx.label}</div>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>

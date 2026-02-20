@@ -15,6 +15,7 @@ export default function Sidebar() {
         { label: 'Account Settings', href: '/dashboard/settings' },
         { label: '──────────', href: '#', disabled: true },
         { label: '⬡ Enrollment', href: '/enroll' },
+        { label: '⬡ Verificar Cert.', href: '/verify' },
         { label: '⬡ API Docs', href: '/docs' },
     ]
 
