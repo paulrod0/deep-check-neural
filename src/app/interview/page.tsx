@@ -5,7 +5,8 @@ import Link from 'next/link'
 import dynamic from 'next/dynamic'
 import styles from './page.module.css'
 import { VerificationCameraHandle, VerificationFailureReason, GazeDirection, BlinkEvent, FaceMetrics, AntiCheatEvent } from '@/components/VerificationCamera'
-import { BiometricEvent } from '@/components/CodeEditor'
+import { BiometricEvent, CodeEditorHandle } from '@/components/CodeEditor'
+import { extractFeatureVector } from '@/lib/biometricFeatures'
 import { generateCertificatePDF } from '@/lib/generateCertificate'
 
 // ─── Dynamic imports (client-only) ────────────────────────────────────────────
@@ -299,6 +300,7 @@ export default function InterviewPage() {
     const tabSwitchCount   = useRef(0)   // ← persists across renders without re-render cost
     const gazeEventCount   = useRef(0)
     const cameraRef        = useRef<VerificationCameraHandle>(null)
+    const codeEditorRef    = useRef<CodeEditorHandle>(null)
 
     // ── Cross-modal / Anti-cheat correlation state ────────────────────────────
     const currentGazeRef          = useRef<GazeDirection>('center')
@@ -650,6 +652,68 @@ export default function InterviewPage() {
         } catch { /* fallback: no hash */ }
 
         const fm = faceMetricsRef.current
+
+        // ── ML scoring: get session data from editor and run ONNX inference ───
+        let mlAiRisk = liveMetrics.aiRisk
+        let mlIdentityMatchScore: number | undefined
+        let mlFlags: string[] = []
+
+        try {
+            const rawSessionData = codeEditorRef.current?.getSessionData()
+            if (rawSessionData && rawSessionData.flightTimes.length >= 20) {
+                const { raw } = extractFeatureVector(rawSessionData)
+
+                const mlRes = await fetch('/api/ml-score', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        features: {
+                            flightMean:          raw.flight_mean,
+                            flightStd:           raw.flight_std,
+                            holdMean:            raw.hold_mean,
+                            holdStd:             raw.hold_std,
+                            entropy:             raw.flight_entropy,
+                            skewness:            raw.flight_skewness,
+                            kurtosis:            raw.flight_kurtosis,
+                            periodicityScore:    raw.periodicity_score,
+                            velocityGradient:    raw.velocity_gradient,
+                            fatigueRate:         raw.fatigue_rate,
+                            rhythmConsistency:   raw.rhythm_consistency,
+                            impossibleFastRatio: raw.impossible_fast_ratio,
+                            digramCvMean:        raw.digram_cv_mean,
+                            backspaceLatencyStd: raw.backspace_latency_std,
+                            backspaceCountRatio: raw.backspace_count_ratio,
+                            burstCountPer100k:   raw.burst_count_per_100k,
+                            sessionWpm:          raw.session_wpm,
+                        },
+                        totalKeystrokes: rawSessionData.totalKeystrokes,
+                    }),
+                })
+
+                if (mlRes.ok) {
+                    const mlJson = await mlRes.json()
+                    if (mlJson.success) {
+                        mlAiRisk = mlJson.mlAiRisk ?? mlAiRisk
+                        mlIdentityMatchScore = mlJson.identityMatchScore ?? undefined
+                        mlFlags = mlJson.flags ?? []
+                        // Add ML flags as alerts if significant
+                        if (mlJson.mlAiRisk > 70) {
+                            const ts = new Date().toLocaleTimeString()
+                            setAlerts(prev => [{
+                                id: Date.now(),
+                                timestamp: ts,
+                                message: `[${ts}] 🤖 ML Bot Detection: ${mlJson.mlAiRisk}% risk (${mlJson.inferenceMethod})`,
+                                severity: 'high' as const,
+                                penalty: 0,
+                            }, ...prev].slice(0, 10))
+                        }
+                    }
+                }
+            }
+        } catch (mlErr) {
+            console.warn('[interview] ML scoring failed (non-fatal):', mlErr)
+        }
+
         const assessment = {
             id: sessionId,
             candidateName: 'Remote Candidate',
@@ -661,13 +725,14 @@ export default function InterviewPage() {
             evidence,
             lastEvent: alerts[0]?.message || 'Session ended cleanly',
             livenessScore,
-            aiRisk: liveMetrics.aiRisk,
+            aiRisk: mlAiRisk,
             keystrokeCount: liveMetrics.keystrokeCount,
             tabSwitchCount: tabSwitches,
             gazeEventCount: gazeEvents,
             autoFlagged,
             sessionHash,
             certificateIssued: true,
+            identityMatchScore: mlIdentityMatchScore,
             // Enhanced biometric fields
             blinkRate: fm?.blinkRate ?? 0,
             blinkCount: fm?.blinkCount ?? 0,
@@ -683,6 +748,8 @@ export default function InterviewPage() {
             blinkEdgeScore: fm?.blinkEdgeScore ?? 0,
             ocoloManualScore: fm?.ocoloManualScore ?? 0,
             antiCheatFailures: acFailedTotalRef.current,
+            // ML flags
+            mlFlags,
         }
 
         try {
@@ -763,7 +830,7 @@ export default function InterviewPage() {
             <div className={styles.content}>
                 {/* Editor */}
                 <div className={styles.editorArea}>
-                    <CodeEditorDynamic onBiometricEvent={handleBiometricEvent} />
+                    <CodeEditorDynamic ref={codeEditorRef} onBiometricEvent={handleBiometricEvent} />
                 </div>
 
                 {/* Sidebar */}

@@ -1,6 +1,7 @@
 'use client'
 
-import React, { useRef, useState, useEffect, useCallback } from 'react'
+import React, { useRef, useState, useEffect, useCallback, forwardRef, useImperativeHandle } from 'react'
+import type { RawSessionData } from '@/lib/biometricFeatures'
 import Editor, { OnMount } from '@monaco-editor/react'
 import styles from './CodeEditor.module.css'
 
@@ -38,6 +39,11 @@ interface RollingStats {
 interface CodeEditorProps {
     onBiometricEvent?: (metrics: BiometricEvent) => void
     language?: string   // Monaco language id: 'typescript' | 'python' | 'plaintext' etc.
+}
+
+/** Exposed handle for parent components to pull session data at end of session */
+export interface CodeEditorHandle {
+    getSessionData: () => RawSessionData
 }
 
 export interface BiometricEvent {
@@ -331,7 +337,10 @@ function estimateAIScore(
 
 // ─── Main Component ───────────────────────────────────────────────────────────
 
-export default function CodeEditor({ onBiometricEvent, language = 'typescript' }: CodeEditorProps) {
+const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(function CodeEditor(
+    { onBiometricEvent, language = 'typescript' }: CodeEditorProps,
+    ref
+) {
     const [keystrokes, setKeystrokes]   = useState<KeystrokeEvent[]>([])
     const [baseline, setBaseline]       = useState<BiometricBaseline | null>(null)
     const [isCalibrating, setIsCalibrating] = useState(true)
@@ -366,8 +375,34 @@ export default function CodeEditor({ onBiometricEvent, language = 'typescript' }
     // Fatigue — fire at most every 10s
     const lastFatigueCheckRef  = useRef<number>(0)
 
+    // Track session start time for WPM calculation
+    const sessionStartRef = useRef<number>(Date.now())
+
     useEffect(() => { baselineRef.current = baseline }, [baseline])
     useEffect(() => { isCalibratinRef.current = isCalibrating }, [isCalibrating])
+
+    // ── Expose session data to parent (for ML inference at end of session) ────
+    useImperativeHandle(ref, () => ({
+        getSessionData: (): RawSessionData => {
+            // Build digrams map from baseline digramMap
+            const digrams: Record<string, number[]> = {}
+            if (baselineRef.current) {
+                baselineRef.current.digramMap.forEach((v, k) => {
+                    digrams[k] = Array(v.count).fill(v.mean)  // approximation
+                })
+            }
+            return {
+                flightTimes:       [...allFlightsRef.current],
+                holdTimes:         [...allHoldsRef.current],
+                backspaceTimes:    backspaceRecordsRef.current.map(r => r.latency),
+                totalKeystrokes:   allFlightsRef.current.length + allHoldsRef.current.length,
+                totalBackspaces:   backspaceRecordsRef.current.length,
+                burstCount:        rollingStats.burstCount,
+                digrams,
+                sessionDurationMs: Date.now() - sessionStartRef.current,
+            }
+        },
+    }))
 
     const handleEditorMount: OnMount = useCallback((editor) => {
         const domNode = editor.getDomNode()
@@ -814,4 +849,6 @@ export default function CodeEditor({ onBiometricEvent, language = 'typescript' }
             </div>
         </div>
     )
-}
+})
+
+export default CodeEditor
