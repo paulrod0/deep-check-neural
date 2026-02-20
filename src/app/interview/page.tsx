@@ -309,6 +309,23 @@ export default function InterviewPage() {
                     addAlert(`AI probability elevated to ${event.aiScore}%`, 'high', 5)
                 }
                 break
+            case 'content_injection': {
+                const isDragDrop = event.detail?.toLowerCase().includes('drag')
+                const label = isDragDrop
+                    ? `Drag & drop detected — ${event.length ?? 0} chars inserted`
+                    : `Programmatic content injection — ${event.detail ?? `+${event.length} chars without typing`}`
+                const captureLabel = isDragDrop ? 'Drag & Drop' : 'Code Injection'
+                addAlert(label, 'high', isDragDrop ? 20 : 25, captureLabel)
+                setLiveMetrics(prev => ({ ...prev, pasteCount: prev.pasteCount + 1 }))
+                break
+            }
+            case 'drag_drop':
+                addAlert(
+                    `Drag & drop detected — ${event.length ?? 0} chars inserted`,
+                    'high', 20, 'Drag & Drop'
+                )
+                setLiveMetrics(prev => ({ ...prev, pasteCount: prev.pasteCount + 1 }))
+                break
         }
     }, [addAlert, liveMetrics.aiRisk])
 
