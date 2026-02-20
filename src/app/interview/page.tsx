@@ -6,6 +6,7 @@ import dynamic from 'next/dynamic'
 import styles from './page.module.css'
 import { VerificationCameraHandle, VerificationFailureReason, GazeDirection } from '@/components/VerificationCamera'
 import { BiometricEvent } from '@/components/CodeEditor'
+import { generateCertificatePDF } from '@/lib/generateCertificate'
 
 // ─── Dynamic imports (client-only) ────────────────────────────────────────────
 
@@ -48,6 +49,33 @@ interface EvidenceEntry {
 function SessionReport({ assessment, onRestart }: { assessment: any; onRestart: () => void }) {
     const scoreColor = assessment.score > 85 ? 'var(--color-primary)' : assessment.score > 60 ? '#ffd700' : '#ff4d4d'
     const statusLabel = assessment.status === 'passed' ? 'PASSED' : assessment.status === 'review' ? 'UNDER REVIEW' : 'FLAGGED'
+    const [exportingPDF, setExportingPDF] = React.useState(false)
+
+    async function handleExportPDF() {
+        setExportingPDF(true)
+        try {
+            await generateCertificatePDF({
+                id: assessment.id,
+                candidateName: assessment.candidateName,
+                role: assessment.role,
+                date: assessment.date,
+                score: assessment.score,
+                status: assessment.status,
+                sessionHash: assessment.sessionHash ?? '—',
+                livenessScore: assessment.livenessScore,
+                aiRisk: assessment.aiRisk,
+                keystrokeCount: assessment.keystrokeCount,
+                tabSwitchCount: assessment.tabSwitchCount,
+                gazeEventCount: assessment.gazeEventCount,
+                identityMatchScore: assessment.identityMatchScore,
+                alertCount: assessment.alerts?.length ?? 0,
+                evidenceCount: assessment.evidence?.length ?? 0,
+                enrollmentProfileId: assessment.enrollmentProfileId,
+            })
+        } finally {
+            setExportingPDF(false)
+        }
+    }
 
     return (
         // ── Outer wrapper: full viewport, scrollable ──────────────────────────
@@ -176,8 +204,29 @@ function SessionReport({ assessment, onRestart }: { assessment: any; onRestart: 
                     </div>
                 )}
 
-                <div style={{ display: 'flex', gap: '16px', paddingTop: '8px' }}>
+                {/* Session hash — tamper-evident fingerprint */}
+                {assessment.sessionHash && (
+                    <div style={{
+                        background: 'rgba(0,212,127,0.05)', border: '1px solid rgba(0,212,127,0.18)',
+                        borderRadius: '12px', padding: '16px 20px', marginBottom: '28px',
+                    }}>
+                        <div style={{ fontSize: '0.7rem', textTransform: 'uppercase', letterSpacing: '0.12em', color: 'var(--color-primary)', marginBottom: '8px' }}>
+                            Session Integrity Hash (SHA-256)
+                        </div>
+                        <div style={{ fontFamily: 'monospace', fontSize: '0.72rem', wordBreak: 'break-all', color: 'var(--color-text-muted)', lineHeight: 1.6 }}>
+                            {assessment.sessionHash}
+                        </div>
+                        <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginTop: '8px' }}>
+                            Fingerprint criptográfico de esta sesión. Verifica que los datos no han sido alterados.
+                        </div>
+                    </div>
+                )}
+
+                <div style={{ display: 'flex', gap: '16px', paddingTop: '8px', flexWrap: 'wrap' }}>
                     <Link href="/dashboard" className="btn btn-primary">Go to Dashboard</Link>
+                    <button onClick={handleExportPDF} className="btn btn-outline" disabled={exportingPDF}>
+                        {exportingPDF ? 'Generando PDF...' : '↓ Exportar Certificado PDF'}
+                    </button>
                     <button onClick={onRestart} className="btn btn-outline">Start New Session</button>
                 </div>
             </div>
@@ -377,11 +426,29 @@ export default function InterviewPage() {
         const autoFlagged   = tabSwitches >= 2
         const status        = autoFlagged ? 'flagged' : finalScore > 85 ? 'passed' : finalScore > 60 ? 'review' : 'flagged'
 
+        const sessionId = Math.random().toString(36).substr(2, 9)
+        const sessionDate = new Date().toISOString().split('T')[0]
+
+        // Compute SHA-256 hash client-side using Web Crypto API
+        const hashPayload = JSON.stringify({
+            id: sessionId, candidateName: 'Remote Candidate', role: 'Software Engineer',
+            date: sessionDate, score: finalScore, status,
+            alertCount: alerts.length, keystrokeCount: liveMetrics.keystrokeCount,
+            aiRisk: liveMetrics.aiRisk, tabSwitchCount: tabSwitches,
+            gazeEventCount: gazeEvents, livenessScore,
+        })
+        let sessionHash = ''
+        try {
+            const msgBuffer = new TextEncoder().encode(hashPayload)
+            const hashBuffer = await crypto.subtle.digest('SHA-256', msgBuffer)
+            sessionHash = Array.from(new Uint8Array(hashBuffer)).map(b => b.toString(16).padStart(2, '0')).join('')
+        } catch { /* fallback: no hash */ }
+
         const assessment = {
-            id: Math.random().toString(36).substr(2, 9),
+            id: sessionId,
             candidateName: 'Remote Candidate',
             role: 'Software Engineer',
-            date: new Date().toISOString().split('T')[0],
+            date: sessionDate,
             score: finalScore,
             status,
             alerts,
@@ -393,6 +460,8 @@ export default function InterviewPage() {
             tabSwitchCount: tabSwitches,
             gazeEventCount: gazeEvents,
             autoFlagged,
+            sessionHash,
+            certificateIssued: true,
         }
 
         try {

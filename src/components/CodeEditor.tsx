@@ -31,6 +31,7 @@ interface RollingStats {
 
 interface CodeEditorProps {
     onBiometricEvent?: (metrics: BiometricEvent) => void
+    language?: string   // Monaco language id: 'typescript' | 'python' | 'plaintext' etc.
 }
 
 export interface BiometricEvent {
@@ -142,7 +143,7 @@ function estimateAIScore(flights: number[], holds: number[]): number {
 
 // ─── Main Component ───────────────────────────────────────────────────────────
 
-export default function CodeEditor({ onBiometricEvent }: CodeEditorProps) {
+export default function CodeEditor({ onBiometricEvent, language = 'typescript' }: CodeEditorProps) {
     const [keystrokes, setKeystrokes]   = useState<KeystrokeEvent[]>([])
     const [baseline, setBaseline]       = useState<BiometricBaseline | null>(null)
     const [isCalibrating, setIsCalibrating] = useState(true)
@@ -380,7 +381,7 @@ export default function CodeEditor({ onBiometricEvent }: CodeEditorProps) {
             <div className={styles.editorWrapper}>
                 <Editor
                     height="100%"
-                    defaultLanguage="typescript"
+                    defaultLanguage={language}
                     defaultValue={`// Deep-Check Live Assessment\n// Start typing — your keystroke biometrics are being analyzed in real time.\n\nfunction solution(nums: number[], target: number): number[] {\n  \n}\n`}
                     theme="vs-dark"
                     options={{

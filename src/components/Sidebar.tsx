@@ -13,6 +13,9 @@ export default function Sidebar() {
         { label: 'Assessments', href: '/dashboard/assessments' },
         { label: 'Global Benchmarks', href: '/dashboard/benchmarks' },
         { label: 'Account Settings', href: '/dashboard/settings' },
+        { label: '──────────', href: '#', disabled: true },
+        { label: '⬡ Enrollment', href: '/enroll' },
+        { label: '⬡ API Docs', href: '/docs' },
     ]
 
     return (
@@ -27,12 +30,18 @@ export default function Sidebar() {
                     const isActive = pathname === item.href
                     return (
                         <li key={item.href}>
-                            <Link
-                                href={item.href}
-                                className={`${styles.navItem} ${isActive ? styles.active : ''}`}
-                            >
-                                {item.label}
-                            </Link>
+                            {(item as any).disabled ? (
+                                <span className={styles.navItem} style={{ opacity: 0.2, cursor: 'default', fontSize: '0.6rem', letterSpacing: '0.1em' }}>
+                                    {item.label}
+                                </span>
+                            ) : (
+                                <Link
+                                    href={item.href}
+                                    className={`${styles.navItem} ${isActive ? styles.active : ''}`}
+                                >
+                                    {item.label}
+                                </Link>
+                            )}
                         </li>
                     )
                 })}
