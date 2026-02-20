@@ -103,21 +103,50 @@ export default function CodeEditor({ onBiometricEvent }: CodeEditorProps) {
     useEffect(() => { baselineRef.current = baseline }, [baseline])
     useEffect(() => { isCalibratinRef.current = isCalibrating }, [isCalibrating])
 
-    // ── AI Score Estimation (called periodically) ──────────────────────────
+    // ── AI Score Estimation ────────────────────────────────────────────────
+    //
+    // Reference values from keystroke dynamics literature (Banerjee & Woodard 2012,
+    // Mondal & Bours 2013): average human flight time 80–200ms, stdDev 40–120ms.
+    // Hold time avg 70–150ms, stdDev 15–50ms.
+    // AI/macro-generated input typically has: flight < 15ms between chars, OR
+    // extremely low variance (stdDev < 8ms) — physically impossible for humans.
+    //
+    // We score 0 by default and only add points for truly anomalous signals.
     const estimateAIScore = useCallback((flights: number[], holds: number[]): number => {
-        if (flights.length < 10) return 0
-        const { stdDev: flightStd } = computeStats(flights)
+        if (flights.length < 15) return 0   // need more data before judging
+
+        const { mean: flightMean, stdDev: flightStd } = computeStats(flights)
         const { stdDev: holdStd } = computeStats(holds)
         const entropy = shannonEntropy(flights)
 
-        // AI-generated text tends to have extremely low inter-key latency variance
-        // and suspicious uniformity. Human typing has natural variation.
-        const lowVariancePenalty = flightStd < 20 ? 40 : flightStd < 50 ? 15 : 0
-        const lowHoldVariancePenalty = holdStd < 5 ? 20 : 0
-        const highEntropyPenalty = entropy > 3.2 ? 20 : 0   // unnaturally uniform
-        const burstPenalty = flights.filter(f => f < 8 && f > 0).length / flights.length * 40
+        let score = 0
 
-        return Math.min(100, Math.round(lowVariancePenalty + lowHoldVariancePenalty + highEntropyPenalty + burstPenalty))
+        // ── Signal 1: Physically impossible inter-key gaps (< 15ms) ──────────
+        // Human neuro-motor minimum is ~15ms. Below that = keyboard macro / paste.
+        const impossiblyFastRatio = flights.filter(f => f > 0 && f < 15).length / flights.length
+        if (impossiblyFastRatio > 0.12) score += Math.round(impossiblyFastRatio * 60)       // 0–60 pts
+
+        // ── Signal 2: Inhuman uniformity (stdDev < 8ms on flight times) ──────
+        // Even the fastest professional typists show stdDev > 15ms.
+        // stdDev < 8ms is a clear synthetic signal.
+        if (flightStd < 8) score += 35
+        else if (flightStd < 15) score += 15
+
+        // ── Signal 3: Hold time robotically uniform (< 6ms stdDev) ──────────
+        // Human hold time varies due to finger pressure differences; < 6ms is robotic.
+        if (holdStd < 6) score += 20
+        else if (holdStd < 12) score += 8
+
+        // ── Signal 4: Entropy anomaly — perfect uniformity ───────────────────
+        // Shannon entropy > 3.5 on a narrow 10-bin histogram means every bucket
+        // has nearly the same count — robot-like regularity.
+        if (entropy > 3.5) score += 15
+
+        // ── Signal 5: Suspiciously slow mean (> 800ms avg) with low variance ─
+        // Suggests autocomplete: long pauses then sudden typed blocks.
+        if (flightMean > 800 && flightStd < 30) score += 15
+
+        return Math.min(100, score)
     }, [])
 
     const handleEditorMount: OnMount = useCallback((editor) => {
@@ -209,10 +238,12 @@ export default function CodeEditor({ onBiometricEvent }: CodeEditorProps) {
                 }
 
                 // ── Rhythm shift: compare last 10 vs baseline ────────────────
+                // Threshold 1.5 (150% delta): natural thinking pauses cause
+                // temporary slowdowns. We only flag sustained, dramatic shifts.
                 if (recentFlightsRef.current.length >= 10) {
                     const recentStats = computeStats(recentFlightsRef.current.slice(-10))
                     const rhythmDelta = Math.abs(recentStats.mean - bl.mean) / bl.mean
-                    if (rhythmDelta > 0.6) {
+                    if (rhythmDelta > 1.5) {
                         onBiometricEvent?.({ type: 'rhythm_shift', rhythmDelta, timestamp: now })
                     }
                     const stability = Math.max(0, Math.round(100 - rhythmDelta * 60))
@@ -230,14 +261,17 @@ export default function CodeEditor({ onBiometricEvent }: CodeEditorProps) {
                 }
             }
 
-            // ── Burst detection: > 8 keystrokes in 300ms ────────────────────
-            if (recentWindowRef.current.length > 8) {
+            // ── Burst detection: > 12 keystrokes in 300ms ───────────────────
+            // Human WPM record ~216 = ~18 chars/sec = max ~5 keys/300ms.
+            // 12 keys in 300ms (40 keys/sec) is well beyond human capability.
+            if (recentWindowRef.current.length > 12) {
                 onBiometricEvent?.({ type: 'burst', timestamp: now })
                 setRollingStats(prev => ({ ...prev, burstCount: prev.burstCount + 1 }))
             }
 
-            // ── Ultra-fast consecutive keys (< 8ms apart, inhuman) ───────────
-            if (flightTime > 0 && flightTime < 8) {
+            // ── Physically impossible consecutive key gap (< 12ms) ───────────
+            // Neuro-motor minimum reaction: ~15ms. 12ms gives a small safety margin.
+            if (flightTime > 0 && flightTime < 12) {
                 onBiometricEvent?.({ type: 'burst', timestamp: now })
             }
 
