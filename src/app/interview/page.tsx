@@ -4,7 +4,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react'
 import Link from 'next/link'
 import dynamic from 'next/dynamic'
 import styles from './page.module.css'
-import { VerificationCameraHandle, VerificationFailureReason, GazeDirection, BlinkEvent, FaceMetrics } from '@/components/VerificationCamera'
+import { VerificationCameraHandle, VerificationFailureReason, GazeDirection, BlinkEvent, FaceMetrics, AntiCheatEvent } from '@/components/VerificationCamera'
 import { BiometricEvent } from '@/components/CodeEditor'
 import { generateCertificatePDF } from '@/lib/generateCertificate'
 
@@ -175,6 +175,29 @@ function SessionReport({ assessment, onRestart }: { assessment: any; onRestart: 
                             {assessment.alerts.some((a: AlertEntry) => (a.message || a).toString().includes('Cross-modal')) && (
                                 <div>• Cross-modal: <span style={{ color: '#ffd700' }}>TYPING WHILE LOOKING AWAY</span></div>
                             )}
+                            {(assessment.lightingChallengesPassed + assessment.lightingChallengesFailed) > 0 && (
+                                <div>• Lighting Challenges: <span style={{ color: assessment.lightingChallengesFailed > 0 ? '#ff4d4d' : 'var(--color-primary)' }}>
+                                    {assessment.lightingChallengesPassed}✓ / {assessment.lightingChallengesFailed}✗
+                                    {assessment.lightingChallengesFailed > 0 ? ' — DEEPFAKE SIGNAL' : ' — HUMAN REFLEX'}
+                                </span></div>
+                            )}
+                            {assessment.saccadeScore > 0 && (
+                                <div>• Micro-saccades: <span style={{ color: assessment.saccadeScore < 20 ? '#ff4d4d' : assessment.saccadeScore < 50 ? '#ffd700' : 'var(--color-primary)' }}>
+                                    {assessment.saccadeScore < 20 ? `${assessment.saccadeScore}/100 — UNNATURAL (AI renderer)` :
+                                     assessment.saccadeScore < 50 ? `${assessment.saccadeScore}/100 — SUSPICIOUS` :
+                                     `${assessment.saccadeScore}/100 — NATURAL`}
+                                </span></div>
+                            )}
+                            {assessment.blinkEdgeScore > 0 && (
+                                <div>• Blink Edge: <span style={{ color: assessment.blinkEdgeScore < 40 ? '#ff4d4d' : 'var(--color-primary)' }}>
+                                    {assessment.blinkEdgeScore < 40 ? `${assessment.blinkEdgeScore}/100 — ARTIFACT` : `${assessment.blinkEdgeScore}/100 — CLEAN`}
+                                </span></div>
+                            )}
+                            {assessment.antiCheatFailures > 0 && (
+                                <div>• Anti-Cheat Fails: <span style={{ color: assessment.antiCheatFailures >= 2 ? '#ff4d4d' : '#ffd700' }}>
+                                    {assessment.antiCheatFailures} challenge{assessment.antiCheatFailures > 1 ? 's' : ''} failed
+                                </span></div>
+                            )}
                         </div>
                     </div>
                 </div>
@@ -252,14 +275,16 @@ function SessionReport({ assessment, onRestart }: { assessment: any; onRestart: 
 const PROMPT_ID = `#${Math.floor(1000 + Math.random() * 9000)}`
 
 export default function InterviewPage() {
-    const [isVerified, setIsVerified]       = useState(false)
-    const [livenessScore, setLivenessScore] = useState(0)
-    const [trustScore, setTrustScore]       = useState(100)
-    const [alerts, setAlerts]               = useState<AlertEntry[]>([])
-    const [isSaving, setIsSaving]           = useState(false)
-    const [sessionEnded, setSessionEnded]   = useState(false)
-    const [lastAssessment, setLastAssessment] = useState<any>(null)
-    const [evidence, setEvidence]           = useState<EvidenceEntry[]>([])
+    const [isVerified, setIsVerified]             = useState(false)
+    const [livenessScore, setLivenessScore]       = useState(0)
+    const [trustScore, setTrustScore]             = useState(100)
+    const [alerts, setAlerts]                     = useState<AlertEntry[]>([])
+    const [isSaving, setIsSaving]                 = useState(false)
+    const [sessionEnded, setSessionEnded]         = useState(false)
+    const [lastAssessment, setLastAssessment]     = useState<any>(null)
+    const [evidence, setEvidence]                 = useState<EvidenceEntry[]>([])
+    // Lighting Challenge state (controls the screen flash overlay and camera prop)
+    const [lightingChallenge, setLightingChallenge] = useState(false)
 
     const [liveMetrics, setLiveMetrics] = useState({
         keystrokeCount: 0,
@@ -275,13 +300,20 @@ export default function InterviewPage() {
     const gazeEventCount   = useRef(0)
     const cameraRef        = useRef<VerificationCameraHandle>(null)
 
-    // ── Cross-modal correlation state ──────────────────────────────────────────
-    // Track if gaze is off-screen while actively typing
-    const currentGazeRef   = useRef<GazeDirection>('center')
-    const lastTypingTimeRef= useRef<number>(0)
-    const lastCrossModalAlertRef = useRef<number>(0)
-    const faceMetricsRef   = useRef<FaceMetrics | null>(null)
-    const blinkAnomalyCountRef = useRef<number>(0)
+    // ── Cross-modal / Anti-cheat correlation state ────────────────────────────
+    const currentGazeRef          = useRef<GazeDirection>('center')
+    const lastTypingTimeRef       = useRef<number>(0)
+    const lastCrossModalAlertRef  = useRef<number>(0)
+    const faceMetricsRef          = useRef<FaceMetrics | null>(null)
+    const blinkAnomalyCountRef    = useRef<number>(0)
+    // Oculo-manual synchrony — track cursor movement in editor
+    const cursorActivityRef       = useRef<number>(0)  // last timestamp of cursor move
+    const ocoloDesyncCountRef     = useRef<number>(0)
+    const lastOculoAlertRef       = useRef<number>(0)
+    // Anti-cheat challenge counters
+    const lcPassedRef             = useRef<number>(0)
+    const lcFailedRef             = useRef<number>(0)
+    const acFailedTotalRef        = useRef<number>(0)
 
     useEffect(() => { trustScoreRef.current = trustScore }, [trustScore])
 
@@ -368,6 +400,98 @@ export default function InterviewPage() {
     const handleFaceMetrics = useCallback((metrics: FaceMetrics) => {
         faceMetricsRef.current = metrics
     }, [])
+
+    // ── Anti-cheat event handler ──────────────────────────────────────────────
+    const handleAntiCheatEvent = useCallback((event: AntiCheatEvent) => {
+        switch (event.type) {
+            case 'lighting_challenge_fail':
+                lcFailedRef.current++
+                acFailedTotalRef.current++
+                addAlert(
+                    `Lighting challenge FAILED — no pupil/lid reflex detected (ΔEAR ${event.detail?.match(/[\d.]+/)?.[0] ?? '?'}) — possible deepfake`,
+                    'high', 20, 'Lighting Fail'
+                )
+                break
+            case 'lighting_challenge_pass':
+                lcPassedRef.current++
+                // Pass is a positive liveness signal — no alert, just log
+                break
+            case 'saccade_too_smooth':
+                acFailedTotalRef.current++
+                addAlert(
+                    `Gaze too smooth — no micro-saccades detected. AI renderer signature.`,
+                    'high', 15
+                )
+                break
+            case 'blink_edge_artifact':
+                acFailedTotalRef.current++
+                addAlert(
+                    `Blink eyelid artifact — snap-close or unnatural symmetry. ${event.detail ?? ''}`,
+                    'medium', 10
+                )
+                break
+            case 'oculo_manual_desynced':
+                acFailedTotalRef.current++
+                ocoloDesyncCountRef.current++
+                addAlert(
+                    `Oculo-manual desync — cursor moving but gaze frozen. Possible virtual camera or screen-share cheat.`,
+                    'high', 12
+                )
+                break
+        }
+    }, [addAlert])
+
+    // ── Lighting Challenge scheduler ──────────────────────────────────────────
+    // Fires a random bright flash every 45–90 seconds after session start.
+    // The flash lasts 500ms. Camera component reads lightingChallengeActive prop.
+    useEffect(() => {
+        let timeoutId: ReturnType<typeof setTimeout>
+        const scheduleNext = () => {
+            const delay = 45000 + Math.random() * 45000  // 45–90s
+            timeoutId = setTimeout(() => {
+                // Trigger flash
+                setLightingChallenge(true)
+                setTimeout(() => {
+                    setLightingChallenge(false)
+                    scheduleNext()
+                }, 500)  // Flash duration: 500ms
+            }, delay)
+        }
+        // First challenge after 30s
+        const first = setTimeout(() => {
+            setLightingChallenge(true)
+            setTimeout(() => { setLightingChallenge(false); scheduleNext() }, 500)
+        }, 30000)
+
+        return () => { clearTimeout(first); clearTimeout(timeoutId) }
+    }, [])
+
+    // ── Oculo-Manual Synchrony tracker ────────────────────────────────────────
+    // Every 5 seconds, check if the editor cursor has been moving (user is typing)
+    // but gaze has been frozen in center (ratio variance too low = looking at fixed point).
+    // This catches: virtual camera showing a pre-recorded face while human looks at notes.
+    useEffect(() => {
+        const interval = setInterval(() => {
+            const now = Date.now()
+            const typingRecently = now - lastTypingTimeRef.current < 5000
+            const gazeOff = currentGazeRef.current !== 'center' && currentGazeRef.current !== 'unknown'
+            const faceMetrics = faceMetricsRef.current
+
+            if (!typingRecently || !faceMetrics) return
+
+            // Saccade score too low while actively typing = gaze is frozen (pre-recorded video)
+            if (faceMetrics.saccadeScore < 15 && now - lastOculoAlertRef.current > 15000) {
+                lastOculoAlertRef.current = now
+                handleAntiCheatEvent({
+                    type: 'oculo_manual_desynced',
+                    confidence: 1 - faceMetrics.saccadeScore / 15,
+                    detail: `Saccade score ${faceMetrics.saccadeScore}/100 while typing — gaze frozen`,
+                    timestamp: now
+                })
+            }
+        }, 5000)
+        return () => clearInterval(interval)
+    }, [handleAntiCheatEvent])
 
     // ── Keyboard biometric events ─────────────────────────────────────────────
     const handleBiometricEvent = useCallback((event: BiometricEvent) => {
@@ -552,6 +676,13 @@ export default function InterviewPage() {
             microMovementScore: fm?.microMovementScore ?? 0,
             gazeStabilityScore: fm?.gazeStabilityScore ?? 0,
             faceBrightnessDelta: fm?.faceBrightnessDelta ?? 0,
+            // Anti-cheat challenge results
+            lightingChallengesPassed: lcPassedRef.current,
+            lightingChallengesFailed: lcFailedRef.current,
+            saccadeScore: fm?.saccadeScore ?? 0,
+            blinkEdgeScore: fm?.blinkEdgeScore ?? 0,
+            ocoloManualScore: fm?.ocoloManualScore ?? 0,
+            antiCheatFailures: acFailedTotalRef.current,
         }
 
         try {
@@ -584,6 +715,20 @@ export default function InterviewPage() {
 
     return (
         <main className={styles.main}>
+            {/* ── Lighting Challenge flash overlay ─────────────────────────────
+                Covers the entire viewport with a bright white overlay for 500ms.
+                The real pupillary light reflex (blepharospasm) appears within ~150–300ms.
+                A deepfake face renderer cannot react to this unpredictable stimulus.
+            */}
+            {lightingChallenge && (
+                <div style={{
+                    position: 'fixed', inset: 0, zIndex: 9999,
+                    background: 'rgba(255,255,255,0.92)',
+                    pointerEvents: 'none',
+                    animation: 'none',
+                }} />
+            )}
+
             {/* Header */}
             <header className={styles.header}>
                 <div className={styles.logo}>Deep-Check<span style={{ color: 'var(--color-primary)' }}>.</span></div>
@@ -632,6 +777,8 @@ export default function InterviewPage() {
                             onGazeEvent={handleGazeEvent}
                             onBlinkEvent={handleBlinkEvent}
                             onFaceMetrics={handleFaceMetrics}
+                            onAntiCheatEvent={handleAntiCheatEvent}
+                            lightingChallengeActive={lightingChallenge}
                         />
                         <p className={styles.hint}>Face + eye gaze monitored continuously.</p>
                     </section>

@@ -22,6 +22,9 @@ export interface VerificationCameraProps {
     onGazeEvent?: (direction: GazeDirection) => void
     onBlinkEvent?: (event: BlinkEvent) => void
     onFaceMetrics?: (metrics: FaceMetrics) => void
+    onAntiCheatEvent?: (event: AntiCheatEvent) => void
+    // Lighting challenge: parent flashes screen and notifies camera to watch for response
+    lightingChallengeActive?: boolean
 }
 
 export interface VerificationCameraHandle {
@@ -43,6 +46,23 @@ export interface BlinkEvent {
     timestamp: number
 }
 
+// ─── Anti-cheat challenge events ─────────────────────────────────────────────
+
+export interface AntiCheatEvent {
+    type:
+        | 'lighting_challenge_pass'    // pupil reacted to flash — human
+        | 'lighting_challenge_fail'    // no EAR response to flash — deepfake
+        | 'saccade_detected'           // natural micro-saccade movement
+        | 'saccade_too_smooth'         // unnaturally smooth gaze — AI renderer
+        | 'blink_edge_clean'           // eyelid edge consistent during blink
+        | 'blink_edge_artifact'        // eyelid inconsistency during blink = deepfake
+        | 'oculo_manual_synced'        // gaze correlates with editor cursor position
+        | 'oculo_manual_desynced'      // typing complex code but gaze frozen center
+    confidence: number                 // 0–1
+    detail?: string
+    timestamp: number
+}
+
 // ─── Face metrics (rich signal set) ──────────────────────────────────────────
 
 export interface FaceMetrics {
@@ -55,6 +75,12 @@ export interface FaceMetrics {
     eyeOpenness: number         // average EAR 0–1
     gazeStabilityScore: number  // 0–100 (how steady gaze is)
     faceBrightnessDelta: number // variance in detection score (photosubstitution proxy)
+    // Anti-cheat fields
+    lightingChallengesPassed: number
+    lightingChallengesFailed: number
+    saccadeScore: number        // 0–100 (natural micro-saccade presence)
+    blinkEdgeScore: number      // 0–100 (eyelid consistency = human)
+    ocoloManualScore: number    // 0–100 (gaze-cursor synchrony)
 }
 
 // ─── Geometry helpers ─────────────────────────────────────────────────────────
@@ -282,25 +308,151 @@ function computeLivenessScore(
     return Math.min(100, Math.round(base + poseBonus + jitterScore + blinkBonus + gazeBonus))
 }
 
+// ─── Micro-saccade analysis ───────────────────────────────────────────────────
+// Human eyes make tiny involuntary movements (micro-saccades) every 100–200ms.
+// AI face renderers produce unnaturally smooth gaze — the ratio history has
+// linear interpolation artifacts detectable as "too-smooth" transitions.
+//
+// We compute the second-order differences (acceleration) of the gaze ratio.
+// Human: noisy, high-variance acceleration. AI: near-zero acceleration (linear).
+
+function computeSaccadeScore(ratioHistory: number[]): number {
+    if (ratioHistory.length < 8) return 50
+    // First differences (velocity)
+    const vel: number[] = []
+    for (let i = 1; i < ratioHistory.length; i++) {
+        vel.push(ratioHistory[i] - ratioHistory[i - 1])
+    }
+    // Second differences (acceleration)
+    const acc: number[] = []
+    for (let i = 1; i < vel.length; i++) {
+        acc.push(vel[i] - vel[i - 1])
+    }
+    // Variance of acceleration: high = natural micro-saccades
+    const mean = acc.reduce((s, v) => s + v, 0) / acc.length
+    const variance = acc.reduce((s, v) => s + (v - mean) ** 2, 0) / acc.length
+    // Map: variance 0 = perfectly smooth (AI). variance > 0.0003 = natural.
+    if (variance < 0.00005) return 5      // unnaturally smooth — deepfake
+    if (variance < 0.0001)  return 25
+    if (variance < 0.0003)  return 60
+    if (variance < 0.001)   return 85
+    return 95                             // chaotic but human-like
+}
+
+// ─── Blink-edge consistency ────────────────────────────────────────────────────
+// During a real blink, the eyelid moves smoothly downward and up. A deepfake
+// renderer often has inconsistencies at the lid boundary:
+// - Abrupt disappearance (no gradual EAR decrease)
+// - Asymmetry: left EAR ≠ right EAR beyond normal tolerance during closure
+// - Snap-open: EAR jumps from 0 to open in a single frame (no re-open ramp)
+//
+// We compare the trajectory of left vs right EAR during blinks.
+// Perfect symmetry (|leftEAR - rightEAR| < 0.01 always) is suspect for a generated face.
+
+interface EARFrame { leftEAR: number; rightEAR: number; ts: number }
+
+function computeBlinkEdgeScore(earHistory: EARFrame[], blinkFrames: number[]): number {
+    if (earHistory.length < 5 || blinkFrames.length === 0) return 75 // no data yet
+    // For each detected blink, examine the EAR trajectory during that blink window
+    let totalScore = 0
+    let checks = 0
+
+    blinkFrames.forEach(blinkIdx => {
+        if (blinkIdx < 1 || blinkIdx >= earHistory.length) return
+        const frame   = earHistory[blinkIdx]
+        const before  = earHistory[blinkIdx - 1]
+        const after   = blinkIdx + 1 < earHistory.length ? earHistory[blinkIdx + 1] : null
+
+        // Check 1: Was there a ramp-down before (not snap-closed)?
+        const rampDown = before.leftEAR - frame.leftEAR
+        const snapClose = rampDown < 0.01  // too sudden
+
+        // Check 2: Binocular symmetry — humans blink both eyes together but NOT perfectly
+        const asymmetry = Math.abs(frame.leftEAR - frame.rightEAR)
+        // Real blinks: asymmetry 0.01–0.04 (slight dominance).
+        // < 0.005 = unnaturally perfect = synthetic. > 0.1 = winking.
+        const unnaturallySymmetric = asymmetry < 0.005
+        const winking = asymmetry > 0.10
+
+        // Check 3: Ramp-up after blink
+        const snapOpen = after ? (after.leftEAR - frame.leftEAR > 0.15) : false
+
+        // Score this blink: penalise snap events and perfect symmetry
+        let blinkScore = 90
+        if (snapClose) blinkScore -= 25
+        if (unnaturallySymmetric) blinkScore -= 20
+        if (snapOpen) blinkScore -= 20
+        if (winking) blinkScore -= 10
+        totalScore += Math.max(0, blinkScore)
+        checks++
+    })
+
+    return checks === 0 ? 75 : Math.round(totalScore / checks)
+}
+
+// ─── Lighting challenge response ──────────────────────────────────────────────
+// When the screen flashes bright, the natural pupillary light reflex causes:
+// 1. Eyelids to partially close (EAR drops slightly — blepharospasm)
+// 2. A squint reflex visible as slight EAR reduction within 100–300ms
+//
+// A deepfake that doesn't model photoreactive irises will show NO EAR change
+// after the flash. We measure ΔEAR in the 3 frames following challenge trigger.
+
+interface LightingChallengeResult {
+    passed: boolean
+    deltaEAR: number   // how much EAR changed in response
+    confidence: number
+}
+
+function evaluateLightingResponse(
+    earBeforeFlash: number,
+    earAfterFrames: number[]
+): LightingChallengeResult {
+    if (earAfterFrames.length === 0) return { passed: false, deltaEAR: 0, confidence: 0 }
+    // Find minimum EAR in the 3 frames after flash (squint response)
+    const minEARAfter = Math.min(...earAfterFrames)
+    const deltaEAR    = earBeforeFlash - minEARAfter
+    // Human squint: ΔEAR typically 0.02–0.08 within 200ms of bright flash
+    const passed      = deltaEAR > 0.018
+    const confidence  = Math.min(1, deltaEAR / 0.06)
+    return { passed, deltaEAR, confidence }
+}
+
 // ─── Component ────────────────────────────────────────────────────────────────
 
 const VerificationCamera = forwardRef<VerificationCameraHandle, VerificationCameraProps>(
-    ({ onStatusChange, onLivenessScore, onGazeEvent, onBlinkEvent, onFaceMetrics }, ref) => {
+    ({ onStatusChange, onLivenessScore, onGazeEvent, onBlinkEvent, onFaceMetrics, onAntiCheatEvent, lightingChallengeActive }, ref) => {
         const webcamRef        = useRef<Webcam>(null)
         const canvasRef        = useRef<HTMLCanvasElement>(null)
         const livenessScoreRef = useRef(0)
         const noseHistoryRef   = useRef<Point2D[]>([])
         const gazeHistoryRef   = useRef<GazeDirection[]>([])
-        const gazeRatioHistRef = useRef<number[]>([])   // raw ratios for stability
+        const gazeRatioHistRef = useRef<number[]>([])   // raw ratios for stability (saccade analysis)
         const lastGazeEventRef = useRef<GazeDirection>('center')
         const sessionStartRef  = useRef<number>(performance.now())
 
         // Blink tracking
         const blinkStateRef    = useRef<BlinkState>({ closedFrames: 0, isInBlink: false, blinkStart: 0 })
         const blinkCountRef    = useRef<number>(0)
-        const blinkTimesRef    = useRef<number[]>([])    // timestamps of blinks
-        const blinkDurationsRef= useRef<number[]>([])   // durations of blinks (ms)
-        const detectionScoreHistRef = useRef<number[]>([])  // for face brightness stability
+        const blinkTimesRef    = useRef<number[]>([])
+        const blinkDurationsRef= useRef<number[]>([])
+        const blinkFrameIdxRef = useRef<number[]>([])   // frame indices during blinks
+        const detectionScoreHistRef = useRef<number[]>([])
+
+        // EAR history for blink-edge analysis (left, right per frame)
+        const earHistoryRef    = useRef<EARFrame[]>([])
+        const frameCounterRef  = useRef<number>(0)
+
+        // Lighting challenge tracking
+        const lcActiveRef      = useRef<boolean>(false)
+        const lcEARBeforeRef   = useRef<number>(0)
+        const lcAfterEARsRef   = useRef<number[]>([])
+        const lcPassedRef      = useRef<number>(0)
+        const lcFailedRef      = useRef<number>(0)
+
+        // Anti-cheat scores (rolling)
+        const saccadeScoreRef  = useRef<number>(50)
+        const blinkEdgeScoreRef= useRef<number>(75)
 
         // Rich metrics ref (exposed via handle)
         const faceMetricsRef   = useRef<FaceMetrics | null>(null)
@@ -481,6 +633,85 @@ const VerificationCamera = forwardRef<VerificationCameraHandle, VerificationCame
 
                     setBlinkDisplay({ count: blinkCountRef.current, rate: blinkRateRef.current, ear: Math.round(avgEAR * 100) / 100 })
 
+                    // ── EAR history (for blink-edge analysis) ─────────────────
+                    const frameIdx = frameCounterRef.current++
+                    earHistoryRef.current.push({ leftEAR: gaze.leftEAR, rightEAR: gaze.rightEAR, ts: now })
+                    if (earHistoryRef.current.length > 60) earHistoryRef.current.shift()
+
+                    // Record frame index when a blink closes (for edge analysis)
+                    if (avgEAR < BLINK_THRESHOLD && blinkStateRef.current.isInBlink) {
+                        blinkFrameIdxRef.current.push(earHistoryRef.current.length - 1)
+                    }
+                    if (blinkFrameIdxRef.current.length > 20) blinkFrameIdxRef.current.shift()
+
+                    // ── Lighting challenge response measurement ────────────────
+                    // When parent signals a flash started (lightingChallengeActive goes true→false),
+                    // we record EAR before and collect the 3 frames after the flash peak.
+                    if (lightingChallengeActive && !lcActiveRef.current) {
+                        // Flash just started — record baseline EAR
+                        lcActiveRef.current  = true
+                        lcEARBeforeRef.current = avgEAR
+                        lcAfterEARsRef.current = []
+                    } else if (!lightingChallengeActive && lcActiveRef.current) {
+                        // Flash ended — analyse collected frames
+                        lcActiveRef.current = false
+                        if (lcAfterEARsRef.current.length >= 2) {
+                            const result = evaluateLightingResponse(lcEARBeforeRef.current, lcAfterEARsRef.current)
+                            if (result.passed) {
+                                lcPassedRef.current++
+                                onAntiCheatEvent?.({
+                                    type: 'lighting_challenge_pass',
+                                    confidence: result.confidence,
+                                    detail: `ΔEAR=${result.deltaEAR.toFixed(3)} — pupil/lid reflex detected`,
+                                    timestamp: now
+                                })
+                            } else {
+                                lcFailedRef.current++
+                                onAntiCheatEvent?.({
+                                    type: 'lighting_challenge_fail',
+                                    confidence: 1 - result.confidence,
+                                    detail: `ΔEAR=${result.deltaEAR.toFixed(3)} — no reflex to screen flash`,
+                                    timestamp: now
+                                })
+                            }
+                        }
+                    } else if (lightingChallengeActive && lcActiveRef.current) {
+                        // During flash — collect EAR readings
+                        lcAfterEARsRef.current.push(avgEAR)
+                    }
+
+                    // ── Micro-saccade score (every 10 frames) ─────────────────
+                    if (frameIdx % 10 === 0 && gazeRatioHistRef.current.length >= 8) {
+                        const sScore = computeSaccadeScore(gazeRatioHistRef.current)
+                        saccadeScoreRef.current = sScore
+                        if (sScore < 20) {
+                            onAntiCheatEvent?.({
+                                type: 'saccade_too_smooth',
+                                confidence: 1 - sScore / 20,
+                                detail: `Gaze acceleration variance too low (${sScore}/100) — AI renderer signature`,
+                                timestamp: now
+                            })
+                        } else if (sScore > 60 && frameIdx % 50 === 0) {
+                            onAntiCheatEvent?.({ type: 'saccade_detected', confidence: sScore / 100, timestamp: now })
+                        }
+                    }
+
+                    // ── Blink-edge score (on each completed blink) ────────────
+                    if (blinkFrameIdxRef.current.length > 0 && frameIdx % 5 === 0) {
+                        const beScore = computeBlinkEdgeScore(earHistoryRef.current, blinkFrameIdxRef.current)
+                        blinkEdgeScoreRef.current = beScore
+                        if (beScore < 40) {
+                            onAntiCheatEvent?.({
+                                type: 'blink_edge_artifact',
+                                confidence: 1 - beScore / 40,
+                                detail: `Eyelid trajectory anomaly (score ${beScore}/100) — snap-close or unnatural symmetry`,
+                                timestamp: now
+                            })
+                        } else if (beScore > 70 && frameIdx % 30 === 0) {
+                            onAntiCheatEvent?.({ type: 'blink_edge_clean', confidence: beScore / 100, timestamp: now })
+                        }
+                    }
+
                     // ── Gaze smoothing ─────────────────────────────────────────
                     gazeHistoryRef.current.push(gaze.direction)
                     if (gazeHistoryRef.current.length > 4) gazeHistoryRef.current.shift()
@@ -537,6 +768,12 @@ const VerificationCamera = forwardRef<VerificationCameraHandle, VerificationCame
                         eyeOpenness: Math.round(avgEAR * 100) / 100,
                         gazeStabilityScore: gazeStability,
                         faceBrightnessDelta: Math.round(detScoreStd * 1000) / 1000,
+                        // Anti-cheat
+                        lightingChallengesPassed: lcPassedRef.current,
+                        lightingChallengesFailed: lcFailedRef.current,
+                        saccadeScore: saccadeScoreRef.current,
+                        blinkEdgeScore: blinkEdgeScoreRef.current,
+                        ocoloManualScore: 50, // computed in interview/page.tsx via cursor tracking
                     }
                     faceMetricsRef.current = metrics
                     onFaceMetrics?.(metrics)
@@ -644,6 +881,11 @@ const VerificationCamera = forwardRef<VerificationCameraHandle, VerificationCame
                             <span>Rate <span style={{ color: blinkRateColor }}>{blinkDisplay.rate}/min</span></span>
                             <span>EAR <span style={{ color: blinkDisplay.ear < 0.2 ? '#ffd700' : 'var(--color-text-muted)' }}>{blinkDisplay.ear}</span></span>
                         </div>
+                        {lightingChallengeActive && (
+                            <div style={{ marginTop: '4px', fontSize: '0.7rem', color: '#ffd700', textAlign: 'center', letterSpacing: '0.08em' }}>
+                                ⚡ LIGHTING CHALLENGE ACTIVE
+                            </div>
+                        )}
                     </>
                 )}
             </div>
