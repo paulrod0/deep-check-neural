@@ -4,7 +4,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react'
 import Link from 'next/link'
 import dynamic from 'next/dynamic'
 import styles from './page.module.css'
-import { VerificationCameraHandle, VerificationFailureReason, GazeDirection } from '@/components/VerificationCamera'
+import { VerificationCameraHandle, VerificationFailureReason, GazeDirection, BlinkEvent, FaceMetrics } from '@/components/VerificationCamera'
 import { BiometricEvent } from '@/components/CodeEditor'
 import { generateCertificatePDF } from '@/lib/generateCertificate'
 
@@ -162,6 +162,19 @@ function SessionReport({ assessment, onRestart }: { assessment: any; onRestart: 
                             <div>• AI-Assist Risk: <span style={{ color: (assessment.aiRisk ?? 0) > 50 ? '#ff4d4d' : 'var(--color-primary)' }}>
                                 {(assessment.aiRisk ?? 0) > 50 ? `ELEVATED (${assessment.aiRisk}%)` : 'LOW'}
                             </span></div>
+                            {assessment.blinkRate > 0 && (
+                                <div>• Blink Rate: <span style={{ color: (assessment.blinkRate < 5 || assessment.blinkRate > 40) ? '#ffd700' : 'var(--color-primary)' }}>
+                                    {assessment.blinkRate}/min {assessment.blinkCount > 0 ? `(${assessment.blinkCount} blinks)` : ''}
+                                </span></div>
+                            )}
+                            {assessment.gazeStabilityScore > 0 && (
+                                <div>• Gaze Stability: <span style={{ color: assessment.gazeStabilityScore < 50 ? '#ffd700' : 'var(--color-primary)' }}>
+                                    {assessment.gazeStabilityScore}%
+                                </span></div>
+                            )}
+                            {assessment.alerts.some((a: AlertEntry) => (a.message || a).toString().includes('Cross-modal')) && (
+                                <div>• Cross-modal: <span style={{ color: '#ffd700' }}>TYPING WHILE LOOKING AWAY</span></div>
+                            )}
                         </div>
                     </div>
                 </div>
@@ -262,6 +275,14 @@ export default function InterviewPage() {
     const gazeEventCount   = useRef(0)
     const cameraRef        = useRef<VerificationCameraHandle>(null)
 
+    // ── Cross-modal correlation state ──────────────────────────────────────────
+    // Track if gaze is off-screen while actively typing
+    const currentGazeRef   = useRef<GazeDirection>('center')
+    const lastTypingTimeRef= useRef<number>(0)
+    const lastCrossModalAlertRef = useRef<number>(0)
+    const faceMetricsRef   = useRef<FaceMetrics | null>(null)
+    const blinkAnomalyCountRef = useRef<number>(0)
+
     useEffect(() => { trustScoreRef.current = trustScore }, [trustScore])
 
     // ── Evidence capture ──────────────────────────────────────────────────────
@@ -311,11 +332,12 @@ export default function InterviewPage() {
     const lastGazeAlertRef = useRef<Record<string, number>>({})
 
     const handleGazeEvent = useCallback((direction: GazeDirection) => {
+        currentGazeRef.current = direction
         if (direction === 'center' || direction === 'unknown') return
 
         const now = Date.now()
         const lastTime = lastGazeAlertRef.current[direction] ?? 0
-        if (now - lastTime < 4000) return   // debounce: max 1 alert per 4s per direction
+        if (now - lastTime < 4000) return
 
         lastGazeAlertRef.current[direction] = now
         gazeEventCount.current += 1
@@ -324,12 +346,51 @@ export default function InterviewPage() {
         addAlert(`Eye gaze detected — looking ${dirLabel}`, 'medium', 4, `Eye Gaze ${direction}`)
     }, [addAlert])
 
+    // ── Blink events ───────────────────────────────────────────────────────────
+    const handleBlinkEvent = useCallback((event: BlinkEvent) => {
+        if (event.type === 'blink_rate_anomaly') {
+            blinkAnomalyCountRef.current += 1
+            // Only alert on repeated anomalies or very extreme values (< 2/min)
+            if (blinkAnomalyCountRef.current >= 2 || (event.blinkRate !== undefined && event.blinkRate < 2)) {
+                addAlert(
+                    `Blink rate anomaly: ${event.blinkRate}/min — ${event.detail ?? 'unusual blink pattern'}`,
+                    'medium', 8
+                )
+                blinkAnomalyCountRef.current = 0
+            }
+        } else if (event.type === 'prolonged_closure') {
+            addAlert(`Eyes closed ${Math.round((event.blinkDurationMs ?? 0) / 1000 * 10) / 10}s — attention check`,
+                'low', 3)
+        }
+    }, [addAlert])
+
+    // ── Face metrics stream ────────────────────────────────────────────────────
+    const handleFaceMetrics = useCallback((metrics: FaceMetrics) => {
+        faceMetricsRef.current = metrics
+    }, [])
+
     // ── Keyboard biometric events ─────────────────────────────────────────────
     const handleBiometricEvent = useCallback((event: BiometricEvent) => {
         switch (event.type) {
-            case 'keystroke':
+            case 'keystroke': {
                 setLiveMetrics(prev => ({ ...prev, typingActive: true, keystrokeCount: prev.keystrokeCount + 1 }))
+                lastTypingTimeRef.current = Date.now()
+                // ── Cross-modal: typing while gaze is off-screen ───────────
+                // A human looks at what they type. If gaze is consistently off-screen
+                // during active typing, it may indicate reading from another source.
+                const gaze = currentGazeRef.current
+                if (gaze !== 'center' && gaze !== 'unknown') {
+                    const now = Date.now()
+                    if (now - lastCrossModalAlertRef.current > 8000) {
+                        lastCrossModalAlertRef.current = now
+                        addAlert(
+                            `Cross-modal anomaly — typing while looking ${gaze} (possible external source)`,
+                            'medium', 6
+                        )
+                    }
+                }
                 break
+            }
             case 'paste': {
                 const penalty = event.length! > 200 ? 20 : event.length! > 50 ? 12 : 5
                 const sev: AlertEntry['severity'] = event.length! > 200 ? 'high' : event.length! > 50 ? 'medium' : 'low'
@@ -374,6 +435,26 @@ export default function InterviewPage() {
                     'high', 20, 'Drag & Drop'
                 )
                 setLiveMetrics(prev => ({ ...prev, pasteCount: prev.pasteCount + 1 }))
+                break
+            case 'backspace_anomaly':
+                addAlert(
+                    `Backspace pattern anomaly — ${event.detail ?? 'inhuman correction uniformity'}`,
+                    'medium', 8
+                )
+                break
+            case 'fft_periodicity':
+                addAlert(
+                    `Periodic keystroke rhythm detected — ${event.periodicityScore}% spectral dominance (bot signature)`,
+                    'high', 15
+                )
+                setLiveMetrics(prev => ({ ...prev, aiRisk: Math.min(100, prev.aiRisk + 15) }))
+                break
+            case 'fatigue_detected':
+                // No fatigue over 80+ keystrokes = suspicious (bots don't tire)
+                addAlert(
+                    `No typing fatigue detected after ${event.detail?.match(/\d+/)?.[0] ?? '80'}+ keystrokes — bot-like consistency`,
+                    'medium', 8
+                )
                 break
         }
     }, [addAlert, liveMetrics.aiRisk])
@@ -444,6 +525,7 @@ export default function InterviewPage() {
             sessionHash = Array.from(new Uint8Array(hashBuffer)).map(b => b.toString(16).padStart(2, '0')).join('')
         } catch { /* fallback: no hash */ }
 
+        const fm = faceMetricsRef.current
         const assessment = {
             id: sessionId,
             candidateName: 'Remote Candidate',
@@ -462,6 +544,14 @@ export default function InterviewPage() {
             autoFlagged,
             sessionHash,
             certificateIssued: true,
+            // Enhanced biometric fields
+            blinkRate: fm?.blinkRate ?? 0,
+            blinkCount: fm?.blinkCount ?? 0,
+            avgBlinkDuration: fm?.avgBlinkDuration ?? 0,
+            headSymmetryScore: fm?.headSymmetryScore ?? 0,
+            microMovementScore: fm?.microMovementScore ?? 0,
+            gazeStabilityScore: fm?.gazeStabilityScore ?? 0,
+            faceBrightnessDelta: fm?.faceBrightnessDelta ?? 0,
         }
 
         try {
@@ -540,6 +630,8 @@ export default function InterviewPage() {
                             onStatusChange={handleVerificationChange}
                             onLivenessScore={handleLivenessScore}
                             onGazeEvent={handleGazeEvent}
+                            onBlinkEvent={handleBlinkEvent}
+                            onFaceMetrics={handleFaceMetrics}
                         />
                         <p className={styles.hint}>Face + eye gaze monitored continuously.</p>
                     </section>

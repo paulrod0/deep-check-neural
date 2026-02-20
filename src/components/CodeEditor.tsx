@@ -13,12 +13,18 @@ interface KeystrokeEvent {
     holdTime: number
     flightTime: number
     digramKey?: string
+    fingerGroup?: FingerGroup
 }
+
+// Approximate finger groups by key position (QWERTY layout)
+type FingerGroup = 'left_pinky' | 'left_ring' | 'left_middle' | 'left_index' | 'thumbs' | 'right_index' | 'right_middle' | 'right_ring' | 'right_pinky'
 
 interface BiometricBaseline {
     mean: number
     stdDev: number
     digramMap: Map<string, { mean: number; stdDev: number; count: number }>
+    // Key-specific profiles
+    keyProfiles: Map<string, { holdMean: number; holdStd: number; count: number }>
 }
 
 interface RollingStats {
@@ -35,7 +41,9 @@ interface CodeEditorProps {
 }
 
 export interface BiometricEvent {
-    type: 'keystroke' | 'paste' | 'burst' | 'inconsistency' | 'long_pause' | 'rhythm_shift' | 'ai_score_update' | 'content_injection' | 'drag_drop'
+    type: 'keystroke' | 'paste' | 'burst' | 'inconsistency' | 'long_pause' | 'rhythm_shift'
+        | 'ai_score_update' | 'content_injection' | 'drag_drop'
+        | 'fatigue_detected' | 'backspace_anomaly' | 'fft_periodicity'
     holdTime?: number
     flightTime?: number
     key?: string
@@ -45,12 +53,17 @@ export interface BiometricEvent {
     rhythmDelta?: number
     timestamp?: number
     detail?: string
+    // Advanced fields
+    skewness?: number
+    kurtosis?: number
+    velocityGradient?: number
+    backspaceLatency?: number
+    periodicityScore?: number
+    fatigueRate?: number
+    keyFingerGroup?: FingerGroup
 }
 
 // ─── Keys to IGNORE in biometric analysis ────────────────────────────────────
-// Modifier keys, navigation, function keys — these are NOT typing chars and
-// pollute flight-time windows. Pressing Ctrl while navigating looks like burst.
-
 const IGNORED_KEYS = new Set([
     'Control', 'Meta', 'Alt', 'Shift', 'CapsLock',
     'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown',
@@ -58,13 +71,43 @@ const IGNORED_KEYS = new Set([
     'F1','F2','F3','F4','F5','F6','F7','F8','F9','F10','F11','F12',
     'Escape', 'Tab', 'ContextMenu',
     'Insert', 'PrintScreen', 'Pause', 'ScrollLock', 'NumLock',
-    'Dead',  // dead keys (accent compositions)
+    'Dead',
 ])
 
-// Keys that, when held WITH modifier, indicate a clipboard/selection action
-// We still record them as keystrokes but tag them as "command" (not text input)
 const isCommandKeystroke = (e: KeyboardEvent): boolean =>
     e.ctrlKey || e.metaKey || e.altKey
+
+// ─── Finger group mapping (QWERTY) ───────────────────────────────────────────
+// Maps keys to approximate finger used — different fingers have different biomechanics
+
+const FINGER_MAP: Record<string, FingerGroup> = {
+    // Left pinky
+    'q':'left_pinky','a':'left_pinky','z':'left_pinky','1':'left_pinky','`':'left_pinky',
+    // Left ring
+    'w':'left_ring','s':'left_ring','x':'left_ring','2':'left_ring',
+    // Left middle
+    'e':'left_middle','d':'left_middle','c':'left_middle','3':'left_middle',
+    // Left index
+    'r':'left_index','f':'left_index','v':'left_index','4':'left_index',
+    't':'left_index','g':'left_index','b':'left_index','5':'left_index',
+    // Thumbs (space, enter)
+    ' ':'thumbs','Enter':'thumbs',
+    // Right index
+    'y':'right_index','h':'right_index','n':'right_index','6':'right_index',
+    'u':'right_index','j':'right_index','m':'right_index','7':'right_index',
+    // Right middle
+    'i':'right_middle','k':'right_middle',',':'right_middle','8':'right_middle',
+    // Right ring
+    'o':'right_ring','l':'right_ring','.':'right_ring','9':'right_ring',
+    // Right pinky
+    'p':'right_pinky',';':'right_pinky','/':'right_pinky','0':'right_pinky',
+    '[':'right_pinky',']':'right_pinky','\\':'right_pinky','\'':'right_pinky',
+    '-':'right_pinky','=':'right_pinky','Backspace':'right_pinky',
+}
+
+function getFingerGroup(key: string): FingerGroup | undefined {
+    return FINGER_MAP[key.toLowerCase()] ?? FINGER_MAP[key]
+}
 
 // ─── Statistical helpers ──────────────────────────────────────────────────────
 
@@ -79,12 +122,30 @@ function zScore(value: number, mean: number, stdDev: number): number {
     return Math.abs((value - mean) / (stdDev || 1))
 }
 
-// Shannon entropy on a binned distribution.
-// For AI detection: human typing = HIGH entropy (natural variation).
-// Robotic input = LOW entropy (everything in 1-2 bins).
-// (Note: this is the OPPOSITE of the intuition of "too uniform" —
-//  uniform = all bins equal = MAX entropy. We want to flag LOW entropy =
-//  everything clustered in one bin = macro-like regularity at same speed.)
+// ─── Skewness & Kurtosis ──────────────────────────────────────────────────────
+// Human flight time distributions are right-skewed (long tail of pauses).
+// Robotic input has near-zero skewness (symmetric around mean).
+// Excess kurtosis > 3: leptokurtic (bot-like peaks); < 3: platykurtic (human).
+
+function computeSkewness(values: number[]): number {
+    if (values.length < 3) return 0
+    const { mean, stdDev } = computeStats(values)
+    const n = values.length
+    const m3 = values.reduce((s, v) => s + ((v - mean) / stdDev) ** 3, 0) / n
+    return (n / ((n - 1) * (n - 2))) * m3 * n  // Fisher skewness (bias-corrected)
+}
+
+function computeKurtosis(values: number[]): number {
+    if (values.length < 4) return 0
+    const { mean, stdDev } = computeStats(values)
+    const n = values.length
+    const m4 = values.reduce((s, v) => s + ((v - mean) / stdDev) ** 4, 0) / n
+    return m4 - 3  // excess kurtosis (0 = normal, >0 = heavy tails like bot peaks)
+}
+
+// ─── Shannon entropy ──────────────────────────────────────────────────────────
+// Human: HIGH entropy (natural variation). Robot: LOW entropy (one pace).
+
 function shannonEntropy(values: number[]): number {
     if (values.length < 2) return 0
     const min = Math.min(...values)
@@ -103,17 +164,104 @@ function shannonEntropy(values: number[]): number {
     }, 0)
 }
 
-// ─── AI Score ─────────────────────────────────────────────────────────────────
-// Only flags physically impossible or statistically inhuman patterns.
-// Reference: Banerjee & Woodard 2012, Mondal & Bours 2013.
-// Human range: flight stdDev 40–120ms, hold stdDev 15–50ms.
+// ─── FFT periodicity detection ────────────────────────────────────────────────
+// A bot typing at constant intervals produces a strong periodic signal.
+// We compute a simplified DFT magnitude spectrum and look for dominant peaks.
+// If the dominant frequency accounts for > 60% of total spectral power → periodic.
+//
+// Reference: Shen et al. 2013 "User authentication through typing biometrics"
 
-function estimateAIScore(flights: number[], holds: number[]): number {
+function computePeriodicityScore(flights: number[]): number {
+    const n = flights.length
+    if (n < 16) return 0
+
+    // Normalize to zero-mean
+    const { mean } = computeStats(flights)
+    const signal = flights.map(f => f - mean)
+
+    // DFT: compute magnitudes for frequencies k=1..n/2
+    let maxMag = 0
+    let totalPower = 0
+    const magnitudes: number[] = []
+
+    for (let k = 1; k <= Math.floor(n / 2); k++) {
+        let re = 0, im = 0
+        for (let t = 0; t < n; t++) {
+            const angle = (2 * Math.PI * k * t) / n
+            re += signal[t] * Math.cos(angle)
+            im -= signal[t] * Math.sin(angle)
+        }
+        const mag = Math.sqrt(re * re + im * im)
+        magnitudes.push(mag)
+        totalPower += mag
+        if (mag > maxMag) maxMag = mag
+    }
+
+    if (totalPower === 0) return 0
+    // Periodicity = how dominant the strongest frequency is
+    return Math.round((maxMag / totalPower) * 100)
+}
+
+// ─── Velocity gradient (acceleration pattern) ─────────────────────────────────
+// Humans accelerate at start of a typing burst and decelerate at end.
+// Bots maintain constant velocity.
+// Returns: positive = accelerating, negative = decelerating, ~0 = constant.
+
+function computeVelocityGradient(flights: number[]): number {
+    if (flights.length < 6) return 0
+    const half = Math.floor(flights.length / 2)
+    const { mean: firstHalf } = computeStats(flights.slice(0, half))
+    const { mean: secondHalf } = computeStats(flights.slice(half))
+    // Positive = slowing down (human fatigue), negative = speeding up
+    return (secondHalf - firstHalf) / (firstHalf || 1)
+}
+
+// ─── Fatigue modeling ─────────────────────────────────────────────────────────
+// Humans slow down progressively over time. This computes the linear regression
+// slope of flight times over the session (ms increase per keystroke).
+// Bots have slope ~0. Humans typically +0.5 to +2ms per keystroke over long sessions.
+
+function computeFatigueRate(allFlights: number[]): number {
+    if (allFlights.length < 30) return 0
+    // Compute linear regression slope
+    const n = allFlights.length
+    const xs = allFlights.map((_, i) => i)
+    const meanX = (n - 1) / 2
+    const { mean: meanY } = computeStats(allFlights)
+    const numerator   = xs.reduce((s, x, i) => s + (x - meanX) * (allFlights[i] - meanY), 0)
+    const denominator = xs.reduce((s, x) => s + (x - meanX) ** 2, 0)
+    return denominator === 0 ? 0 : numerator / denominator
+}
+
+// ─── Backspace correction analysis ───────────────────────────────────────────
+// Humans make typos and correct them. After a typo they press Backspace.
+// The latency distribution of [error_key → Backspace] is characteristic.
+// Bots either never use Backspace, or use it with inhuman uniformity.
+
+interface BackspaceRecord {
+    prevKey: string
+    latency: number   // ms between prev key release and Backspace press
+}
+
+// ─── AI Score (enhanced — 9 signals) ─────────────────────────────────────────
+// Now includes skewness, kurtosis, periodicity, gradient, backspace patterns.
+
+function estimateAIScore(
+    flights: number[],
+    holds: number[],
+    backspaceLatencies: number[],
+    allFlights: number[]
+): number {
     if (flights.length < 20) return 0
 
     const { mean: flightMean, stdDev: flightStd } = computeStats(flights)
     const { stdDev: holdStd } = computeStats(holds)
-    const entropy = shannonEntropy(flights)
+    const entropy     = shannonEntropy(flights)
+    const skewness    = computeSkewness(flights)
+    const kurtosis    = computeKurtosis(flights)
+    const periodicity = computePeriodicityScore(flights)
+    const gradient    = computeVelocityGradient(flights)
+    const fatigue     = computeFatigueRate(allFlights)
 
     let score = 0
 
@@ -130,13 +278,45 @@ function estimateAIScore(flights: number[], holds: number[]): number {
     else if (holdStd < 10) score += 10
 
     // Signal 4: LOW entropy = all keystrokes at the same pace (macro-like)
-    // Human entropy on 10 bins is typically 2.5–3.3. Below 1.5 = very suspicious.
     if (entropy < 1.5) score += 20
     else if (entropy < 2.0) score += 8
 
     // Signal 5: Autocomplete pattern — very slow mean with low variance
-    // (long thinking pause, then sudden uniform burst)
     if (flightMean > 600 && flightStd < 25) score += 15
+
+    // Signal 6: Skewness anomaly
+    // Human right-skewed: skewness 0.5–2.5. Near-zero or negative = suspicious.
+    if (Math.abs(skewness) < 0.15) score += 18     // perfectly symmetric = bot
+    else if (skewness < 0) score += 10              // left-skewed = very unusual for humans
+
+    // Signal 7: Kurtosis anomaly
+    // Bots produce leptokurtic distributions (spike at one speed).
+    // Excess kurtosis > 5 with low stdDev is a strong bot signature.
+    if (kurtosis > 5 && flightStd < 20) score += 15
+    else if (kurtosis > 3 && flightStd < 15) score += 8
+
+    // Signal 8: FFT periodicity — dominant frequency > 55% of spectral power
+    if (periodicity > 55) score += 20
+    else if (periodicity > 40) score += 10
+
+    // Signal 9: No velocity gradient (bots don't accelerate or decelerate)
+    // Humans always have |gradient| > 0.05 in natural typing (they warm up or tire)
+    if (Math.abs(gradient) < 0.03) score += 10
+
+    // Signal 10: No fatigue (bots have slope ≈ 0 over entire session)
+    if (allFlights.length >= 50 && Math.abs(fatigue) < 0.1) score += 8
+
+    // Signal 11: Backspace patterns
+    if (backspaceLatencies.length > 0) {
+        const { stdDev: bsStd } = computeStats(backspaceLatencies)
+        // Zero backspaces in long session is suspicious (unless perfect typist)
+        if (allFlights.length > 80 && backspaceLatencies.length === 0) score += 10
+        // Inhuman uniformity in Backspace corrections
+        if (backspaceLatencies.length >= 3 && bsStd < 10) score += 12
+    } else if (allFlights.length > 80) {
+        // No corrections in 80+ keystrokes — unusual for humans
+        score += 8
+    }
 
     return Math.min(100, score)
 }
@@ -152,22 +332,29 @@ export default function CodeEditor({ onBiometricEvent, language = 'typescript' }
     })
     const [displayMetrics, setDisplayMetrics] = useState({
         avgHold: 0, avgFlight: 0, entropy: 0, rhythmStability: 100, calibrationCount: 0,
+        skewness: 0, kurtosis: 0, periodicity: 0, fatigue: 0,
     })
 
-    const lastReleaseTimeRef  = useRef<number>(0)
-    const lastKeyRef          = useRef<string>('')
-    const activeKeysRef       = useRef<Map<string, number>>(new Map())
-    const calibrationPoolRef  = useRef<number[]>([])
-    // Only character-key timestamps (no modifiers) for burst window
-    const charWindowRef       = useRef<number[]>([])
-    const recentFlightsRef    = useRef<number[]>([])
-    const baselineRef         = useRef<BiometricBaseline | null>(null)
-    const isCalibratinRef     = useRef(true)
-    // Burst debounce — don't fire burst more than once per 2s
-    const lastBurstRef        = useRef<number>(0)
-    // Content injection sentinel — snapshot of editor value per frame
-    const lastContentLenRef   = useRef<number>(0)
-    const lastKeystrokeTimeRef= useRef<number>(0)
+    const lastReleaseTimeRef   = useRef<number>(0)
+    const lastKeyRef           = useRef<string>('')
+    const activeKeysRef        = useRef<Map<string, number>>(new Map())
+    const calibrationPoolRef   = useRef<number[]>([])
+    const charWindowRef        = useRef<number[]>([])
+    const recentFlightsRef     = useRef<number[]>([])
+    const allFlightsRef        = useRef<number[]>([])    // full session — for fatigue
+    const allHoldsRef          = useRef<number[]>([])    // full session holds
+    const baselineRef          = useRef<BiometricBaseline | null>(null)
+    const isCalibratinRef      = useRef(true)
+    const lastBurstRef         = useRef<number>(0)
+    const lastContentLenRef    = useRef<number>(0)
+    const lastKeystrokeTimeRef = useRef<number>(0)
+    // Backspace correction tracking
+    const backspaceRecordsRef  = useRef<BackspaceRecord[]>([])
+    const lastCharKeyRef       = useRef<{ key: string; releaseTime: number } | null>(null)
+    // Periodicity / FFT — fire at most every 5s
+    const lastPeriodicityCheckRef = useRef<number>(0)
+    // Fatigue — fire at most every 10s
+    const lastFatigueCheckRef  = useRef<number>(0)
 
     useEffect(() => { baselineRef.current = baseline }, [baseline])
     useEffect(() => { isCalibratinRef.current = isCalibrating }, [isCalibrating])
@@ -177,17 +364,13 @@ export default function CodeEditor({ onBiometricEvent, language = 'typescript' }
         if (!domNode) return
 
         // ── Content injection detection ───────────────────────────────────────
-        // Polls editor content every 800ms. If content grew by more than 1 char
-        // without a recent keystroke or paste event, it was injected programmatically
-        // (autotyper script, IDE plugin, AI autocomplete accepted via mouse, etc.)
         const contentPollInterval = setInterval(() => {
             const model = editor.getModel()
             if (!model) return
-            const currentLen  = model.getValueLength()
-            const prevLen     = lastContentLenRef.current
+            const currentLen   = model.getValueLength()
+            const prevLen      = lastContentLenRef.current
             const timeSinceKey = performance.now() - lastKeystrokeTimeRef.current
 
-            // If content grew by >2 chars and last keystroke was >1.5s ago → injection
             if (currentLen > prevLen + 2 && timeSinceKey > 1500) {
                 const injected = currentLen - prevLen
                 onBiometricEvent?.({
@@ -203,7 +386,7 @@ export default function CodeEditor({ onBiometricEvent, language = 'typescript' }
         // ── keydown ───────────────────────────────────────────────────────────
         domNode.addEventListener('keydown', (e: KeyboardEvent) => {
             const now = performance.now()
-            if (activeKeysRef.current.has(e.key)) return   // ignore key-repeat
+            if (activeKeysRef.current.has(e.key)) return
             activeKeysRef.current.set(e.key, now)
         }, { capture: true })
 
@@ -214,34 +397,68 @@ export default function CodeEditor({ onBiometricEvent, language = 'typescript' }
             if (pressTime === undefined) return
             activeKeysRef.current.delete(e.key)
 
-            // ── Skip modifier / navigation keys entirely ──────────────────────
             if (IGNORED_KEYS.has(e.key)) return
-
-            // ── Skip command keystrokes (Ctrl+C, Ctrl+Z, etc.) ───────────────
-            // These are handled by paste/input events, not here
             if (isCommandKeystroke(e)) return
 
             const holdTime   = now - pressTime
             lastKeystrokeTimeRef.current = now
 
-            // Flight time: only from previous *character* key release
             const flightTime = lastReleaseTimeRef.current > 0
                 ? pressTime - lastReleaseTimeRef.current
                 : 0
             const digramKey  = lastKeyRef.current + '→' + e.key
+            const fingerGroup = getFingerGroup(e.key)
+
+            // ── Backspace correction analysis ─────────────────────────────────
+            // When we see a Backspace, compute latency from the LAST char key release
+            if (e.key === 'Backspace' && lastCharKeyRef.current) {
+                const bsLatency = pressTime - lastCharKeyRef.current.releaseTime
+                if (bsLatency > 0 && bsLatency < 5000) {   // reasonable correction window
+                    const record: BackspaceRecord = { prevKey: lastCharKeyRef.current.key, latency: bsLatency }
+                    backspaceRecordsRef.current.push(record)
+
+                    // Check for anomalies in backspace timing
+                    if (backspaceRecordsRef.current.length >= 3) {
+                        const latencies = backspaceRecordsRef.current.slice(-10).map(r => r.latency)
+                        const { stdDev: bsStd, mean: bsMean } = computeStats(latencies)
+                        // Inhuman uniformity: all corrections at exact same latency
+                        if (bsStd < 8 && latencies.length >= 3) {
+                            onBiometricEvent?.({
+                                type: 'backspace_anomaly',
+                                backspaceLatency: bsMean,
+                                detail: `Backspace stdDev ${bsStd.toFixed(1)}ms (inhuman uniformity)`,
+                                timestamp: now
+                            })
+                        }
+                    }
+                }
+            }
 
             const event: KeystrokeEvent = {
-                key: e.key, pressTime, releaseTime: now, holdTime, flightTime, digramKey
+                key: e.key, pressTime, releaseTime: now, holdTime, flightTime, digramKey, fingerGroup
             }
 
             lastReleaseTimeRef.current = now
-            lastKeyRef.current = e.key
+
+            // Update lastCharKey only for non-Backspace typing
+            if (e.key !== 'Backspace') {
+                lastCharKeyRef.current = { key: e.key, releaseTime: now }
+                lastKeyRef.current = e.key
+            }
+
+            // ── Store holds ───────────────────────────────────────────────────
+            allHoldsRef.current.push(holdTime)
+            if (flightTime > 0) {
+                allFlightsRef.current.push(flightTime)
+            }
 
             // ── Burst window — CHARACTER keys only ────────────────────────────
-            charWindowRef.current.push(now)
-            charWindowRef.current = charWindowRef.current.filter(t => now - t < 300)
+            if (e.key !== 'Backspace') {
+                charWindowRef.current.push(now)
+                charWindowRef.current = charWindowRef.current.filter(t => now - t < 300)
+            }
 
-            // ── Flight sliding window ─────────────────────────────────────────
+            // ── Flight sliding window (last 60) ───────────────────────────────
             if (flightTime > 0) {
                 recentFlightsRef.current.push(flightTime)
                 if (recentFlightsRef.current.length > 60) recentFlightsRef.current.shift()
@@ -249,14 +466,19 @@ export default function CodeEditor({ onBiometricEvent, language = 'typescript' }
 
             // ── Calibration ───────────────────────────────────────────────────
             if (isCalibratinRef.current) {
-                if (flightTime > 10 && flightTime < 2000) {   // exclude outliers during calibration
+                if (flightTime > 10 && flightTime < 2000) {
                     calibrationPoolRef.current.push(flightTime)
                 }
                 setDisplayMetrics(prev => ({ ...prev, calibrationCount: calibrationPoolRef.current.length }))
 
                 if (calibrationPoolRef.current.length >= 30) {
                     const stats = computeStats(calibrationPoolRef.current)
-                    setBaseline({ mean: stats.mean, stdDev: stats.stdDev, digramMap: new Map() })
+                    setBaseline({
+                        mean: stats.mean,
+                        stdDev: stats.stdDev,
+                        digramMap: new Map(),
+                        keyProfiles: new Map()
+                    })
                     setIsCalibrating(false)
                 }
             } else if (baselineRef.current) {
@@ -266,9 +488,37 @@ export default function CodeEditor({ onBiometricEvent, language = 'typescript' }
                 if (flightTime > 0) {
                     const z = zScore(flightTime, bl.mean, bl.stdDev)
                     if (z > 3.5) {
-                        onBiometricEvent?.({ type: 'inconsistency', zScore: z, key: e.key, timestamp: now })
+                        onBiometricEvent?.({ type: 'inconsistency', zScore: z, key: e.key, keyFingerGroup: fingerGroup, timestamp: now })
                         setRollingStats(prev => ({ ...prev, inconsistencyCount: prev.inconsistencyCount + 1 }))
                     }
+                }
+
+                // ── Key-specific hold time profiles ───────────────────────────
+                // Each key/finger has its own hold distribution; check against it
+                if (bl.keyProfiles.has(e.key)) {
+                    const kp = bl.keyProfiles.get(e.key)!
+                    if (kp.count >= 5) {
+                        const kz = zScore(holdTime, kp.holdMean, kp.holdStd)
+                        if (kz > 4.0) {
+                            onBiometricEvent?.({
+                                type: 'inconsistency',
+                                zScore: kz,
+                                key: e.key,
+                                keyFingerGroup: fingerGroup,
+                                detail: `Key-specific hold anomaly (${e.key})`,
+                                timestamp: now
+                            })
+                        }
+                    }
+                    // Online update of key profile (Welford's algorithm)
+                    const kp2 = bl.keyProfiles.get(e.key)!
+                    const nc = kp2.count + 1
+                    const delta = holdTime - kp2.holdMean
+                    const nm = kp2.holdMean + delta / nc
+                    const nm2 = (kp2.holdStd ** 2) * kp2.count + delta * (holdTime - nm)
+                    bl.keyProfiles.set(e.key, { holdMean: nm, holdStd: Math.sqrt(nm2 / nc) || 1, count: nc })
+                } else {
+                    bl.keyProfiles.set(e.key, { holdMean: holdTime, holdStd: 1, count: 1 })
                 }
 
                 // ── Digram-pair analysis ──────────────────────────────────────
@@ -291,19 +541,71 @@ export default function CodeEditor({ onBiometricEvent, language = 'typescript' }
                     }
                 }
 
-                // ── Rhythm shift ──────────────────────────────────────────────
+                // ── Advanced analysis (every 10+ keystrokes) ──────────────────
                 if (recentFlightsRef.current.length >= 10) {
-                    const recentStats = computeStats(recentFlightsRef.current.slice(-10))
+                    const recent = recentFlightsRef.current
+                    const recentStats = computeStats(recent)
                     const rhythmDelta = Math.abs(recentStats.mean - bl.mean) / bl.mean
                     if (rhythmDelta > 1.5) {
                         onBiometricEvent?.({ type: 'rhythm_shift', rhythmDelta, timestamp: now })
                     }
-                    const stability = Math.max(0, Math.round(100 - rhythmDelta * 60))
-                    const entropy   = shannonEntropy(recentFlightsRef.current)
-                    const holds     = keystrokes.slice(-20).map(k => k.holdTime)
-                    const aiScore   = estimateAIScore(recentFlightsRef.current, holds)
 
-                    setDisplayMetrics(prev => ({ ...prev, avgFlight: recentStats.mean, entropy, rhythmStability: stability }))
+                    const stability   = Math.max(0, Math.round(100 - rhythmDelta * 60))
+                    const entropy     = shannonEntropy(recent)
+                    const skewness    = computeSkewness(recent)
+                    const kurtosis    = computeKurtosis(recent)
+                    const gradient    = computeVelocityGradient(recent)
+
+                    // ── FFT periodicity check (every 5s) ──────────────────────
+                    let periodicity = 0
+                    if (recent.length >= 16 && now - lastPeriodicityCheckRef.current > 5000) {
+                        lastPeriodicityCheckRef.current = now
+                        periodicity = computePeriodicityScore(recent)
+                        if (periodicity > 55) {
+                            onBiometricEvent?.({
+                                type: 'fft_periodicity',
+                                periodicityScore: periodicity,
+                                detail: `Dominant frequency = ${periodicity}% spectral power (bot-like rhythm)`,
+                                timestamp: now
+                            })
+                        }
+                    }
+
+                    // ── Fatigue check (every 10s, after 50+ keystrokes) ───────
+                    let fatigue = 0
+                    if (allFlightsRef.current.length >= 50 && now - lastFatigueCheckRef.current > 10000) {
+                        lastFatigueCheckRef.current = now
+                        fatigue = computeFatigueRate(allFlightsRef.current)
+                        // If slope is extremely flat over long session → suspicious
+                        if (allFlightsRef.current.length >= 80 && Math.abs(fatigue) < 0.05) {
+                            onBiometricEvent?.({
+                                type: 'fatigue_detected',
+                                fatigueRate: fatigue,
+                                detail: `No natural fatigue slope after ${allFlightsRef.current.length} keystrokes`,
+                                timestamp: now
+                            })
+                        }
+                    }
+
+                    const holds   = allHoldsRef.current.slice(-20)
+                    const aiScore = estimateAIScore(
+                        recent,
+                        holds,
+                        backspaceRecordsRef.current.map(r => r.latency),
+                        allFlightsRef.current
+                    )
+
+                    setDisplayMetrics(prev => ({
+                        ...prev,
+                        avgFlight: recentStats.mean,
+                        entropy,
+                        rhythmStability: stability,
+                        skewness,
+                        kurtosis,
+                        periodicity,
+                        fatigue,
+                    }))
+
                     setRollingStats(prev => {
                         if (Math.abs(prev.aiScore - aiScore) > 5) {
                             onBiometricEvent?.({ type: 'ai_score_update', aiScore, timestamp: now })
@@ -314,8 +616,6 @@ export default function CodeEditor({ onBiometricEvent, language = 'typescript' }
             }
 
             // ── Burst: > 12 CHAR keystrokes in 300ms ─────────────────────────
-            // (modifier-free — we only count character keys)
-            // Debounced: max 1 burst alert per 2s to avoid spam
             if (charWindowRef.current.length > 12) {
                 const sinceLast = now - lastBurstRef.current
                 if (sinceLast > 2000) {
@@ -326,7 +626,6 @@ export default function CodeEditor({ onBiometricEvent, language = 'typescript' }
             }
 
             // ── Physically impossible gap (< 12ms between char keys) ─────────
-            // Only flag once every 2s (same debounce as burst)
             if (flightTime > 0 && flightTime < 12) {
                 const sinceLast = now - lastBurstRef.current
                 if (sinceLast > 2000) {
@@ -341,7 +640,14 @@ export default function CodeEditor({ onBiometricEvent, language = 'typescript' }
                 setRollingStats(prev => ({ ...prev, longPauseCount: prev.longPauseCount + 1 }))
             }
 
-            onBiometricEvent?.({ type: 'keystroke', holdTime, flightTime, key: e.key, timestamp: now })
+            onBiometricEvent?.({
+                type: 'keystroke',
+                holdTime,
+                flightTime,
+                key: e.key,
+                keyFingerGroup: fingerGroup,
+                timestamp: now
+            })
 
             setKeystrokes(prev => {
                 const next = [...prev.slice(-99), event]
@@ -354,13 +660,13 @@ export default function CodeEditor({ onBiometricEvent, language = 'typescript' }
         // ── Paste via clipboard event ─────────────────────────────────────────
         domNode.addEventListener('paste', (e: ClipboardEvent) => {
             const text = e.clipboardData?.getData('text') || ''
-            lastKeystrokeTimeRef.current = performance.now()    // reset injection detector
+            lastKeystrokeTimeRef.current = performance.now()
             lastContentLenRef.current += text.length
             onBiometricEvent?.({ type: 'paste', length: text.length, timestamp: performance.now() })
             setRollingStats(prev => ({ ...prev, pasteCount: prev.pasteCount + 1 }))
         })
 
-        // ── Drag & drop text (bypasses paste event) ───────────────────────────
+        // ── Drag & drop text ──────────────────────────────────────────────────
         domNode.addEventListener('drop', (e: DragEvent) => {
             const text = e.dataTransfer?.getData('text/plain') || ''
             if (text.length > 0) {
@@ -373,8 +679,10 @@ export default function CodeEditor({ onBiometricEvent, language = 'typescript' }
         return () => clearInterval(contentPollInterval)
     }, [onBiometricEvent])
 
-    const aiColor       = rollingStats.aiScore > 60 ? '#ff4d4d' : rollingStats.aiScore > 30 ? '#ffd700' : 'var(--color-primary)'
-    const stabilityColor= displayMetrics.rhythmStability > 70 ? 'var(--color-primary)' : displayMetrics.rhythmStability > 40 ? '#ffd700' : '#ff4d4d'
+    const aiColor        = rollingStats.aiScore > 60 ? '#ff4d4d' : rollingStats.aiScore > 30 ? '#ffd700' : 'var(--color-primary)'
+    const stabilityColor = displayMetrics.rhythmStability > 70 ? 'var(--color-primary)' : displayMetrics.rhythmStability > 40 ? '#ffd700' : '#ff4d4d'
+    const skewnessColor  = Math.abs(displayMetrics.skewness) < 0.2 ? '#ff4d4d' : 'var(--color-primary)'
+    const periodicityColor = displayMetrics.periodicity > 40 ? '#ff4d4d' : 'var(--color-primary)'
 
     return (
         <div className={styles.container}>
@@ -393,7 +701,6 @@ export default function CodeEditor({ onBiometricEvent, language = 'typescript' }
                         wordWrap: 'on',
                         suggestOnTriggerCharacters: false,
                         quickSuggestions: false,
-                        // Disable drag & drop at Monaco level too (belt + suspenders)
                         dragAndDrop: false,
                     }}
                     onMount={handleEditorMount}
@@ -419,6 +726,20 @@ export default function CodeEditor({ onBiometricEvent, language = 'typescript' }
                 <div className={styles.metric}>
                     <span>Rhythm</span>
                     <span style={{ color: stabilityColor }}>{displayMetrics.rhythmStability}%</span>
+                </div>
+                <div className={styles.metric}>
+                    <span>Skewness</span>
+                    <span style={{ color: skewnessColor }}>{displayMetrics.skewness.toFixed(2)}</span>
+                </div>
+                <div className={styles.metric}>
+                    <span>Kurtosis</span>
+                    <span style={{ color: displayMetrics.kurtosis > 3 ? '#ffd700' : 'var(--color-primary)' }}>
+                        {displayMetrics.kurtosis.toFixed(2)}
+                    </span>
+                </div>
+                <div className={styles.metric}>
+                    <span>Periodicity</span>
+                    <span style={{ color: periodicityColor }}>{displayMetrics.periodicity}%</span>
                 </div>
                 <div className={styles.metric}>
                     <span>AI Risk</span>
