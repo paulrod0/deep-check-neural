@@ -302,6 +302,16 @@ export default function InterviewPage() {
     const cameraRef        = useRef<VerificationCameraHandle>(null)
     const codeEditorRef    = useRef<CodeEditorHandle>(null)
 
+    // ── Camera alert rate-limiting ────────────────────────────────────────────
+    // Prevents the trust score from collapsing when the camera fires the same
+    // reason repeatedly (every 450ms) — e.g. 'No face detected' while models load.
+    // Min interval between same-type alerts: 8 seconds.
+    // Grace period: no camera-based penalties for the first 7 seconds of the session.
+    const cameraAlertLastRef = useRef<Record<string, number>>({})
+    const sessionStartMsRef  = useRef<number>(Date.now())
+    const CAMERA_ALERT_COOLDOWN_MS = 8000
+    const SESSION_GRACE_MS         = 7000
+
     // ── Cross-modal / Anti-cheat correlation state ────────────────────────────
     const currentGazeRef          = useRef<GazeDirection>('center')
     const lastTypingTimeRef       = useRef<number>(0)
@@ -344,6 +354,17 @@ export default function InterviewPage() {
     const handleVerificationChange = useCallback((verified: boolean, type?: VerificationFailureReason) => {
         setIsVerified(verified)
         if (!verified && type) {
+            const now = Date.now()
+
+            // Grace period: no camera penalties for the first SESSION_GRACE_MS of the session
+            const msSinceStart = now - sessionStartMsRef.current
+            if (msSinceStart < SESSION_GRACE_MS) return
+
+            // Rate-limit: skip if same reason fired recently
+            const lastFired = cameraAlertLastRef.current[type] ?? 0
+            if (now - lastFired < CAMERA_ALERT_COOLDOWN_MS) return
+            cameraAlertLastRef.current[type] = now
+
             if (type === 'Gaze Divergence') {
                 addAlert('Head turned away from screen', 'medium', 5, 'Head Turn')
             } else if (type === 'Eye Gaze Detected') {

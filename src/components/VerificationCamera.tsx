@@ -458,6 +458,13 @@ const VerificationCamera = forwardRef<VerificationCameraHandle, VerificationCame
         const faceMetricsRef   = useRef<FaceMetrics | null>(null)
         const blinkRateRef     = useRef<number>(0)
 
+        // ── Status change deduplication ────────────────────────────────────────
+        // Only fire onStatusChange when verified state or reason actually changes,
+        // not on every detection tick (every 450ms). This prevents flooding the
+        // parent with repeated 'No face detected' calls while the camera inits.
+        const lastStatusRef    = useRef<{ verified: boolean; reason: VerificationFailureReason }>({ verified: false, reason: null })
+        const modelReadyTimeRef = useRef<number>(0)  // timestamp when models finished loading
+
         const [isModelLoaded,      setIsModelLoaded]      = useState(false)
         const [modelLoadError,     setModelLoadError]     = useState<string | null>(null)
         const [verificationStatus, setVerificationStatus] = useState<'idle' | 'scanning' | 'verified' | 'failed'>('idle')
@@ -484,7 +491,7 @@ const VerificationCamera = forwardRef<VerificationCameraHandle, VerificationCame
                         faceapi.nets.tinyFaceDetector.loadFromUri('/models'),
                         faceapi.nets.faceLandmark68Net.loadFromUri('/models'),
                     ])
-                    if (!cancelled) { setIsModelLoaded(true); setVerificationStatus('scanning') }
+                    if (!cancelled) { setIsModelLoaded(true); setVerificationStatus('scanning'); modelReadyTimeRef.current = Date.now() }
                 } catch (e) {
                     console.error('Model load error:', e)
                     if (!cancelled) setModelLoadError('AI models failed to load. Please refresh.')
@@ -788,26 +795,34 @@ const VerificationCamera = forwardRef<VerificationCameraHandle, VerificationCame
                     const headOff = !pose.isFacing
                     const gazeOff = smoothGaze !== 'center' && smoothGaze !== 'unknown'
 
+                    // ── Helper: fire onStatusChange only when state changes ──────
+                    const fireStatus = (verified: boolean, reason: VerificationFailureReason) => {
+                        const prev = lastStatusRef.current
+                        if (prev.verified === verified && prev.reason === reason) return   // no change — skip
+                        lastStatusRef.current = { verified, reason }
+                        onStatusChange?.(verified, reason ?? undefined)
+                    }
+
                     if (headOff) {
                         const reason: VerificationFailureReason = pose.yaw !== 'center' ? 'Gaze Divergence' : 'Head Tilted'
                         setPoseLabel(pose.yaw !== 'center' ? `Head ${pose.yaw}` : 'Head tilted')
                         setGazeLabel('')
                         setVerificationStatus('failed')
                         setFailureReason(reason)
-                        onStatusChange?.(false, reason)
+                        fireStatus(false, reason)
                     } else if (gazeOff) {
                         const gazeDirectionLabel = `Looking ${smoothGaze}`
                         setPoseLabel('Facing camera')
                         setGazeLabel(gazeDirectionLabel)
                         setVerificationStatus('failed')
                         setFailureReason('Eye Gaze Detected')
-                        onStatusChange?.(false, 'Eye Gaze Detected')
+                        fireStatus(false, 'Eye Gaze Detected')
                     } else {
                         setPoseLabel('Facing camera')
                         setGazeLabel('Eyes: center')
                         setVerificationStatus('verified')
                         setFailureReason(null)
-                        onStatusChange?.(true)
+                        fireStatus(true, null)
                     }
 
                 } else if (detections.length === 0) {
@@ -816,12 +831,24 @@ const VerificationCamera = forwardRef<VerificationCameraHandle, VerificationCame
                     gazeRatioHistRef.current = []
                     setVerificationStatus('failed')
                     setFailureReason('No face detected')
-                    onStatusChange?.(false, 'No face detected')
+                    // Suppress during model warm-up (first 4s after load)
+                    const msSinceReady = Date.now() - modelReadyTimeRef.current
+                    if (msSinceReady > 4000) {
+                        const prev = lastStatusRef.current
+                        if (prev.verified !== false || prev.reason !== 'No face detected') {
+                            lastStatusRef.current = { verified: false, reason: 'No face detected' }
+                            onStatusChange?.(false, 'No face detected')
+                        }
+                    }
                     setPoseLabel('–'); setGazeLabel('')
                 } else {
                     setVerificationStatus('failed')
                     setFailureReason('Multiple faces detected')
-                    onStatusChange?.(false, 'Multiple faces detected')
+                    const prev = lastStatusRef.current
+                    if (prev.verified !== false || prev.reason !== 'Multiple faces detected') {
+                        lastStatusRef.current = { verified: false, reason: 'Multiple faces detected' }
+                        onStatusChange?.(false, 'Multiple faces detected')
+                    }
                 }
             }, 450)
 
