@@ -264,7 +264,8 @@ function estimateAIScore(
     flights: number[],
     holds: number[],
     backspaceLatencies: number[],
-    allFlights: number[]
+    allFlights: number[],
+    sessionDurationMs: number = 0
 ): number {
     if (flights.length < 20) return 0
 
@@ -276,6 +277,12 @@ function estimateAIScore(
     const periodicity = computePeriodicityScore(flights)
     const gradient    = computeVelocityGradient(flights)
     const fatigue     = computeFatigueRate(allFlights)
+
+    // Compute session WPM to protect slow typists from false positives on
+    // signals that are only meaningful at higher typing speeds.
+    const elapsedMin = sessionDurationMs > 0 ? sessionDurationMs / 60000 : 1
+    const sessionWpm = (allFlights.length / 5) / elapsedMin
+    const isSlowTypist = sessionWpm < 25  // < 25 WPM = slow but legitimate
 
     let score = 0
 
@@ -314,11 +321,13 @@ function estimateAIScore(
     else if (periodicity > 40) score += 10
 
     // Signal 9: No velocity gradient (bots don't accelerate or decelerate)
-    // Humans always have |gradient| > 0.05 in natural typing (they warm up or tire)
-    if (Math.abs(gradient) < 0.03) score += 10
+    // Humans always have |gradient| > 0.05 in natural typing (they warm up or tire).
+    // Guard: skip for slow typists (<25 WPM) who may genuinely type at constant pace.
+    if (!isSlowTypist && Math.abs(gradient) < 0.03) score += 10
 
     // Signal 10: No fatigue (bots have slope ≈ 0 over entire session)
-    if (allFlights.length >= 50 && Math.abs(fatigue) < 0.1) score += 8
+    // Guard: skip for slow typists — a slow steady pace is not suspicious.
+    if (!isSlowTypist && allFlights.length >= 50 && Math.abs(fatigue) < 0.1) score += 8
 
     // Signal 11: Backspace patterns
     if (backspaceLatencies.length > 0) {
@@ -356,6 +365,7 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(function CodeEd
     const lastKeyRef           = useRef<string>('')
     const activeKeysRef        = useRef<Map<string, number>>(new Map())
     const calibrationPoolRef   = useRef<number[]>([])
+    const calibrationStartRef  = useRef<number>(Date.now())  // for time-based calibration gate
     const charWindowRef        = useRef<number[]>([])
     const recentFlightsRef     = useRef<number[]>([])
     const allFlightsRef        = useRef<number[]>([])    // full session — for fatigue
@@ -538,7 +548,10 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(function CodeEd
                 }
                 setDisplayMetrics(prev => ({ ...prev, calibrationCount: calibrationPoolRef.current.length }))
 
-                if (calibrationPoolRef.current.length >= 30) {
+                // Require ≥30 samples AND ≥20s elapsed so fast typists don't get
+                // a baseline from only 3 seconds of data (which would over-alert later).
+                const msSinceCalibStart = Date.now() - calibrationStartRef.current
+                if (calibrationPoolRef.current.length >= 30 && msSinceCalibStart >= 20000) {
                     const stats = computeStats(calibrationPoolRef.current)
                     setBaseline({
                         mean: stats.mean,
@@ -659,7 +672,8 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(function CodeEd
                         recent,
                         holds,
                         backspaceRecordsRef.current.map(r => r.latency),
-                        allFlightsRef.current
+                        allFlightsRef.current,
+                        Date.now() - sessionStartRef.current
                     )
 
                     setDisplayMetrics(prev => ({

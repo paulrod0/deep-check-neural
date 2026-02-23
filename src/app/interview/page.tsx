@@ -318,6 +318,20 @@ export default function InterviewPage() {
     const lastCrossModalAlertRef  = useRef<number>(0)
     const faceMetricsRef          = useRef<FaceMetrics | null>(null)
     const blinkAnomalyCountRef    = useRef<number>(0)
+
+    // ── Gaze-keystroke temporal correlation (Layer 2 Sync-Check) ─────────────
+    // Distinguishes AUTHOR pattern (gaze leads keystrokes by 50-300ms = predictive)
+    // from SPECTATOR pattern (gaze follows keystrokes by >150ms = reactive/fraud).
+    // We record each gaze shift timestamp and, on each keystroke, compute the delta
+    // between the keystroke and the most recent gaze direction change.
+    // Negative delta = gaze shifted BEFORE keystroke (author — healthy).
+    // Positive delta > 150ms = gaze shifted AFTER keystroke (spectator — suspicious).
+    const gazeShiftHistoryRef     = useRef<{ ts: number; direction: GazeDirection }[]>([])
+    const gazeLeadSamplesRef      = useRef<number[]>([])    // ring buffer of deltas (ms)
+    const lastSpectatorAlertRef   = useRef<number>(0)
+    const SPECTATOR_THRESHOLD_MS  = 150   // positive lag above this = spectator
+    const SPECTATOR_MIN_SAMPLES   = 30    // require 30 keystrokes before judging
+    const SPECTATOR_WINDOW        = 10    // look at last 10 samples for final verdict
     // Oculo-manual synchrony — track cursor movement in editor
     const cursorActivityRef       = useRef<number>(0)  // last timestamp of cursor move
     const ocoloDesyncCountRef     = useRef<number>(0)
@@ -387,10 +401,19 @@ export default function InterviewPage() {
     const lastGazeAlertRef = useRef<Record<string, number>>({})
 
     const handleGazeEvent = useCallback((direction: GazeDirection) => {
+        const now = Date.now()
+        const prevDirection = currentGazeRef.current
         currentGazeRef.current = direction
+
+        // Record every gaze direction change for temporal correlation analysis.
+        // We track shifts between any two distinct directions (including center↔off).
+        if (direction !== prevDirection) {
+            gazeShiftHistoryRef.current.push({ ts: now, direction })
+            if (gazeShiftHistoryRef.current.length > 20) gazeShiftHistoryRef.current.shift()
+        }
+
         if (direction === 'center' || direction === 'unknown') return
 
-        const now = Date.now()
         const lastTime = lastGazeAlertRef.current[direction] ?? 0
         if (now - lastTime < 4000) return
 
@@ -520,20 +543,55 @@ export default function InterviewPage() {
     const handleBiometricEvent = useCallback((event: BiometricEvent) => {
         switch (event.type) {
             case 'keystroke': {
+                const now = Date.now()
                 setLiveMetrics(prev => ({ ...prev, typingActive: true, keystrokeCount: prev.keystrokeCount + 1 }))
-                lastTypingTimeRef.current = Date.now()
+                lastTypingTimeRef.current = now
+
                 // ── Cross-modal: typing while gaze is off-screen ───────────
-                // A human looks at what they type. If gaze is consistently off-screen
-                // during active typing, it may indicate reading from another source.
                 const gaze = currentGazeRef.current
                 if (gaze !== 'center' && gaze !== 'unknown') {
-                    const now = Date.now()
                     if (now - lastCrossModalAlertRef.current > 8000) {
                         lastCrossModalAlertRef.current = now
                         addAlert(
                             `Cross-modal anomaly — typing while looking ${gaze} (possible external source)`,
                             'medium', 6
                         )
+                    }
+                }
+
+                // ── Gaze-Keystroke temporal correlation (Sync-Check) ───────
+                // Find the most recent gaze shift relative to this keystroke.
+                // delta > 0  → gaze shifted AFTER the key was pressed (spectator: reactive)
+                // delta < 0  → gaze shifted BEFORE the key was pressed (author: predictive)
+                const history = gazeShiftHistoryRef.current
+                if (history.length > 0) {
+                    const lastShift = history[history.length - 1]
+                    const delta = now - lastShift.ts  // ms since last gaze shift
+                    // Only count deltas < 2000ms (older shifts are unrelated to this keystroke)
+                    if (delta < 2000) {
+                        gazeLeadSamplesRef.current.push(delta)
+                        if (gazeLeadSamplesRef.current.length > 50) gazeLeadSamplesRef.current.shift()
+                    }
+                }
+
+                // Evaluate spectator pattern once we have enough samples
+                const samples = gazeLeadSamplesRef.current
+                if (samples.length >= SPECTATOR_MIN_SAMPLES) {
+                    const recent = samples.slice(-SPECTATOR_WINDOW)
+                    const sorted = [...recent].sort((a, b) => a - b)
+                    const median = sorted[Math.floor(sorted.length / 2)]
+                    // All recent gaze shifts happened well BEFORE the keystroke they
+                    // supposedly "reacted to" = spectator watching someone else type.
+                    const allReactive = recent.every(d => d > SPECTATOR_THRESHOLD_MS)
+                    if (allReactive && median > SPECTATOR_THRESHOLD_MS) {
+                        const msSinceLast = now - lastSpectatorAlertRef.current
+                        if (msSinceLast > 30000) {  // max once per 30s
+                            lastSpectatorAlertRef.current = now
+                            addAlert(
+                                `Sync-Check: gaze follows keystrokes reactively (${Math.round(median)}ms lag) — spectator pattern detected`,
+                                'high', 15
+                            )
+                        }
                     }
                 }
                 break

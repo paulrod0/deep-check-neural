@@ -444,11 +444,13 @@ const VerificationCamera = forwardRef<VerificationCameraHandle, VerificationCame
         const frameCounterRef  = useRef<number>(0)
 
         // Lighting challenge tracking
-        const lcActiveRef      = useRef<boolean>(false)
-        const lcEARBeforeRef   = useRef<number>(0)
-        const lcAfterEARsRef   = useRef<number[]>([])
-        const lcPassedRef      = useRef<number>(0)
-        const lcFailedRef      = useRef<number>(0)
+        const lcActiveRef             = useRef<boolean>(false)
+        const lcEARBeforeRef          = useRef<number>(0)
+        const lcAfterEARsRef          = useRef<number[]>([])
+        const lcGazeRatiosDuringFlash = useRef<number[]>([])   // gaze ratios while flash is active
+        const lcGazeRatioBefore       = useRef<number>(0.5)    // baseline gaze ratio pre-flash
+        const lcPassedRef             = useRef<number>(0)
+        const lcFailedRef             = useRef<number>(0)
 
         // Anti-cheat scores (rolling)
         const saccadeScoreRef  = useRef<number>(50)
@@ -655,16 +657,30 @@ const VerificationCamera = forwardRef<VerificationCameraHandle, VerificationCame
                     // When parent signals a flash started (lightingChallengeActive goes true→false),
                     // we record EAR before and collect the 3 frames after the flash peak.
                     if (lightingChallengeActive && !lcActiveRef.current) {
-                        // Flash just started — record baseline EAR
+                        // Flash just started — record baseline EAR and gaze ratio
                         lcActiveRef.current  = true
                         lcEARBeforeRef.current = avgEAR
+                        lcGazeRatioBefore.current = (gaze.leftRatio + gaze.rightRatio) / 2
                         lcAfterEARsRef.current = []
+                        lcGazeRatiosDuringFlash.current = []
                     } else if (!lightingChallengeActive && lcActiveRef.current) {
                         // Flash ended — analyse collected frames
                         lcActiveRef.current = false
                         if (lcAfterEARsRef.current.length >= 2) {
                             const result = evaluateLightingResponse(lcEARBeforeRef.current, lcAfterEARsRef.current)
-                            if (result.passed) {
+
+                            // Secondary signal: did gaze freeze during the flash?
+                            // A live human involuntarily micro-moves during a bright flash (startle).
+                            // A pre-recorded video loop has perfectly static gaze ratio.
+                            let gazeFreezeDuringFlash = false
+                            const gazeRatios = lcGazeRatiosDuringFlash.current
+                            if (gazeRatios.length >= 2) {
+                                const mean = gazeRatios.reduce((s, v) => s + v, 0) / gazeRatios.length
+                                const variance = gazeRatios.reduce((s, v) => s + (v - mean) ** 2, 0) / gazeRatios.length
+                                gazeFreezeDuringFlash = variance < 0.0001  // gaze unnaturally frozen
+                            }
+
+                            if (result.passed && !gazeFreezeDuringFlash) {
                                 lcPassedRef.current++
                                 onAntiCheatEvent?.({
                                     type: 'lighting_challenge_pass',
@@ -674,17 +690,27 @@ const VerificationCamera = forwardRef<VerificationCameraHandle, VerificationCame
                                 })
                             } else {
                                 lcFailedRef.current++
+                                // Boost confidence if BOTH EAR and gaze freeze indicate deepfake
+                                const failConfidence = gazeFreezeDuringFlash
+                                    ? Math.min(1, (1 - result.confidence) + 0.3)
+                                    : 1 - result.confidence
+                                const detail = gazeFreezeDuringFlash && !result.passed
+                                    ? `ΔEAR=${result.deltaEAR.toFixed(3)} + gaze frozen during flash — strong deepfake signal`
+                                    : gazeFreezeDuringFlash
+                                    ? `ΔEAR=${result.deltaEAR.toFixed(3)} — reflex detected but gaze frozen (partial deepfake signal)`
+                                    : `ΔEAR=${result.deltaEAR.toFixed(3)} — no reflex to screen flash`
                                 onAntiCheatEvent?.({
                                     type: 'lighting_challenge_fail',
-                                    confidence: 1 - result.confidence,
-                                    detail: `ΔEAR=${result.deltaEAR.toFixed(3)} — no reflex to screen flash`,
+                                    confidence: failConfidence,
+                                    detail,
                                     timestamp: now
                                 })
                             }
                         }
                     } else if (lightingChallengeActive && lcActiveRef.current) {
-                        // During flash — collect EAR readings
+                        // During flash — collect EAR and gaze ratio readings
                         lcAfterEARsRef.current.push(avgEAR)
+                        lcGazeRatiosDuringFlash.current.push((gaze.leftRatio + gaze.rightRatio) / 2)
                     }
 
                     // ── Micro-saccade score (every 10 frames) ─────────────────
