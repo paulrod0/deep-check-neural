@@ -237,8 +237,11 @@ function estimateGaze(landmarks: faceapi.FaceLandmarks68): GazeEstimate {
 // EAR > BLINK_OPEN_THRESHOLD = eye has reopened
 // PROLONGED: eye stays closed for > PROLONGED_MS = probably not a blink
 
-const BLINK_THRESHOLD   = 0.20   // EAR below this = eyes closing/closed
-const BLINK_OPEN        = 0.25   // EAR above this = eyes open
+// EAR thresholds raised slightly: 0.20 was too strict for users wearing glasses
+// or positioned at an angle — their EAR rarely drops below 0.20 even during blinks.
+// 0.22/0.27 gives more margin while still reliably catching genuine blink closures.
+const BLINK_THRESHOLD   = 0.22   // EAR below this = eyes closing/closed
+const BLINK_OPEN        = 0.27   // EAR above this = eyes open
 const MIN_BLINK_FRAMES  = 2      // Min consecutive frames below threshold
 const MAX_BLINK_FRAMES  = 12     // Max frames = ~540ms at 45ms interval
 
@@ -632,7 +635,10 @@ const VerificationCamera = forwardRef<VerificationCameraHandle, VerificationCame
                     // Widened normal range to 4–35/min: people blink less under focused
                     // test conditions and individual variation is wide (4–30 is common).
                     const blinkCheckMin = Math.floor(elapsedMin)
-                    if (elapsedMin >= 1.0 && blinkCheckMin > lastBlinkCheckMinRef.current) {
+                    // Require ≥2 full minutes before judging blink rate as anomalous.
+                    // A rate of 0/min in the first minute is meaningless — the user may
+                    // simply not have blinked yet in the EAR window, or be wearing glasses.
+                    if (elapsedMin >= 2.0 && blinkCheckMin > lastBlinkCheckMinRef.current) {
                         lastBlinkCheckMinRef.current = blinkCheckMin
                         if (blinkRateRef.current < 4 && blinkCountRef.current < 3) {
                             onBlinkEvent?.({

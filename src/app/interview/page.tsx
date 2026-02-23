@@ -440,7 +440,7 @@ export default function InterviewPage() {
             if (isExtreme || blinkAnomalyCountRef.current >= 3) {
                 addAlert(
                     `Blink rate anomaly: ${event.blinkRate}/min — ${event.detail ?? 'unusual blink pattern'}`,
-                    'medium', 8
+                    'medium', 4   // reduced from 8: glasses/angle can suppress EAR below threshold
                 )
                 // Reset only to 2 so the next minute doesn't immediately re-trigger,
                 // but a continued anomaly (count reaches 3 again) will alert once more.
@@ -622,11 +622,11 @@ export default function InterviewPage() {
                 setLiveMetrics(prev => ({ ...prev, aiRisk: Math.min(100, prev.aiRisk + 20) }))
                 break
             case 'inconsistency':
-                addAlert(`Typing anomaly — Z-score ${event.zScore?.toFixed(1)}σ (key: ${event.key})`, 'medium', 8)
+                addAlert(`Typing anomaly — Z-score ${event.zScore?.toFixed(1)}σ (key: ${event.key})`, 'medium', 5)
                 setLiveMetrics(prev => ({ ...prev, anomalyCount: prev.anomalyCount + 1 }))
                 break
             case 'rhythm_shift':
-                addAlert('Sustained typing rhythm shift — possible user substitution', 'high', 12, 'Rhythm Shift')
+                addAlert('Sustained typing rhythm shift — possible user substitution', 'medium', 8, 'Rhythm Shift')
                 setLiveMetrics(prev => ({ ...prev, anomalyCount: prev.anomalyCount + 1 }))
                 break
             case 'long_pause':

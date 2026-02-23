@@ -385,6 +385,10 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(function CodeEd
     // Consecutive inhuman-gap counter (< 12ms flight). Reset on any normal keystroke.
     // We only escalate to an alert after 3 in a row to avoid Monaco synthetic events.
     const inhumanGapStreakRef     = useRef<number>(0)
+    // Rate-limiting for rhythm_shift and inconsistency events — without these,
+    // a single anomalous typing period generates a penalty on every keystroke.
+    const lastRhythmShiftRef      = useRef<number>(0)   // cooldown: 10s between rhythm_shift
+    const lastInconsistencyRef    = useRef<number>(0)   // cooldown: 5s between inconsistency
     // Fatigue — fire at most every 10s
     const lastFatigueCheckRef  = useRef<number>(0)
 
@@ -570,9 +574,13 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(function CodeEd
                 const bl = baselineRef.current
 
                 // ── Z-Score anomaly ───────────────────────────────────────────
+                // Threshold raised 3.5σ → 4.5σ: with a 30-keystroke baseline the
+                // stdDev can be very small, making normal variation appear extreme.
+                // A cooldown of 5s prevents burst-penalising a single anomalous phrase.
                 if (flightTime > 0) {
                     const z = zScore(flightTime, bl.mean, bl.stdDev)
-                    if (z > 3.5) {
+                    if (z > 4.5 && now - lastInconsistencyRef.current > 5000) {
+                        lastInconsistencyRef.current = now
                         onBiometricEvent?.({ type: 'inconsistency', zScore: z, key: e.key, keyFingerGroup: fingerGroup, timestamp: now })
                         setRollingStats(prev => ({ ...prev, inconsistencyCount: prev.inconsistencyCount + 1 }))
                     }
@@ -584,7 +592,8 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(function CodeEd
                     const kp = bl.keyProfiles.get(e.key)!
                     if (kp.count >= 5) {
                         const kz = zScore(holdTime, kp.holdMean, kp.holdStd)
-                        if (kz > 4.0) {
+                        if (kz > 4.0 && now - lastInconsistencyRef.current > 5000) {
+                            lastInconsistencyRef.current = now
                             onBiometricEvent?.({
                                 type: 'inconsistency',
                                 zScore: kz,
@@ -609,9 +618,12 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(function CodeEd
                 // ── Digram-pair analysis ──────────────────────────────────────
                 if (flightTime > 0) {
                     const entry = bl.digramMap.get(digramKey)
-                    if (entry && entry.count >= 5) {
+                    // Require ≥10 samples per digram (was 5): with only 5 samples the
+                    // stdDev is noisy and normal variation easily exceeds 4σ.
+                    if (entry && entry.count >= 10) {
                         const dz = zScore(flightTime, entry.mean, entry.stdDev)
-                        if (dz > 4.0) {
+                        if (dz > 4.0 && now - lastRhythmShiftRef.current > 10000) {
+                            lastRhythmShiftRef.current = now
                             onBiometricEvent?.({ type: 'rhythm_shift', zScore: dz, key: digramKey, timestamp: now })
                         }
                     }
@@ -631,7 +643,8 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(function CodeEd
                     const recent = recentFlightsRef.current
                     const recentStats = computeStats(recent)
                     const rhythmDelta = Math.abs(recentStats.mean - bl.mean) / bl.mean
-                    if (rhythmDelta > 1.5) {
+                    if (rhythmDelta > 1.5 && now - lastRhythmShiftRef.current > 10000) {
+                        lastRhythmShiftRef.current = now
                         onBiometricEvent?.({ type: 'rhythm_shift', rhythmDelta, timestamp: now })
                     }
 
