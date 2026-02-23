@@ -457,8 +457,9 @@ const VerificationCamera = forwardRef<VerificationCameraHandle, VerificationCame
         const blinkEdgeScoreRef= useRef<number>(75)
 
         // Rich metrics ref (exposed via handle)
-        const faceMetricsRef   = useRef<FaceMetrics | null>(null)
-        const blinkRateRef     = useRef<number>(0)
+        const faceMetricsRef         = useRef<FaceMetrics | null>(null)
+        const blinkRateRef           = useRef<number>(0)
+        const lastBlinkCheckMinRef   = useRef<number>(-1)  // last integer-minute blink check fired
 
         // ── Status change deduplication ────────────────────────────────────────
         // Only fire onStatusChange when verified state or reason actually changes,
@@ -622,22 +623,29 @@ const VerificationCamera = forwardRef<VerificationCameraHandle, VerificationCame
                         ? Math.round(blinkCountRef.current / elapsedMin)
                         : recentBlinks.length
 
-                    // Blink rate anomaly detection
-                    // Human range: 8–30 blinks/min. Below 5 = staring (video?). Above 40 = anxiety or artifact.
-                    if (elapsedMin > 0.5 && blinkRateRef.current < 5 && blinkCountRef.current < 2) {
-                        onBlinkEvent?.({
-                            type: 'blink_rate_anomaly',
-                            blinkRate: blinkRateRef.current,
-                            detail: `Low blink rate: ${blinkRateRef.current}/min (expected 8–30)`,
-                            timestamp: now
-                        })
-                    } else if (elapsedMin > 0.5 && blinkRateRef.current > 40) {
-                        onBlinkEvent?.({
-                            type: 'blink_rate_anomaly',
-                            blinkRate: blinkRateRef.current,
-                            detail: `High blink rate: ${blinkRateRef.current}/min`,
-                            timestamp: now
-                        })
+                    // Blink rate anomaly detection — checked at most once per full minute.
+                    // This prevents the 450ms detection loop from generating dozens of
+                    // events for the same sustained low/high rate condition.
+                    // Widened normal range to 4–35/min: people blink less under focused
+                    // test conditions and individual variation is wide (4–30 is common).
+                    const blinkCheckMin = Math.floor(elapsedMin)
+                    if (elapsedMin >= 1.0 && blinkCheckMin > lastBlinkCheckMinRef.current) {
+                        lastBlinkCheckMinRef.current = blinkCheckMin
+                        if (blinkRateRef.current < 4 && blinkCountRef.current < 3) {
+                            onBlinkEvent?.({
+                                type: 'blink_rate_anomaly',
+                                blinkRate: blinkRateRef.current,
+                                detail: `Low blink rate: ${blinkRateRef.current}/min (expected 4–35)`,
+                                timestamp: now
+                            })
+                        } else if (blinkRateRef.current > 35) {
+                            onBlinkEvent?.({
+                                type: 'blink_rate_anomaly',
+                                blinkRate: blinkRateRef.current,
+                                detail: `High blink rate: ${blinkRateRef.current}/min`,
+                                timestamp: now
+                            })
+                        }
                     }
 
                     setBlinkDisplay({ count: blinkCountRef.current, rate: blinkRateRef.current, ear: Math.round(avgEAR * 100) / 100 })

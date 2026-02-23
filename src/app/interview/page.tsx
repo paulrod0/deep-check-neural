@@ -428,13 +428,20 @@ export default function InterviewPage() {
     const handleBlinkEvent = useCallback((event: BlinkEvent) => {
         if (event.type === 'blink_rate_anomaly') {
             blinkAnomalyCountRef.current += 1
-            // Only alert on repeated anomalies or very extreme values (< 2/min)
-            if (blinkAnomalyCountRef.current >= 2 || (event.blinkRate !== undefined && event.blinkRate < 2)) {
+            // Blink frequency varies widely between individuals and conditions.
+            // Only alert after 3 consecutive anomalous minutes (sustained pattern),
+            // or immediately for extreme values (< 1/min = very likely no live face).
+            // Counter does NOT reset after alerting — it keeps growing so we don't
+            // re-enter the "almost there" zone and fire again quickly.
+            const isExtreme = event.blinkRate !== undefined && event.blinkRate < 1
+            if (isExtreme || blinkAnomalyCountRef.current >= 3) {
                 addAlert(
                     `Blink rate anomaly: ${event.blinkRate}/min — ${event.detail ?? 'unusual blink pattern'}`,
                     'medium', 8
                 )
-                blinkAnomalyCountRef.current = 0
+                // Reset only to 2 so the next minute doesn't immediately re-trigger,
+                // but a continued anomaly (count reaches 3 again) will alert once more.
+                blinkAnomalyCountRef.current = 2
             }
         } else if (event.type === 'prolonged_closure') {
             addAlert(`Eyes closed ${Math.round((event.blinkDurationMs ?? 0) / 1000 * 10) / 10}s — attention check`,
