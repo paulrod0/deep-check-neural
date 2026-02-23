@@ -374,9 +374,12 @@ export default function InterviewPage() {
             const msSinceStart = now - sessionStartMsRef.current
             if (msSinceStart < SESSION_GRACE_MS) return
 
-            // Rate-limit: skip if same reason fired recently
+            // Rate-limit: skip if same reason fired recently.
+            // Head Tilted gets a longer cooldown (30s) — a user standing or sitting
+            // at an angle may sustain a tilt the whole session, which is not fraud.
+            const cooldown = type === 'Head Tilted' ? 30000 : CAMERA_ALERT_COOLDOWN_MS
             const lastFired = cameraAlertLastRef.current[type] ?? 0
-            if (now - lastFired < CAMERA_ALERT_COOLDOWN_MS) return
+            if (now - lastFired < cooldown) return
             cameraAlertLastRef.current[type] = now
 
             if (type === 'Gaze Divergence') {
@@ -532,12 +535,16 @@ export default function InterviewPage() {
 
             if (!typingRecently || !faceMetrics) return
 
-            // Saccade score too low while actively typing = gaze is frozen (pre-recorded video)
-            if (faceMetrics.saccadeScore < 15 && now - lastOculoAlertRef.current > 15000) {
+            // Saccade score too low while actively typing = gaze is frozen (pre-recorded video).
+            // Threshold lowered from < 15 to < 10: score 10–15 can occur naturally when a
+            // human is deeply focused on the screen and barely moves their eyes.
+            // Cooldown raised from 15s to 45s: this is a strong but rare signal — firing
+            // every 15s created excessive trust-score damage for legitimate users.
+            if (faceMetrics.saccadeScore < 10 && now - lastOculoAlertRef.current > 45000) {
                 lastOculoAlertRef.current = now
                 handleAntiCheatEvent({
                     type: 'oculo_manual_desynced',
-                    confidence: 1 - faceMetrics.saccadeScore / 15,
+                    confidence: 1 - faceMetrics.saccadeScore / 10,
                     detail: `Saccade score ${faceMetrics.saccadeScore}/100 while typing — gaze frozen`,
                     timestamp: now
                 })

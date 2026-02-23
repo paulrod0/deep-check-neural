@@ -141,7 +141,10 @@ function estimateHeadPose(landmarks: faceapi.FaceLandmarks68): HeadPoseResult {
     // Roll — eye height difference
     const eyeSpan   = Math.abs(leftEye.x - rightEye.x)
     const eyeDeltaY = Math.abs(leftEye.y - rightEye.y)
-    const isTilted  = eyeDeltaY / (eyeSpan || 1) > 0.3
+    // Roll threshold raised from 0.3 (≈17°) to 0.4 (≈22°) to avoid flagging
+    // users who are standing, have a monitor at an angle, or sit with a natural
+    // head lean. 0.4 still catches deliberate cheat-sheet or phone reading tilts.
+    const isTilted  = eyeDeltaY / (eyeSpan || 1) > 0.4
 
     // Bilateral face symmetry score
     // Compare left jaw half to right jaw half (midpoint at jaw[8])
@@ -722,10 +725,17 @@ const VerificationCamera = forwardRef<VerificationCameraHandle, VerificationCame
                     }
 
                     // ── Micro-saccade score (every 10 frames) ─────────────────
-                    if (frameIdx % 10 === 0 && gazeRatioHistRef.current.length >= 8) {
+                    // Require ≥30 samples (~13s of data) before evaluating — the score
+                    // starts at 50 by default and can temporarily dip below threshold
+                    // during the first few seconds simply due to insufficient data.
+                    // Threshold lowered from < 20 to < 10: score 10–20 is borderline and
+                    // can occur during focused typing when the user's gaze is naturally
+                    // still. Only truly pathological smoothness (AI renderer = score < 10)
+                    // should warrant a penalty.
+                    if (frameIdx % 10 === 0 && gazeRatioHistRef.current.length >= 30) {
                         const sScore = computeSaccadeScore(gazeRatioHistRef.current)
                         saccadeScoreRef.current = sScore
-                        if (sScore < 20) {
+                        if (sScore < 10) {
                             onAntiCheatEvent?.({
                                 type: 'saccade_too_smooth',
                                 confidence: 1 - sScore / 20,

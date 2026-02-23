@@ -382,6 +382,9 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(function CodeEd
     const lastCharKeyRef       = useRef<{ key: string; releaseTime: number } | null>(null)
     // Periodicity / FFT — fire at most every 5s
     const lastPeriodicityCheckRef = useRef<number>(0)
+    // Consecutive inhuman-gap counter (< 12ms flight). Reset on any normal keystroke.
+    // We only escalate to an alert after 3 in a row to avoid Monaco synthetic events.
+    const inhumanGapStreakRef     = useRef<number>(0)
     // Fatigue — fire at most every 10s
     const lastFatigueCheckRef  = useRef<number>(0)
 
@@ -530,9 +533,11 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(function CodeEd
             //   - Enter causes Monaco to auto-insert indentation (false +N chars)
             //   - Backspace/Delete are editing operations, not injection bursts
             //   - Tab in code editors jumps indent levels, not text injection
+            // Window widened to 500ms (was 300ms) so fast human typing (~120 WPM =
+            // ~1 char/100ms = 5 chars/500ms) doesn't approach the burst threshold.
             if (!BURST_EXCLUDED_KEYS.has(e.key)) {
                 charWindowRef.current.push(now)
-                charWindowRef.current = charWindowRef.current.filter(t => now - t < 300)
+                charWindowRef.current = charWindowRef.current.filter(t => now - t < 500)
             }
 
             // ── Flight sliding window (last 60) ───────────────────────────────
@@ -696,26 +701,47 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(function CodeEd
                 }
             }
 
-            // ── Burst: > 12 CHAR keystrokes in 300ms ─────────────────────────
-            if (charWindowRef.current.length > 12) {
+            // ── Burst: > 15 CHAR keystrokes in 500ms ─────────────────────────
+            // Threshold raised from >12/300ms to >15/500ms:
+            //   - 120 WPM typist produces ~10 chars/500ms — safely below threshold
+            //   - AI clipboard injection / LLM paste produces 50–500 chars instantly
+            // Additional guard: skip for 800ms after Enter (Monaco auto-indent fires
+            // several synthetic chars immediately after Enter for code indentation).
+            const msSinceEnterForBurst = now - lastEnterTimeRef.current
+            if (charWindowRef.current.length > 15 && msSinceEnterForBurst > 800) {
                 const sinceLast = now - lastBurstRef.current
                 if (sinceLast > 2000) {
                     lastBurstRef.current = now
-                    onBiometricEvent?.({ type: 'burst', timestamp: now, detail: `${charWindowRef.current.length} chars/300ms` })
+                    onBiometricEvent?.({ type: 'burst', timestamp: now, detail: `${charWindowRef.current.length} chars/500ms` })
                     setRollingStats(prev => ({ ...prev, burstCount: prev.burstCount + 1 }))
                 }
             }
 
             // ── Physically impossible gap (< 12ms between char keys) ─────────
-            // Only flag for printable characters — Enter/Backspace/Delete are
-            // editing actions that can legitimately follow each other very quickly
-            // (e.g. pressing Enter twice rapidly for paragraph breaks).
+            // Neuromotor minimum is ~15ms. Gaps < 12ms are physically impossible
+            // for deliberate keystrokes BUT Monaco auto-inserts bracket pairs,
+            // quotes, and import completions as synthetic events with 0ms flight.
+            // Strategy: count consecutive inhuman gaps — only alert after 3 in a
+            // row, which cannot be explained by a single autocomplete insertion.
+            // Demoted from 'burst' (high penalty) to 'inconsistency' (medium).
             if (flightTime > 0 && flightTime < 12 && !BURST_EXCLUDED_KEYS.has(e.key)) {
-                const sinceLast = now - lastBurstRef.current
-                if (sinceLast > 2000) {
-                    lastBurstRef.current = now
-                    onBiometricEvent?.({ type: 'burst', timestamp: now, detail: `${flightTime.toFixed(1)}ms gap (inhuman)` })
+                inhumanGapStreakRef.current += 1
+                if (inhumanGapStreakRef.current >= 3) {
+                    const sinceLast = now - lastBurstRef.current
+                    if (sinceLast > 3000) {
+                        lastBurstRef.current = now
+                        onBiometricEvent?.({
+                            type: 'inconsistency',
+                            zScore: 5,  // off-scale = synthetic
+                            key: e.key,
+                            keyFingerGroup: fingerGroup,
+                            detail: `${inhumanGapStreakRef.current} consecutive impossible gaps (< 12ms) — synthetic input`,
+                            timestamp: now
+                        })
+                    }
                 }
+            } else if (flightTime >= 12) {
+                inhumanGapStreakRef.current = 0  // reset streak on any normal gap
             }
 
             // ── Long pause ────────────────────────────────────────────────────
