@@ -630,28 +630,32 @@ const VerificationCamera = forwardRef<VerificationCameraHandle, VerificationCame
                         : recentBlinks.length
 
                     // Blink rate anomaly detection — checked at most once per full minute.
-                    // This prevents the 450ms detection loop from generating dozens of
-                    // events for the same sustained low/high rate condition.
-                    // Widened normal range to 4–35/min: people blink less under focused
-                    // test conditions and individual variation is wide (4–30 is common).
+                    // Normal range widened to 2–50/min:
+                    //   • Lower bound 2 (was 4): webcam EAR misses many natural blinks
+                    //     (glasses, angle, heavy eyelids). 2–4/min is rare but legitimate.
+                    //   • Upper bound 50 (was 35): some people blink rapidly under stress.
+                    //   • LOW blink rate alone is unreliable — only fire if the measured
+                    //     rate is 0 AND the session has had zero detected blinks at all,
+                    //     meaning the EAR threshold was never crossed (strong signal).
+                    //   • HIGH blink rate (> 50/min) is a more reliable signal.
+                    // Require ≥3 full minutes before judging low rate as anomalous —
+                    // gives the EAR detector time to accumulate real data.
                     const blinkCheckMin = Math.floor(elapsedMin)
-                    // Require ≥2 full minutes before judging blink rate as anomalous.
-                    // A rate of 0/min in the first minute is meaningless — the user may
-                    // simply not have blinked yet in the EAR window, or be wearing glasses.
                     if (elapsedMin >= 2.0 && blinkCheckMin > lastBlinkCheckMinRef.current) {
                         lastBlinkCheckMinRef.current = blinkCheckMin
-                        if (blinkRateRef.current < 4 && blinkCountRef.current < 3) {
+                        // Only alert on truly zero detected blinks after ≥3 min (camera EAR failure is common)
+                        if (blinkRateRef.current === 0 && blinkCountRef.current === 0 && elapsedMin >= 3.0) {
                             onBlinkEvent?.({
                                 type: 'blink_rate_anomaly',
-                                blinkRate: blinkRateRef.current,
-                                detail: `Low blink rate: ${blinkRateRef.current}/min (expected 4–35)`,
+                                blinkRate: 0,
+                                detail: `No blinks detected in ${Math.floor(elapsedMin)} min — possible still image`,
                                 timestamp: now
                             })
-                        } else if (blinkRateRef.current > 35) {
+                        } else if (blinkRateRef.current > 50) {
                             onBlinkEvent?.({
                                 type: 'blink_rate_anomaly',
                                 blinkRate: blinkRateRef.current,
-                                detail: `High blink rate: ${blinkRateRef.current}/min`,
+                                detail: `High blink rate: ${blinkRateRef.current}/min (> 50)`,
                                 timestamp: now
                             })
                         }

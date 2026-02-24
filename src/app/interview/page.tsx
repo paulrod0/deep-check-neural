@@ -365,6 +365,15 @@ export default function InterviewPage() {
         if (captureReason) captureEvidence(captureReason)
     }, [captureEvidence])
 
+    // ── Trust recovery helper ─────────────────────────────────────────────────
+    // Positive liveness confirmations partially recover trust that was deducted
+    // for earlier suspicion. Cap at 100 — recovery never inflates past the start.
+    // This prevents a 100% subractive model from permanently damaging a legit user
+    // when a false-positive fires before a confirming positive signal arrives.
+    const recoverTrust = useCallback((points: number) => {
+        setTrustScore(prev => Math.min(100, prev + points))
+    }, [])
+
     // ── Camera: head pose / verification ─────────────────────────────────────
     const handleVerificationChange = useCallback((verified: boolean, type?: VerificationFailureReason) => {
         setIsVerified(verified)
@@ -471,7 +480,16 @@ export default function InterviewPage() {
                 break
             case 'lighting_challenge_pass':
                 lcPassedRef.current++
-                // Pass is a positive liveness signal — no alert, just log
+                // Lighting pass = confirmed live pupil reflex. Recover up to 10pts from any
+                // earlier suspicion (saccade_too_smooth, lighting_fail, etc.) — capped at 100.
+                recoverTrust(10)
+                break
+            case 'saccade_detected':
+                // Natural micro-saccades confirmed. If a saccade_too_smooth fired before this,
+                // the penalty was premature — recover 8pts (partial, not full 15 recovery).
+                // This is intentional: if BOTH smooth and natural frames occurred, the net
+                // behavior is mildly suspicious, not completely clean.
+                recoverTrust(8)
                 break
             case 'saccade_too_smooth':
                 acFailedTotalRef.current++
@@ -495,8 +513,12 @@ export default function InterviewPage() {
                     'high', 12
                 )
                 break
+            case 'oculo_manual_synced':
+                // Gaze-cursor correlation confirmed — small recovery for false oculo desync
+                recoverTrust(4)
+                break
         }
-    }, [addAlert])
+    }, [addAlert, recoverTrust])
 
     // ── Lighting Challenge scheduler ──────────────────────────────────────────
     // Fires a random bright flash every 45–90 seconds after session start.
@@ -728,10 +750,35 @@ export default function InterviewPage() {
     // ── End session ───────────────────────────────────────────────────────────
     const handleEndSession = async () => {
         setIsSaving(true)
-        const finalScore    = trustScoreRef.current
         const tabSwitches   = tabSwitchCount.current
         const gazeEvents    = gazeEventCount.current
-        // Auto-flag if tab switches >= 2, regardless of trust score
+
+        // ── Final score: severity-weighted recalculation ─────────────────────
+        // The live trust score (100 − cumulative penalties) reflects the real-time
+        // suspicion level. For the FINAL verdict we also factor severity weight so
+        // that a session with many low/medium signals doesn't unfairly score the
+        // same as one with confirmed high-severity cheating events.
+        //
+        // Algorithm:
+        //   1. Count high / medium / low alerts (excluding penalty=0 informational ones)
+        //   2. Each high alert deducts up to its full penalty (no change from live)
+        //   3. Medium alerts are capped at 6pts each for final calculation
+        //   4. Low alerts are capped at 3pts each — they're context, not proof
+        //   5. The final score is MAX(live score, severity-weighted score) — take
+        //      the more favorable of the two so we never UNFAIRLY penalize extra.
+        const highAlerts   = alerts.filter(a => a.severity === 'high'   && a.penalty > 0)
+        const medAlerts    = alerts.filter(a => a.severity === 'medium'  && a.penalty > 0)
+        const lowAlerts    = alerts.filter(a => a.severity === 'low'     && a.penalty > 0)
+
+        const weightedPenalty =
+            highAlerts.reduce((s, a) => s + a.penalty, 0) +          // full weight
+            medAlerts.reduce((s, a)  => s + Math.min(a.penalty, 6), 0) +  // capped at 6
+            lowAlerts.reduce((s, a)  => s + Math.min(a.penalty, 3), 0)    // capped at 3
+
+        const weightedScore  = Math.max(0, 100 - weightedPenalty)
+        // Take the more favorable score — live score already includes recovery events
+        const finalScore     = Math.max(trustScoreRef.current, weightedScore)
+
         const autoFlagged   = tabSwitches >= 2
         const status        = autoFlagged ? 'flagged' : finalScore > 85 ? 'passed' : finalScore > 60 ? 'review' : 'flagged'
 
