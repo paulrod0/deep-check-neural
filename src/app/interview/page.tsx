@@ -302,37 +302,26 @@ export default function InterviewPage() {
     const cameraRef        = useRef<VerificationCameraHandle>(null)
     const codeEditorRef    = useRef<CodeEditorHandle>(null)
 
-    // ── Camera alert rate-limiting ────────────────────────────────────────────
-    // Prevents the trust score from collapsing when the camera fires the same
-    // reason repeatedly (every 450ms) — e.g. 'No face detected' while models load.
-    // Min interval between same-type alerts: 8 seconds.
-    // Grace period: no camera-based penalties for the first 7 seconds of the session.
+    // ── Event rate controls ───────────────────────────────────────────────────
     const cameraAlertLastRef = useRef<Record<string, number>>({})
     const sessionStartMsRef  = useRef<number>(Date.now())
     const lastBlurAlertRef   = useRef<number>(0)
-    const CAMERA_ALERT_COOLDOWN_MS = 8000
-    const SESSION_GRACE_MS         = 7000
+    const _CAC = 8000
+    const _SGP = 7000
 
-    // ── Cross-modal / Anti-cheat correlation state ────────────────────────────
+    // ── Multi-modal correlation state ─────────────────────────────────────────
     const currentGazeRef          = useRef<GazeDirection>('center')
     const lastTypingTimeRef       = useRef<number>(0)
     const lastCrossModalAlertRef  = useRef<number>(0)
     const faceMetricsRef          = useRef<FaceMetrics | null>(null)
     const blinkAnomalyCountRef    = useRef<number>(0)
 
-    // ── Gaze-keystroke temporal correlation (Layer 2 Sync-Check) ─────────────
-    // Distinguishes AUTHOR pattern (gaze leads keystrokes by 50-300ms = predictive)
-    // from SPECTATOR pattern (gaze follows keystrokes by >150ms = reactive/fraud).
-    // We record each gaze shift timestamp and, on each keystroke, compute the delta
-    // between the keystroke and the most recent gaze direction change.
-    // Negative delta = gaze shifted BEFORE keystroke (author — healthy).
-    // Positive delta > 150ms = gaze shifted AFTER keystroke (spectator — suspicious).
     const gazeShiftHistoryRef     = useRef<{ ts: number; direction: GazeDirection }[]>([])
-    const gazeLeadSamplesRef      = useRef<number[]>([])    // ring buffer of deltas (ms)
+    const gazeLeadSamplesRef      = useRef<number[]>([])
     const lastSpectatorAlertRef   = useRef<number>(0)
-    const SPECTATOR_THRESHOLD_MS  = 150   // positive lag above this = spectator
-    const SPECTATOR_MIN_SAMPLES   = 30    // require 30 keystrokes before judging
-    const SPECTATOR_WINDOW        = 10    // look at last 10 samples for final verdict
+    const _SPT = 150
+    const _SPM = 30
+    const _SPW = 10
     // Oculo-manual synchrony — track cursor movement in editor
     const cursorActivityRef       = useRef<number>(0)  // last timestamp of cursor move
     const ocoloDesyncCountRef     = useRef<number>(0)
@@ -365,11 +354,6 @@ export default function InterviewPage() {
         if (captureReason) captureEvidence(captureReason)
     }, [captureEvidence])
 
-    // ── Trust recovery helper ─────────────────────────────────────────────────
-    // Positive liveness confirmations partially recover trust that was deducted
-    // for earlier suspicion. Cap at 100 — recovery never inflates past the start.
-    // This prevents a 100% subractive model from permanently damaging a legit user
-    // when a false-positive fires before a confirming positive signal arrives.
     const recoverTrust = useCallback((points: number) => {
         setTrustScore(prev => Math.min(100, prev + points))
     }, [])
@@ -380,14 +364,11 @@ export default function InterviewPage() {
         if (!verified && type) {
             const now = Date.now()
 
-            // Grace period: no camera penalties for the first SESSION_GRACE_MS of the session
+            // Grace period: no camera penalties for the first _SGP of the session
             const msSinceStart = now - sessionStartMsRef.current
-            if (msSinceStart < SESSION_GRACE_MS) return
+            if (msSinceStart < _SGP) return
 
-            // Rate-limit: skip if same reason fired recently.
-            // Head Tilted gets a longer cooldown (30s) — a user standing or sitting
-            // at an angle may sustain a tilt the whole session, which is not fraud.
-            const cooldown = type === 'Head Tilted' ? 30000 : CAMERA_ALERT_COOLDOWN_MS
+            const cooldown = type === 'Head Tilted' ? 30000 : _CAC
             const lastFired = cameraAlertLastRef.current[type] ?? 0
             if (now - lastFired < cooldown) return
             cameraAlertLastRef.current[type] = now
@@ -596,33 +577,23 @@ export default function InterviewPage() {
                     }
                 }
 
-                // ── Gaze-Keystroke temporal correlation (Sync-Check) ───────
-                // Find the most recent gaze shift relative to this keystroke.
-                // delta > 0  → gaze shifted AFTER the key was pressed (spectator: reactive)
-                // delta < 0  → gaze shifted BEFORE the key was pressed (author: predictive)
                 const history = gazeShiftHistoryRef.current
                 if (history.length > 0) {
                     const lastShift = history[history.length - 1]
-                    const delta = now - lastShift.ts  // ms since last gaze shift
-                    // Only count deltas < 2000ms (older shifts are unrelated to this keystroke)
+                    const delta = now - lastShift.ts
                     if (delta < 2000) {
                         gazeLeadSamplesRef.current.push(delta)
                         if (gazeLeadSamplesRef.current.length > 50) gazeLeadSamplesRef.current.shift()
                     }
                 }
-
-                // Evaluate spectator pattern once we have enough samples
                 const samples = gazeLeadSamplesRef.current
-                if (samples.length >= SPECTATOR_MIN_SAMPLES) {
-                    const recent = samples.slice(-SPECTATOR_WINDOW)
+                if (samples.length >= _SPM) {
+                    const recent = samples.slice(-_SPW)
                     const sorted = [...recent].sort((a, b) => a - b)
                     const median = sorted[Math.floor(sorted.length / 2)]
-                    // All recent gaze shifts happened well BEFORE the keystroke they
-                    // supposedly "reacted to" = spectator watching someone else type.
-                    const allReactive = recent.every(d => d > SPECTATOR_THRESHOLD_MS)
-                    if (allReactive && median > SPECTATOR_THRESHOLD_MS) {
-                        const msSinceLast = now - lastSpectatorAlertRef.current
-                        if (msSinceLast > 30000) {  // max once per 30s
+                    const allReactive = recent.every(d => d > _SPT)
+                    if (allReactive && median > _SPT) {
+                        if (now - lastSpectatorAlertRef.current > 30000) {
                             lastSpectatorAlertRef.current = now
                             addAlert(
                                 `Sync-Check: gaze follows keystrokes reactively (${Math.round(median)}ms lag) — spectator pattern detected`,
@@ -727,7 +698,7 @@ export default function InterviewPage() {
             if (document.hidden) return
             const now = Date.now()
             // Same startup grace as camera alerts: no blur penalties for the first 7s
-            if (now - sessionStartMsRef.current < SESSION_GRACE_MS) return
+            if (now - sessionStartMsRef.current < _SGP) return
             // Rate-limit: max 1 blur alert per 10 seconds
             if (now - lastBlurAlertRef.current < 10000) return
             lastBlurAlertRef.current = now
@@ -753,31 +724,14 @@ export default function InterviewPage() {
         const tabSwitches   = tabSwitchCount.current
         const gazeEvents    = gazeEventCount.current
 
-        // ── Final score: severity-weighted recalculation ─────────────────────
-        // The live trust score (100 − cumulative penalties) reflects the real-time
-        // suspicion level. For the FINAL verdict we also factor severity weight so
-        // that a session with many low/medium signals doesn't unfairly score the
-        // same as one with confirmed high-severity cheating events.
-        //
-        // Algorithm:
-        //   1. Count high / medium / low alerts (excluding penalty=0 informational ones)
-        //   2. Each high alert deducts up to its full penalty (no change from live)
-        //   3. Medium alerts are capped at 6pts each for final calculation
-        //   4. Low alerts are capped at 3pts each — they're context, not proof
-        //   5. The final score is MAX(live score, severity-weighted score) — take
-        //      the more favorable of the two so we never UNFAIRLY penalize extra.
-        const highAlerts   = alerts.filter(a => a.severity === 'high'   && a.penalty > 0)
-        const medAlerts    = alerts.filter(a => a.severity === 'medium'  && a.penalty > 0)
-        const lowAlerts    = alerts.filter(a => a.severity === 'low'     && a.penalty > 0)
-
-        const weightedPenalty =
-            highAlerts.reduce((s, a) => s + a.penalty, 0) +          // full weight
-            medAlerts.reduce((s, a)  => s + Math.min(a.penalty, 6), 0) +  // capped at 6
-            lowAlerts.reduce((s, a)  => s + Math.min(a.penalty, 3), 0)    // capped at 3
-
-        const weightedScore  = Math.max(0, 100 - weightedPenalty)
-        // Take the more favorable score — live score already includes recovery events
-        const finalScore     = Math.max(trustScoreRef.current, weightedScore)
+        const _aH = alerts.filter(a => a.severity === 'high'   && a.penalty > 0)
+        const _aM = alerts.filter(a => a.severity === 'medium'  && a.penalty > 0)
+        const _aL = alerts.filter(a => a.severity === 'low'     && a.penalty > 0)
+        const _wp =
+            _aH.reduce((s, a) => s + a.penalty, 0) +
+            _aM.reduce((s, a) => s + Math.min(a.penalty, 6), 0) +
+            _aL.reduce((s, a) => s + Math.min(a.penalty, 3), 0)
+        const finalScore = Math.max(trustScoreRef.current, Math.max(0, 100 - _wp))
 
         const autoFlagged   = tabSwitches >= 2
         const status        = autoFlagged ? 'flagged' : finalScore > 85 ? 'passed' : finalScore > 60 ? 'review' : 'flagged'

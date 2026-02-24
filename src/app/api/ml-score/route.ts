@@ -18,9 +18,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getProfileById, getProfileByEmail, KeystrokeProfile } from '@/lib/db'
 import path from 'path'
 
-// ─── Mahalanobis identity match ───────────────────────────────────────────────
-// Uses 4 core features: [flightMean, flightStd, holdMean, entropy]
-// The covariance matrix is estimated from the enrolled profile's stored stats.
+// ─── Identity distance computation ───────────────────────────────────────────
 
 interface SessionFeatures {
     // Core biometric stats
@@ -52,84 +50,45 @@ interface MlScoreRequest {
     totalKeystrokes:     number
 }
 
-function mahalanobisDistance(
-    live: number[],    // [flightMean, flightStd, holdMean, entropy]
+function _mdist(
+    live: number[],
     baseline: KeystrokeProfile
 ): number {
-    // Build mean vector from baseline
-    const mu = [
-        baseline.flightMean,
-        baseline.flightStd,
-        baseline.holdMean,
-        baseline.entropy,
-    ]
-
-    // Approximate diagonal covariance (no off-diagonal available at enrollment)
-    // Using flightStd as proxy for variance in each dimension
-    // Variance heuristics: σ² ≈ (feature * 0.30)² for each feature
-    const variances = [
+    const mu = [baseline.flightMean, baseline.flightStd, baseline.holdMean, baseline.entropy]
+    const vr = [
         Math.pow(baseline.flightStd * 0.60, 2) || 1,
         Math.pow(baseline.flightStd * 0.50, 2) || 1,
         Math.pow(baseline.holdStd   * 0.60, 2) || 1,
-        Math.pow(0.5, 2),  // entropy variance in bits²
+        Math.pow(0.5, 2),
     ]
-
-    // D² = Σ (xi - μi)² / σi²
     let d2 = 0
-    for (let i = 0; i < 4; i++) {
-        d2 += Math.pow(live[i] - mu[i], 2) / variances[i]
-    }
-
-    // Add digram similarity if available
-    // (increases confidence when there are matching digram pairs)
+    for (let i = 0; i < 4; i++) d2 += Math.pow(live[i] - mu[i], 2) / vr[i]
     return Math.sqrt(d2)
 }
 
-function mahalanobisToScore(distance: number): number {
-    // Convert Mahalanobis distance to 0-100 identity match score
-    // D=0: perfect match = 100
-    // D=2: good match ≈ 85 (within 2 std devs on each feature)
-    // D=4: marginal ≈ 50
-    // D=8+: mismatch < 10
-    return Math.max(0, Math.round(100 * Math.exp(-0.12 * distance)))
+function _mts(d: number): number {
+    return Math.max(0, Math.round(100 * Math.exp(-0.12 * d)))
 }
 
-// ─── Heuristic fallback AI score ──────────────────────────────────────────────
+// ─── Fallback risk estimator ──────────────────────────────────────────────────
 
-function heuristicAiScore(f: SessionFeatures): number {
-    let score = 0
-
-    // Periodicity (FFT)
-    if (f.periodicityScore > 65) score += 25
-    else if (f.periodicityScore > 45) score += 12
-
-    // Velocity gradient (bots are flat)
-    if (Math.abs(f.velocityGradient) < 0.01) score += 15
-    else if (Math.abs(f.velocityGradient) < 0.05) score += 6
-
-    // Fatigue rate (bots show no fatigue)
-    if (Math.abs(f.fatigueRate) < 0.02) score += 15
-    else if (Math.abs(f.fatigueRate) < 0.08) score += 5
-
-    // Backspace uniformity (bots don't self-correct naturally)
-    if (f.backspaceLatencyStd < 8) score += 15
-    if (f.backspaceCountRatio < 0.01) score += 8
-
-    // Kurtosis (leptokurtic = bot)
-    if (f.kurtosis > 7) score += 12
-    else if (f.kurtosis > 4) score += 5
-
-    // Entropy
-    if (f.entropy < 1.0) score += 15
-    else if (f.entropy < 1.8) score += 7
-
-    // Skewness (symmetric = bot)
-    if (Math.abs(f.skewness) < 0.1) score += 8
-
-    // Rhythm
-    if (f.rhythmConsistency < 5) score += 10
-
-    return Math.min(100, score)
+function _hrs(f: SessionFeatures): number {
+    let s = 0
+    if (f.periodicityScore > 65) s += 25
+    else if (f.periodicityScore > 45) s += 12
+    if (Math.abs(f.velocityGradient) < 0.01) s += 15
+    else if (Math.abs(f.velocityGradient) < 0.05) s += 6
+    if (Math.abs(f.fatigueRate) < 0.02) s += 15
+    else if (Math.abs(f.fatigueRate) < 0.08) s += 5
+    if (f.backspaceLatencyStd < 8) s += 15
+    if (f.backspaceCountRatio < 0.01) s += 8
+    if (f.kurtosis > 7) s += 12
+    else if (f.kurtosis > 4) s += 5
+    if (f.entropy < 1.0) s += 15
+    else if (f.entropy < 1.8) s += 7
+    if (Math.abs(f.skewness) < 0.1) s += 8
+    if (f.rhythmConsistency < 5) s += 10
+    return Math.min(100, s)
 }
 
 // ─── ONNX Runtime Node inference (optional) ──────────────────────────────────
@@ -224,7 +183,7 @@ export async function POST(req: NextRequest) {
 
         // 1. Try ONNX inference first, fall back to heuristic
         const onnxScore = await runOnnxInference(features)
-        const mlAiRisk  = onnxScore ?? heuristicAiScore(features)
+        const mlAiRisk  = onnxScore ?? _hrs(features)
         const inferenceMethod = onnxScore !== null ? 'onnx' : 'heuristic'
 
         // 2. Identity match (Mahalanobis) if enrollment profile provided
@@ -244,8 +203,8 @@ export async function POST(req: NextRequest) {
                 features.holdMean,
                 features.entropy,
             ]
-            const dist = mahalanobisDistance(liveVec, profile.profile)
-            identityMatchScore = mahalanobisToScore(dist)
+            const dist = _mdist(liveVec, profile.profile)
+            identityMatchScore = _mts(dist)
             enrollmentContext = profile.context
 
             // Bonus: check digram overlap if available
@@ -273,14 +232,14 @@ export async function POST(req: NextRequest) {
 
         // 3. Generate flags
         const flags: string[] = []
-        if (features.periodicityScore > 65)       flags.push('high_periodicity')
-        if (Math.abs(features.fatigueRate) < 0.02) flags.push('no_fatigue')
-        if (features.backspaceLatencyStd < 8)      flags.push('uniform_backspace')
-        if (features.kurtosis > 7)                 flags.push('leptokurtic')
-        if (features.entropy < 1.2)                flags.push('low_entropy')
-        if (features.burstCountPer100k > 10)       flags.push('high_burst_rate')
-        if (mlAiRisk > 70)                         flags.push('ai_bot_detected')
-        if (identityMatchScore !== null && identityMatchScore < 40) flags.push('identity_mismatch')
+        if (features.periodicityScore > 65)        flags.push('F01')
+        if (Math.abs(features.fatigueRate) < 0.02) flags.push('F02')
+        if (features.backspaceLatencyStd < 8)      flags.push('F03')
+        if (features.kurtosis > 7)                 flags.push('F04')
+        if (features.entropy < 1.2)                flags.push('F05')
+        if (features.burstCountPer100k > 10)       flags.push('F06')
+        if (mlAiRisk > 70)                         flags.push('F07')
+        if (identityMatchScore !== null && identityMatchScore < 40) flags.push('F08')
 
         return NextResponse.json({
             success: true,

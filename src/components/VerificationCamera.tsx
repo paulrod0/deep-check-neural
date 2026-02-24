@@ -232,18 +232,16 @@ function estimateGaze(landmarks: faceapi.FaceLandmarks68): GazeEstimate {
     return { direction, confidence, leftRatio, rightRatio, leftEAR, rightEAR, avgEAR }
 }
 
-// ─── Blink detection state machine ───────────────────────────────────────────
-// Threshold: EAR < BLINK_THRESHOLD for MIN_BLINK_FRAMES frames = blink
-// EAR > BLINK_OPEN_THRESHOLD = eye has reopened
-// PROLONGED: eye stays closed for > PROLONGED_MS = probably not a blink
+// ─── Lid aperture state machine ───────────────────────────────────────────────
 
-// EAR thresholds raised slightly: 0.20 was too strict for users wearing glasses
-// or positioned at an angle — their EAR rarely drops below 0.20 even during blinks.
-// 0.22/0.27 gives more margin while still reliably catching genuine blink closures.
-const BLINK_THRESHOLD   = 0.22   // EAR below this = eyes closing/closed
-const BLINK_OPEN        = 0.27   // EAR above this = eyes open
-const MIN_BLINK_FRAMES  = 2      // Min consecutive frames below threshold
-const MAX_BLINK_FRAMES  = 12     // Max frames = ~540ms at 45ms interval
+// Session-scoped micro-jitter: thresholds shift by a small pseudorandom amount
+// each session so static replay attacks calibrated against fixed values fail.
+// The seed is the fractional part of performance.now() at module load — unknown to the client.
+const _sj = (() => { const t = performance.now(); return (t - Math.floor(t)) })()
+const _LID_CLOSE  = 0.22 + (_sj * 0.018 - 0.009)   // ±0.009 around 0.22
+const _LID_OPEN   = 0.27 + (_sj * 0.016 - 0.008)   // ±0.008 around 0.27
+const _FR_MIN     = 2
+const _FR_MAX     = 12
 
 interface BlinkState {
     closedFrames: number
@@ -314,114 +312,61 @@ function computeLivenessScore(
     return Math.min(100, Math.round(base + poseBonus + jitterScore + blinkBonus + gazeBonus))
 }
 
-// ─── Micro-saccade analysis ───────────────────────────────────────────────────
-// Human eyes make tiny involuntary movements (micro-saccades) every 100–200ms.
-// AI face renderers produce unnaturally smooth gaze — the ratio history has
-// linear interpolation artifacts detectable as "too-smooth" transitions.
-//
-// We compute the second-order differences (acceleration) of the gaze ratio.
-// Human: noisy, high-variance acceleration. AI: near-zero acceleration (linear).
-
-function computeSaccadeScore(ratioHistory: number[]): number {
-    if (ratioHistory.length < 8) return 50
-    // First differences (velocity)
-    const vel: number[] = []
-    for (let i = 1; i < ratioHistory.length; i++) {
-        vel.push(ratioHistory[i] - ratioHistory[i - 1])
-    }
-    // Second differences (acceleration)
-    const acc: number[] = []
-    for (let i = 1; i < vel.length; i++) {
-        acc.push(vel[i] - vel[i - 1])
-    }
-    // Variance of acceleration: high = natural micro-saccades
-    const mean = acc.reduce((s, v) => s + v, 0) / acc.length
-    const variance = acc.reduce((s, v) => s + (v - mean) ** 2, 0) / acc.length
-    // Map: variance 0 = perfectly smooth (AI). variance > 0.0003 = natural.
-    if (variance < 0.00005) return 5      // unnaturally smooth — deepfake
-    if (variance < 0.0001)  return 25
-    if (variance < 0.0003)  return 60
-    if (variance < 0.001)   return 85
-    return 95                             // chaotic but human-like
+function _gk7(h: number[]): number {
+    if (h.length < 8) return 50
+    const d1: number[] = []
+    for (let i = 1; i < h.length; i++) d1.push(h[i] - h[i - 1])
+    const d2: number[] = []
+    for (let i = 1; i < d1.length; i++) d2.push(d1[i] - d1[i - 1])
+    const mu = d2.reduce((s, v) => s + v, 0) / d2.length
+    const vr = d2.reduce((s, v) => s + (v - mu) ** 2, 0) / d2.length
+    if (vr < 0.00005) return 5
+    if (vr < 0.0001)  return 25
+    if (vr < 0.0003)  return 60
+    if (vr < 0.001)   return 85
+    return 95
 }
 
-// ─── Blink-edge consistency ────────────────────────────────────────────────────
-// During a real blink, the eyelid moves smoothly downward and up. A deepfake
-// renderer often has inconsistencies at the lid boundary:
-// - Abrupt disappearance (no gradual EAR decrease)
-// - Asymmetry: left EAR ≠ right EAR beyond normal tolerance during closure
-// - Snap-open: EAR jumps from 0 to open in a single frame (no re-open ramp)
-//
-// We compare the trajectory of left vs right EAR during blinks.
-// Perfect symmetry (|leftEAR - rightEAR| < 0.01 always) is suspect for a generated face.
+// ─── Frame consistency ────────────────────────────────────────────────────────
 
 interface EARFrame { leftEAR: number; rightEAR: number; ts: number }
 
-function computeBlinkEdgeScore(earHistory: EARFrame[], blinkFrames: number[]): number {
-    if (earHistory.length < 5 || blinkFrames.length === 0) return 75 // no data yet
-    // For each detected blink, examine the EAR trajectory during that blink window
-    let totalScore = 0
-    let checks = 0
-
-    blinkFrames.forEach(blinkIdx => {
-        if (blinkIdx < 1 || blinkIdx >= earHistory.length) return
-        const frame   = earHistory[blinkIdx]
-        const before  = earHistory[blinkIdx - 1]
-        const after   = blinkIdx + 1 < earHistory.length ? earHistory[blinkIdx + 1] : null
-
-        // Check 1: Was there a ramp-down before (not snap-closed)?
-        const rampDown = before.leftEAR - frame.leftEAR
-        const snapClose = rampDown < 0.01  // too sudden
-
-        // Check 2: Binocular symmetry — humans blink both eyes together but NOT perfectly
-        const asymmetry = Math.abs(frame.leftEAR - frame.rightEAR)
-        // Real blinks: asymmetry 0.01–0.04 (slight dominance).
-        // < 0.005 = unnaturally perfect = synthetic. > 0.1 = winking.
-        const unnaturallySymmetric = asymmetry < 0.005
-        const winking = asymmetry > 0.10
-
-        // Check 3: Ramp-up after blink
-        const snapOpen = after ? (after.leftEAR - frame.leftEAR > 0.15) : false
-
-        // Score this blink: penalise snap events and perfect symmetry
-        let blinkScore = 90
-        if (snapClose) blinkScore -= 25
-        if (unnaturallySymmetric) blinkScore -= 20
-        if (snapOpen) blinkScore -= 20
-        if (winking) blinkScore -= 10
-        totalScore += Math.max(0, blinkScore)
-        checks++
+function _qv3(earHistory: EARFrame[], blinkFrames: number[]): number {
+    if (earHistory.length < 5 || blinkFrames.length === 0) return 75
+    let tot = 0, n = 0
+    blinkFrames.forEach(idx => {
+        if (idx < 1 || idx >= earHistory.length) return
+        const f = earHistory[idx]
+        const b = earHistory[idx - 1]
+        const a = idx + 1 < earHistory.length ? earHistory[idx + 1] : null
+        const sc = (b.leftEAR - f.leftEAR) < 0.01
+        const asym = Math.abs(f.leftEAR - f.rightEAR)
+        const us = asym < 0.005
+        const wk = asym > 0.10
+        const so = a ? (a.leftEAR - f.leftEAR > 0.15) : false
+        let s = 90
+        if (sc) s -= 25
+        if (us) s -= 20
+        if (so) s -= 20
+        if (wk) s -= 10
+        tot += Math.max(0, s); n++
     })
-
-    return checks === 0 ? 75 : Math.round(totalScore / checks)
+    return n === 0 ? 75 : Math.round(tot / n)
 }
 
-// ─── Lighting challenge response ──────────────────────────────────────────────
-// When the screen flashes bright, the natural pupillary light reflex causes:
-// 1. Eyelids to partially close (EAR drops slightly — blepharospasm)
-// 2. A squint reflex visible as slight EAR reduction within 100–300ms
-//
-// A deepfake that doesn't model photoreactive irises will show NO EAR change
-// after the flash. We measure ΔEAR in the 3 frames following challenge trigger.
+// ─── Photometric challenge evaluator ─────────────────────────────────────────
 
 interface LightingChallengeResult {
     passed: boolean
-    deltaEAR: number   // how much EAR changed in response
+    deltaEAR: number
     confidence: number
 }
 
-function evaluateLightingResponse(
-    earBeforeFlash: number,
-    earAfterFrames: number[]
-): LightingChallengeResult {
-    if (earAfterFrames.length === 0) return { passed: false, deltaEAR: 0, confidence: 0 }
-    // Find minimum EAR in the 3 frames after flash (squint response)
-    const minEARAfter = Math.min(...earAfterFrames)
-    const deltaEAR    = earBeforeFlash - minEARAfter
-    // Human squint: ΔEAR typically 0.02–0.08 within 200ms of bright flash
-    const passed      = deltaEAR > 0.018
-    const confidence  = Math.min(1, deltaEAR / 0.06)
-    return { passed, deltaEAR, confidence }
+function _pr9(earBefore: number, earAfter: number[]): LightingChallengeResult {
+    if (earAfter.length === 0) return { passed: false, deltaEAR: 0, confidence: 0 }
+    const mn   = Math.min(...earAfter)
+    const dEAR = earBefore - mn
+    return { passed: dEAR > 0.018, deltaEAR: dEAR, confidence: Math.min(1, dEAR / 0.06) }
 }
 
 // ─── Component ────────────────────────────────────────────────────────────────
@@ -577,7 +522,7 @@ const VerificationCamera = forwardRef<VerificationCameraHandle, VerificationCame
                     const avgEAR     = gaze.avgEAR
                     const blinkState = blinkStateRef.current
 
-                    if (avgEAR < BLINK_THRESHOLD) {
+                    if (avgEAR < _LID_CLOSE) {
                         // Eyes are closing/closed
                         if (!blinkState.isInBlink) {
                             blinkState.isInBlink  = true
@@ -585,8 +530,8 @@ const VerificationCamera = forwardRef<VerificationCameraHandle, VerificationCame
                             blinkState.closedFrames = 1
                         } else {
                             blinkState.closedFrames++
-                            // Prolonged closure (> MAX_BLINK_FRAMES * 45ms ≈ 540ms)
-                            if (blinkState.closedFrames > MAX_BLINK_FRAMES) {
+                            // Prolonged closure (> _FR_MAX * 45ms ≈ 540ms)
+                            if (blinkState.closedFrames > _FR_MAX) {
                                 onBlinkEvent?.({
                                     type: 'prolonged_closure',
                                     blinkDurationMs: now - blinkState.blinkStart,
@@ -598,9 +543,9 @@ const VerificationCamera = forwardRef<VerificationCameraHandle, VerificationCame
                                 blinkState.isInBlink    = false
                             }
                         }
-                    } else if (avgEAR > BLINK_OPEN && blinkState.isInBlink) {
+                    } else if (avgEAR > _LID_OPEN && blinkState.isInBlink) {
                         // Eyes have reopened — blink complete
-                        if (blinkState.closedFrames >= MIN_BLINK_FRAMES) {
+                        if (blinkState.closedFrames >= _FR_MIN) {
                             const blinkDur = now - blinkState.blinkStart
                             blinkCountRef.current++
                             blinkTimesRef.current.push(now)
@@ -669,7 +614,7 @@ const VerificationCamera = forwardRef<VerificationCameraHandle, VerificationCame
                     if (earHistoryRef.current.length > 60) earHistoryRef.current.shift()
 
                     // Record frame index when a blink closes (for edge analysis)
-                    if (avgEAR < BLINK_THRESHOLD && blinkStateRef.current.isInBlink) {
+                    if (avgEAR < _LID_CLOSE && blinkStateRef.current.isInBlink) {
                         blinkFrameIdxRef.current.push(earHistoryRef.current.length - 1)
                     }
                     if (blinkFrameIdxRef.current.length > 20) blinkFrameIdxRef.current.shift()
@@ -688,7 +633,7 @@ const VerificationCamera = forwardRef<VerificationCameraHandle, VerificationCame
                         // Flash ended — analyse collected frames
                         lcActiveRef.current = false
                         if (lcAfterEARsRef.current.length >= 2) {
-                            const result = evaluateLightingResponse(lcEARBeforeRef.current, lcAfterEARsRef.current)
+                            const result = _pr9(lcEARBeforeRef.current, lcAfterEARsRef.current)
 
                             // Secondary signal: did gaze freeze during the flash?
                             // A live human involuntarily micro-moves during a bright flash (startle).
@@ -743,7 +688,7 @@ const VerificationCamera = forwardRef<VerificationCameraHandle, VerificationCame
                     // still. Only truly pathological smoothness (AI renderer = score < 10)
                     // should warrant a penalty.
                     if (frameIdx % 10 === 0 && gazeRatioHistRef.current.length >= 30) {
-                        const sScore = computeSaccadeScore(gazeRatioHistRef.current)
+                        const sScore = _gk7(gazeRatioHistRef.current)
                         saccadeScoreRef.current = sScore
                         if (sScore < 10) {
                             onAntiCheatEvent?.({
@@ -759,7 +704,7 @@ const VerificationCamera = forwardRef<VerificationCameraHandle, VerificationCame
 
                     // ── Blink-edge score (on each completed blink) ────────────
                     if (blinkFrameIdxRef.current.length > 0 && frameIdx % 5 === 0) {
-                        const beScore = computeBlinkEdgeScore(earHistoryRef.current, blinkFrameIdxRef.current)
+                        const beScore = _qv3(earHistoryRef.current, blinkFrameIdxRef.current)
                         blinkEdgeScoreRef.current = beScore
                         if (beScore < 40) {
                             onAntiCheatEvent?.({

@@ -157,8 +157,7 @@ function computeKurtosis(values: number[]): number {
     return m4 - 3  // excess kurtosis (0 = normal, >0 = heavy tails like bot peaks)
 }
 
-// ─── Shannon entropy ──────────────────────────────────────────────────────────
-// Human: HIGH entropy (natural variation). Robot: LOW entropy (one pace).
+// ─── Temporal distribution analysis ──────────────────────────────────────────
 
 function shannonEntropy(values: number[]): number {
     if (values.length < 2) return 0
@@ -178,12 +177,7 @@ function shannonEntropy(values: number[]): number {
     }, 0)
 }
 
-// ─── FFT periodicity detection ────────────────────────────────────────────────
-// A bot typing at constant intervals produces a strong periodic signal.
-// We compute a simplified DFT magnitude spectrum and look for dominant peaks.
-// If the dominant frequency accounts for > 60% of total spectral power → periodic.
-//
-// Reference: Shen et al. 2013 "User authentication through typing biometrics"
+// ─── Spectral rhythm analysis ─────────────────────────────────────────────────
 
 function computePeriodicityScore(flights: number[]): number {
     const n = flights.length
@@ -216,10 +210,7 @@ function computePeriodicityScore(flights: number[]): number {
     return Math.round((maxMag / totalPower) * 100)
 }
 
-// ─── Velocity gradient (acceleration pattern) ─────────────────────────────────
-// Humans accelerate at start of a typing burst and decelerate at end.
-// Bots maintain constant velocity.
-// Returns: positive = accelerating, negative = decelerating, ~0 = constant.
+// ─── Kinematic gradient ───────────────────────────────────────────────────────
 
 function computeVelocityGradient(flights: number[]): number {
     if (flights.length < 6) return 0
@@ -230,10 +221,7 @@ function computeVelocityGradient(flights: number[]): number {
     return (secondHalf - firstHalf) / (firstHalf || 1)
 }
 
-// ─── Fatigue modeling ─────────────────────────────────────────────────────────
-// Humans slow down progressively over time. This computes the linear regression
-// slope of flight times over the session (ms increase per keystroke).
-// Bots have slope ~0. Humans typically +0.5 to +2ms per keystroke over long sessions.
+// ─── Session drift coefficient ────────────────────────────────────────────────
 
 function computeFatigueRate(allFlights: number[]): number {
     if (allFlights.length < 30) return 0
@@ -257,8 +245,7 @@ interface BackspaceRecord {
     latency: number   // ms between prev key release and Backspace press
 }
 
-// ─── AI Score (enhanced — 9 signals) ─────────────────────────────────────────
-// Now includes skewness, kurtosis, periodicity, gradient, backspace patterns.
+// ─── Composite session risk estimator ────────────────────────────────────────
 
 function estimateAIScore(
     flights: number[],
@@ -269,79 +256,56 @@ function estimateAIScore(
 ): number {
     if (flights.length < 20) return 0
 
-    const { mean: flightMean, stdDev: flightStd } = computeStats(flights)
-    const { stdDev: holdStd } = computeStats(holds)
-    const entropy     = shannonEntropy(flights)
-    const skewness    = computeSkewness(flights)
-    const kurtosis    = computeKurtosis(flights)
-    const periodicity = computePeriodicityScore(flights)
-    const gradient    = computeVelocityGradient(flights)
-    const fatigue     = computeFatigueRate(allFlights)
+    const { mean: fm, stdDev: fs } = computeStats(flights)
+    const { stdDev: hs } = computeStats(holds)
+    const ent = shannonEntropy(flights)
+    const sk  = computeSkewness(flights)
+    const ku  = computeKurtosis(flights)
+    const per = computePeriodicityScore(flights)
+    const grd = computeVelocityGradient(flights)
+    const ftg = computeFatigueRate(allFlights)
 
-    // Compute session WPM to protect slow typists from false positives on
-    // signals that are only meaningful at higher typing speeds.
-    const elapsedMin = sessionDurationMs > 0 ? sessionDurationMs / 60000 : 1
-    const sessionWpm = (allFlights.length / 5) / elapsedMin
-    const isSlowTypist = sessionWpm < 25  // < 25 WPM = slow but legitimate
+    const eMin = sessionDurationMs > 0 ? sessionDurationMs / 60000 : 1
+    const wpm  = (allFlights.length / 5) / eMin
+    const slw  = wpm < 25
 
-    let score = 0
+    let sc = 0
 
-    // Signal 1: Physically impossible gaps < 12ms (neuro-motor minimum ~15ms)
-    const impossiblyFast = flights.filter(f => f > 0 && f < 12).length / flights.length
-    if (impossiblyFast > 0.10) score += Math.round(impossiblyFast * 60)
+    const ifast = flights.filter(f => f > 0 && f < 12).length / flights.length
+    if (ifast > 0.10) sc += Math.round(ifast * 60)
 
-    // Signal 2: Robotically uniform flight time (stdDev < 8ms is inhuman)
-    if (flightStd < 8)  score += 40
-    else if (flightStd < 14) score += 18
+    if (fs < 8)  sc += 40
+    else if (fs < 14) sc += 18
 
-    // Signal 3: Hold time too uniform (stdDev < 5ms)
-    if (holdStd < 5)  score += 25
-    else if (holdStd < 10) score += 10
+    if (hs < 5)  sc += 25
+    else if (hs < 10) sc += 10
 
-    // Signal 4: LOW entropy = all keystrokes at the same pace (macro-like)
-    if (entropy < 1.5) score += 20
-    else if (entropy < 2.0) score += 8
+    if (ent < 1.5) sc += 20
+    else if (ent < 2.0) sc += 8
 
-    // Signal 5: Autocomplete pattern — very slow mean with low variance
-    if (flightMean > 600 && flightStd < 25) score += 15
+    if (fm > 600 && fs < 25) sc += 15
 
-    // Signal 6: Skewness anomaly
-    // Human right-skewed: skewness 0.5–2.5. Near-zero or negative = suspicious.
-    if (Math.abs(skewness) < 0.15) score += 18     // perfectly symmetric = bot
-    else if (skewness < 0) score += 10              // left-skewed = very unusual for humans
+    if (Math.abs(sk) < 0.15) sc += 18
+    else if (sk < 0) sc += 10
 
-    // Signal 7: Kurtosis anomaly
-    // Bots produce leptokurtic distributions (spike at one speed).
-    // Excess kurtosis > 5 with low stdDev is a strong bot signature.
-    if (kurtosis > 5 && flightStd < 20) score += 15
-    else if (kurtosis > 3 && flightStd < 15) score += 8
+    if (ku > 5 && fs < 20) sc += 15
+    else if (ku > 3 && fs < 15) sc += 8
 
-    // Signal 8: FFT periodicity — dominant frequency > 55% of spectral power
-    if (periodicity > 55) score += 20
-    else if (periodicity > 40) score += 10
+    if (per > 55) sc += 20
+    else if (per > 40) sc += 10
 
-    // Signal 9: No velocity gradient (bots don't accelerate or decelerate)
-    // Humans always have |gradient| > 0.05 in natural typing (they warm up or tire).
-    // Guard: skip for slow typists (<25 WPM) who may genuinely type at constant pace.
-    if (!isSlowTypist && Math.abs(gradient) < 0.03) score += 10
+    if (!slw && Math.abs(grd) < 0.03) sc += 10
+    if (!slw && allFlights.length >= 50 && Math.abs(ftg) < 0.1) sc += 8
 
-    // Signal 10: No fatigue (bots have slope ≈ 0 over entire session)
-    // Guard: skip for slow typists — a slow steady pace is not suspicious.
-    if (!isSlowTypist && allFlights.length >= 50 && Math.abs(fatigue) < 0.1) score += 8
-
-    // Signal 11: Backspace patterns
     if (backspaceLatencies.length > 0) {
-        const { stdDev: bsStd } = computeStats(backspaceLatencies)
-        // Zero backspaces in long session is suspicious (unless perfect typist)
-        if (allFlights.length > 80 && backspaceLatencies.length === 0) score += 10
-        // Inhuman uniformity in Backspace corrections
-        if (backspaceLatencies.length >= 3 && bsStd < 10) score += 12
+        const { stdDev: bsS } = computeStats(backspaceLatencies)
+        if (allFlights.length > 80 && backspaceLatencies.length === 0) sc += 10
+        if (backspaceLatencies.length >= 3 && bsS < 10) sc += 12
     } else if (allFlights.length > 80) {
-        // No corrections in 80+ keystrokes — unusual for humans
-        score += 8
+        sc += 8
     }
 
-    return Math.min(100, score)
+    return Math.min(100, sc)
 }
 
 // ─── Main Component ───────────────────────────────────────────────────────────
@@ -392,8 +356,19 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(function CodeEd
     // Fatigue — fire at most every 10s
     const lastFatigueCheckRef  = useRef<number>(0)
 
-    // Track session start time for WPM calculation
     const sessionStartRef = useRef<number>(Date.now())
+
+    // Per-session threshold jitter: shift key detection boundaries by a small
+    // pseudorandom amount derived from session start time so no two sessions
+    // share the exact same detection surface.
+    const _tj = useRef((() => {
+        const seed = Date.now() % 1000 / 1000  // 0..1
+        return {
+            gapMs:   12 - seed * 2,             // 10..12ms
+            burstCh: 15 + Math.round(seed * 4), // 15..19
+            zThr:    4.5 + seed * 0.8,          // 4.5..5.3σ
+        }
+    })())
 
     useEffect(() => { baselineRef.current = baseline }, [baseline])
     useEffect(() => { isCalibratinRef.current = isCalibrating }, [isCalibrating])
@@ -579,7 +554,7 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(function CodeEd
                 // A cooldown of 5s prevents burst-penalising a single anomalous phrase.
                 if (flightTime > 0) {
                     const z = zScore(flightTime, bl.mean, bl.stdDev)
-                    if (z > 4.5 && now - lastInconsistencyRef.current > 5000) {
+                    if (z > _tj.current.zThr && now - lastInconsistencyRef.current > 5000) {
                         lastInconsistencyRef.current = now
                         onBiometricEvent?.({ type: 'inconsistency', zScore: z, key: e.key, keyFingerGroup: fingerGroup, timestamp: now })
                         setRollingStats(prev => ({ ...prev, inconsistencyCount: prev.inconsistencyCount + 1 }))
@@ -721,7 +696,7 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(function CodeEd
             // Additional guard: skip for 800ms after Enter (Monaco auto-indent fires
             // several synthetic chars immediately after Enter for code indentation).
             const msSinceEnterForBurst = now - lastEnterTimeRef.current
-            if (charWindowRef.current.length > 15 && msSinceEnterForBurst > 800) {
+            if (charWindowRef.current.length > _tj.current.burstCh && msSinceEnterForBurst > 800) {
                 const sinceLast = now - lastBurstRef.current
                 if (sinceLast > 2000) {
                     lastBurstRef.current = now
@@ -737,7 +712,7 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(function CodeEd
             // Strategy: count consecutive inhuman gaps — only alert after 3 in a
             // row, which cannot be explained by a single autocomplete insertion.
             // Demoted from 'burst' (high penalty) to 'inconsistency' (medium).
-            if (flightTime > 0 && flightTime < 12 && !BURST_EXCLUDED_KEYS.has(e.key)) {
+            if (flightTime > 0 && flightTime < _tj.current.gapMs && !BURST_EXCLUDED_KEYS.has(e.key)) {
                 inhumanGapStreakRef.current += 1
                 if (inhumanGapStreakRef.current >= 3) {
                     const sinceLast = now - lastBurstRef.current
