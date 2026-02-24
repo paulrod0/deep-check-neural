@@ -309,6 +309,7 @@ export default function InterviewPage() {
     // Grace period: no camera-based penalties for the first 7 seconds of the session.
     const cameraAlertLastRef = useRef<Record<string, number>>({})
     const sessionStartMsRef  = useRef<number>(Date.now())
+    const lastBlurAlertRef   = useRef<number>(0)
     const CAMERA_ALERT_COOLDOWN_MS = 8000
     const SESSION_GRACE_MS         = 7000
 
@@ -700,6 +701,14 @@ export default function InterviewPage() {
             }
         }
         const handleBlur = () => {
+            // If tab is hidden, visibilitychange already handled it — avoid double penalty
+            if (document.hidden) return
+            const now = Date.now()
+            // Same startup grace as camera alerts: no blur penalties for the first 7s
+            if (now - sessionStartMsRef.current < SESSION_GRACE_MS) return
+            // Rate-limit: max 1 blur alert per 10 seconds
+            if (now - lastBlurAlertRef.current < 10000) return
+            lastBlurAlertRef.current = now
             addAlert('Window focus lost — candidate switched application', 'medium', 3, 'Focus Lost')
         }
 
