@@ -1,0 +1,10 @@
+.titleBlock { margin-bottom: 32px; }
+.label { font-size: 11px; font-family: monospace; color: #00cfff; letter-spacing: 1px; text-transform: uppercase; margin-bottom: 12px; }
+.title { font-size: 26px; font-weight: 800; color: #fff; line-height: 1.3; margin: 0 0 10px; }
+.authors { font-size: 13px; color: #555; margin: 0; }
+.abstract { background: #0d0d1f; border: 1px solid #1e1e3a; border-radius: 10px; padding: 24px; margin-bottom: 8px; }
+.abstract h2 { font-size: 13px; color: #888; margin: 0 0 10px; text-transform: uppercase; letter-spacing: 0.5px; font-family: monospace; }
+.abstract p { color: #999; font-size: 14px; line-height: 1.7; margin: 0; }
+.formula { background: #06060f; border: 1px solid #1e1e3a; border-left: 3px solid #00cfff; border-radius: 6px; padding: 14px 18px; margin: 12px 0; overflow-x: auto; }
+.formula code { font-size: 13px; color: #00cfff; white-space: pre; font-family: 'JetBrains Mono', monospace; }
+.cite { font-size: 11px; color: #444; line-height: 1.6; margin-top: 16px; border-top: 1px solid #1a1a2e; padding-top: 16px; }

@@ -1,0 +1,5 @@
+.pillGrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; }
+.pill { display: flex; gap: 14px; background: #0d0d1f; border: 1px solid #1e1e3a; border-radius: 10px; padding: 16px; align-items: flex-start; }
+.pillIcon { font-size: 22px; flex-shrink: 0; margin-top: 2px; }
+.pillLabel { font-size: 13px; font-weight: 600; color: #ddd; margin: 0 0 4px; }
+.pillDetail { font-size: 12px; color: #666; margin: 0; line-height: 1.4; }

@@ -299,6 +299,7 @@ export default function EnrollPage() {
     const [enrollmentHash, setEnrollmentHash] = useState('')
     const [expiresAt, setExpiresAt]   = useState('')
     const [error, setError]           = useState('')
+    const [gdprConsent, setGdprConsent] = useState(false)
 
     // Live biometric accumulator
     const flightTimesRef   = useRef<number[]>([])
@@ -660,13 +661,26 @@ export default function EnrollPage() {
                             ● {quality.label}
                         </div>
                     </div>
+                    {/* GDPR consent — required before submit */}
+                    <label style={{ display: 'flex', alignItems: 'flex-start', gap: '8px', cursor: 'pointer', maxWidth: 340, margin: '8px 0' }}>
+                        <input
+                            type="checkbox"
+                            checked={gdprConsent}
+                            onChange={e => setGdprConsent(e.target.checked)}
+                            style={{ marginTop: 3, accentColor: 'var(--color-primary)', flexShrink: 0 }}
+                        />
+                        <span style={{ fontSize: '0.7rem', color: '#666', lineHeight: 1.4 }}>
+                            Consiento el tratamiento de mis datos biométricos (Art. 9 RGPD) con fines de verificación de identidad.{' '}
+                            <a href="/privacy" target="_blank" rel="noopener noreferrer" style={{ color: '#00cfff' }}>Política de privacidad</a>
+                        </span>
+                    </label>
                     <button
                         className="btn btn-primary"
                         onClick={handleFinishEnrollment}
-                        disabled={!ready || saving}
-                        style={{ opacity: ready ? 1 : 0.4, cursor: ready ? 'pointer' : 'not-allowed' }}
+                        disabled={!ready || saving || !gdprConsent}
+                        style={{ opacity: (ready && gdprConsent) ? 1 : 0.4, cursor: (ready && gdprConsent) ? 'pointer' : 'not-allowed' }}
                     >
-                        {saving ? 'Guardando...' : ready ? '✓ Completar' : `Faltan ${minKeys - keystrokeCount}`}
+                        {saving ? 'Guardando...' : !gdprConsent ? 'Acepta el consentimiento' : ready ? '✓ Completar' : `Faltan ${minKeys - keystrokeCount}`}
                     </button>
                 </div>
             </header>

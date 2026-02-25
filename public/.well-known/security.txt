@@ -1,0 +1,14 @@
+Contact: mailto:security@deep-check.io
+Expires: 2027-01-01T00:00:00.000Z
+Preferred-Languages: es, en
+Canonical: https://deep-check-two.vercel.app/.well-known/security.txt
+Policy: https://deep-check-two.vercel.app/security
+Acknowledgments: https://deep-check-two.vercel.app/security#acknowledgments
+
+# Deep-Check Security Disclosure Policy
+# We welcome responsible disclosure of security vulnerabilities.
+# Please do not publicly disclose issues until we have had 90 days to remediate.
+# We do not currently offer a bug bounty program, but we commit to:
+# - Acknowledge receipt within 48 hours
+# - Provide a resolution timeline within 7 days
+# - Credit researchers who report valid issues (with their consent)
