@@ -284,6 +284,8 @@ export default function InterviewPage() {
     const [sessionEnded, setSessionEnded]         = useState(false)
     const [lastAssessment, setLastAssessment]     = useState<any>(null)
     const [evidence, setEvidence]                 = useState<EvidenceEntry[]>([])
+    // GDPR consent gate — session cannot start until candidate consents
+    const [biometricConsent, setBiometricConsent] = useState(false)
     // Lighting Challenge state (controls the screen flash overlay and camera prop)
     const [lightingChallenge, setLightingChallenge] = useState(false)
 
@@ -881,6 +883,46 @@ export default function InterviewPage() {
         return (
             <div style={{ minHeight: '100vh', background: 'var(--color-bg)', overflowY: 'auto' }}>
                 <SessionReport assessment={lastAssessment} onRestart={() => window.location.reload()} />
+            </div>
+        )
+    }
+
+    // ── Render: GDPR consent gate ─────────────────────────────────────────────
+    if (!biometricConsent) {
+        return (
+            <div style={{ minHeight: '100vh', background: 'var(--color-bg)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px' }}>
+                <div style={{ maxWidth: 540, background: '#0d0d1f', border: '1px solid #1e1e3a', borderRadius: 16, padding: '40px 36px', textAlign: 'center' }}>
+                    <div style={{ fontSize: 40, marginBottom: 16 }}>🔒</div>
+                    <h2 style={{ fontSize: '1.3rem', color: '#e0e0e0', marginBottom: 12, fontFamily: 'monospace' }}>
+                        Consentimiento de datos biométricos
+                    </h2>
+                    <p style={{ fontSize: '0.88rem', color: '#666', lineHeight: 1.7, marginBottom: 24 }}>
+                        Esta sesión analiza en tiempo real:
+                        <br /><strong style={{ color: '#aaa' }}>patrones de escritura (dinámica de teclas)</strong> y{' '}
+                        <strong style={{ color: '#aaa' }}>detección facial de vivacidad</strong>.
+                        <br /><br />
+                        Todo el procesamiento ocurre <strong style={{ color: '#00ff9d' }}>localmente en tu navegador</strong>.
+                        Nunca se almacena vídeo, audio ni secuencias brutas de teclado.
+                        Solo se envían vectores numéricos derivados para puntuación.
+                    </p>
+                    <div style={{ background: '#111', border: '1px solid #222', borderRadius: 8, padding: '14px 16px', marginBottom: 24, textAlign: 'left' }}>
+                        <p style={{ fontSize: '0.78rem', color: '#555', margin: 0, lineHeight: 1.6 }}>
+                            Base legal: <strong style={{ color: '#888' }}>Consentimiento explícito</strong> (Art. 6(1)(a) + Art. 9(2)(a) RGPD).<br />
+                            Puedes retirar el consentimiento en cualquier momento cerrando la sesión.<br />
+                            <a href="/privacy" target="_blank" rel="noopener noreferrer" style={{ color: '#00cfff' }}>Ver Política de Privacidad completa →</a>
+                        </p>
+                    </div>
+                    <button
+                        className="btn btn-primary"
+                        style={{ width: '100%', marginBottom: 12 }}
+                        onClick={() => setBiometricConsent(true)}
+                    >
+                        ✓ Acepto — Iniciar sesión verificada
+                    </button>
+                    <a href="/" style={{ fontSize: '0.8rem', color: '#444', textDecoration: 'none' }}>
+                        Cancelar y volver
+                    </a>
+                </div>
             </div>
         )
     }

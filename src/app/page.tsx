@@ -137,8 +137,37 @@ export default function Home() {
             <input type="email" placeholder="enter@enterprise.com" className={styles.input} />
             <button className="btn btn-primary">Get Early Access</button>
           </form>
+
+          {/* Trust badges */}
+          <div className={styles.trustBadges}>
+            <div className={styles.trustBadge} title="GDPR Compliant — biometric data processed client-side, explicit consent required">
+              <span className={styles.trustIcon}>🔒</span>
+              <span>GDPR Compliant</span>
+            </div>
+            <div className={styles.trustBadge} title="EU AI Act — human oversight mechanisms implemented">
+              <span className={styles.trustIcon}>🤖</span>
+              <span>EU AI Act Ready</span>
+            </div>
+            <div className={styles.trustBadge} title="Privacy by Design — no raw biometric storage">
+              <span className={styles.trustIcon}>🛡️</span>
+              <span>Privacy by Design</span>
+            </div>
+            <div className={styles.trustBadge} title="Client-side processing — data never leaves your device">
+              <span className={styles.trustIcon}>⚡</span>
+              <span>Client-Side Processing</span>
+            </div>
+          </div>
+
+          <div className={styles.footerLinks}>
+            <Link href="/privacy">Privacy Policy</Link>
+            <Link href="/terms">Terms of Service</Link>
+            <Link href="/security">Security</Link>
+            <Link href="/whitepaper">Whitepaper</Link>
+            <a href="/.well-known/security.txt">security.txt</a>
+          </div>
+
           <div className={styles.footerNote}>
-            © 2026 Deep-Check Inc. All rights reserved.
+            © 2026 Deep-Check Inc. All rights reserved. · <a href="mailto:hello@deep-check.io" style={{ color: 'inherit' }}>hello@deep-check.io</a>
           </div>
         </div>
       </footer>

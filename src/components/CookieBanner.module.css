@@ -1,0 +1,50 @@
+.banner {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    z-index: 9999;
+    background: #0d0d1f;
+    border-top: 1px solid #1e1e3a;
+    padding: 16px 24px;
+    box-shadow: 0 -4px 24px rgba(0,0,0,0.5);
+}
+.content {
+    max-width: 1100px;
+    margin: 0 auto;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 24px;
+    flex-wrap: wrap;
+}
+.text { flex: 1; min-width: 200px; }
+.title { font-size: 13px; font-weight: 700; color: #e0e0e0; margin: 0 0 4px; font-family: monospace; }
+.desc { font-size: 12px; color: #666; margin: 0; line-height: 1.5; }
+.link { color: #00cfff; text-decoration: none; }
+.link:hover { text-decoration: underline; }
+.actions { display: flex; gap: 10px; flex-shrink: 0; }
+.btnDecline {
+    background: transparent;
+    border: 1px solid #333;
+    color: #666;
+    border-radius: 6px;
+    padding: 8px 16px;
+    font-size: 12px;
+    font-family: monospace;
+    cursor: pointer;
+    transition: border-color 0.2s;
+}
+.btnDecline:hover { border-color: #555; color: #aaa; }
+.btnAccept {
+    background: #00ff9d22;
+    border: 1px solid #00ff9d;
+    color: #00ff9d;
+    border-radius: 6px;
+    padding: 8px 16px;
+    font-size: 12px;
+    font-family: monospace;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+.btnAccept:hover { background: #00ff9d33; }
