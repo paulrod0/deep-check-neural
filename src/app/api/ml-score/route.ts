@@ -16,6 +16,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { getProfileById, getProfileByEmail, KeystrokeProfile } from '@/lib/db'
+import { writeAuditLog, extractIP } from '@/lib/auditLog'
 import path from 'path'
 
 // ─── Identity distance computation ───────────────────────────────────────────
@@ -173,6 +174,8 @@ async function runOnnxInference(features: SessionFeatures): Promise<number | nul
 // ─── Route handler ────────────────────────────────────────────────────────────
 
 export async function POST(req: NextRequest) {
+    const t0 = Date.now()
+    const ip = extractIP(req.headers)
     try {
         const body: MlScoreRequest = await req.json()
         const { features, enrollmentProfileId, enrollmentEmail, totalKeystrokes } = body
@@ -241,6 +244,23 @@ export async function POST(req: NextRequest) {
         if (mlAiRisk > 70)                         flags.push('F07')
         if (identityMatchScore !== null && identityMatchScore < 40) flags.push('F08')
 
+        void writeAuditLog({
+            eventType: 'ml_inference',
+            endpoint: '/api/ml-score',
+            method: 'POST',
+            ip,
+            statusCode: 200,
+            durationMs: Date.now() - t0,
+            details: {
+                inferenceMethod,
+                mlAiRisk,
+                identityMatchScore,
+                flags,
+                hasEnrollment: !!profile,
+                keystrokes: totalKeystrokes,
+            },
+        })
+
         return NextResponse.json({
             success: true,
             mlAiRisk,
@@ -253,6 +273,7 @@ export async function POST(req: NextRequest) {
 
     } catch (err: any) {
         console.error('[/api/ml-score]', err?.message)
+        void writeAuditLog({ eventType: 'error', endpoint: '/api/ml-score', method: 'POST', ip, statusCode: 500, durationMs: Date.now() - t0 })
         return NextResponse.json(
             { success: false, error: err?.message ?? 'Server error' },
             { status: 500 }
