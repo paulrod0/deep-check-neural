@@ -404,8 +404,12 @@ const VerificationCamera = forwardRef<VerificationCameraHandle, VerificationCame
         const lcFailedRef             = useRef<number>(0)
 
         // Anti-cheat scores (rolling)
-        const saccadeScoreRef  = useRef<number>(50)
-        const blinkEdgeScoreRef= useRef<number>(75)
+        const saccadeScoreRef         = useRef<number>(50)
+        const blinkEdgeScoreRef       = useRef<number>(75)
+        // Consecutive smooth-score counter: only fire saccade_too_smooth after
+        // N consecutive detections to avoid single-frame noise false positives.
+        const consecutiveSmoothRef    = useRef<number>(0)
+        const lastSaccadeTooSmoothRef = useRef<number>(0)  // cooldown tracker
 
         // Rich metrics ref (exposed via handle)
         const faceMetricsRef         = useRef<FaceMetrics | null>(null)
@@ -680,25 +684,40 @@ const VerificationCamera = forwardRef<VerificationCameraHandle, VerificationCame
                     }
 
                     // ── Micro-saccade score (every 10 frames) ─────────────────
-                    // Require ≥30 samples (~13s of data) before evaluating — the score
-                    // starts at 50 by default and can temporarily dip below threshold
-                    // during the first few seconds simply due to insufficient data.
-                    // Threshold lowered from < 20 to < 10: score 10–20 is borderline and
-                    // can occur during focused typing when the user's gaze is naturally
-                    // still. Only truly pathological smoothness (AI renderer = score < 10)
-                    // should warrant a penalty.
-                    if (frameIdx % 10 === 0 && gazeRatioHistRef.current.length >= 30) {
+                    // BUG FIX: history was capped at 20 but gate required >= 30 →
+                    // the check NEVER ran. Cap increased to 60 (~27s at 450ms/frame).
+                    // Gate kept at >= 25 (sufficient for second-derivative analysis).
+                    //
+                    // FALSE POSITIVE GUARD: require 3 consecutive low-score readings
+                    // before firing saccade_too_smooth. A single frame of low variance
+                    // can occur naturally during reading pauses, blink recovery, or
+                    // face detection jitter — it is NOT a reliable AI signal alone.
+                    // Additionally enforce a 60s cooldown between firings.
+                    if (frameIdx % 10 === 0 && gazeRatioHistRef.current.length >= 25) {
                         const sScore = _gk7(gazeRatioHistRef.current)
                         saccadeScoreRef.current = sScore
                         if (sScore < 10) {
-                            onAntiCheatEvent?.({
-                                type: 'saccade_too_smooth',
-                                confidence: 1 - sScore / 20,
-                                detail: `Gaze acceleration variance too low (${sScore}/100) — AI renderer signature`,
-                                timestamp: now
-                            })
-                        } else if (sScore > 60 && frameIdx % 50 === 0) {
-                            onAntiCheatEvent?.({ type: 'saccade_detected', confidence: sScore / 100, timestamp: now })
+                            consecutiveSmoothRef.current += 1
+                            // Only alert after 3 consecutive low readings AND 60s cooldown
+                            if (
+                                consecutiveSmoothRef.current >= 3 &&
+                                now - lastSaccadeTooSmoothRef.current > 60000
+                            ) {
+                                lastSaccadeTooSmoothRef.current = now
+                                consecutiveSmoothRef.current = 0
+                                onAntiCheatEvent?.({
+                                    type: 'saccade_too_smooth',
+                                    confidence: 1 - sScore / 20,
+                                    detail: `Gaze acceleration variance too low (${sScore}/100) — 3 consecutive readings`,
+                                    timestamp: now
+                                })
+                            }
+                        } else {
+                            // Reset streak on any healthy reading
+                            consecutiveSmoothRef.current = 0
+                            if (sScore > 60 && frameIdx % 50 === 0) {
+                                onAntiCheatEvent?.({ type: 'saccade_detected', confidence: sScore / 100, timestamp: now })
+                            }
                         }
                     }
 
@@ -729,7 +748,7 @@ const VerificationCamera = forwardRef<VerificationCameraHandle, VerificationCame
                     // Gaze ratio history for stability
                     const avgRatio = (gaze.leftRatio + gaze.rightRatio) / 2
                     gazeRatioHistRef.current.push(avgRatio)
-                    if (gazeRatioHistRef.current.length > 20) gazeRatioHistRef.current.shift()
+                    if (gazeRatioHistRef.current.length > 60) gazeRatioHistRef.current.shift() // was 20 → bug: gate required 25
                     const gazeStability = computeGazeStability(gazeRatioHistRef.current)
 
                     setGazeRatioDebug(Math.round(avgRatio * 100) / 100)

@@ -20,9 +20,25 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({ success: false, error: 'Missing required fields' }, { status: 400 })
         }
 
-        if (profile.sampleSize < 50) {
+        // Minimum 150 real keystrokes — below this the flightMean stdDev is
+        // too small (< 15ms) and the Mahalanobis distance becomes meaningless.
+        if (profile.sampleSize < 150) {
             return NextResponse.json(
-                { success: false, error: `Need at least 50 keystrokes. Got ${profile.sampleSize}.` },
+                { success: false, error: `Se necesitan al menos 150 pulsaciones para un perfil fiable. Recibidas: ${profile.sampleSize}.` },
+                { status: 422 }
+            )
+        }
+
+        // Basic sanity checks — catch enrollment made under unusual conditions
+        if (profile.flightMean < 30 || profile.flightMean > 1200) {
+            return NextResponse.json(
+                { success: false, error: 'El perfil tiene tiempos de vuelo fuera del rango humano. Inténtalo de nuevo escribiendo a un ritmo normal.' },
+                { status: 422 }
+            )
+        }
+        if (profile.flightStd < 5) {
+            return NextResponse.json(
+                { success: false, error: 'El ritmo de escritura es demasiado uniforme. Escribe de forma natural, no a un ritmo constante.' },
                 { status: 422 }
             )
         }

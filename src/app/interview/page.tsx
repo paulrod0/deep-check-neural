@@ -474,9 +474,15 @@ export default function InterviewPage() {
                 break
             case 'saccade_too_smooth':
                 acFailedTotalRef.current++
+                // Severity downgraded: camera-based saccade detection has inherent
+                // noise from lighting, glasses, and focus intensity. We now require
+                // 3 consecutive detections before this fires, so when it does it
+                // represents ~30s of sustained pathological smoothness — which is
+                // still meaningful but not conclusive alone. Use medium severity
+                // and a lower penalty; corroborate with other signals.
                 addAlert(
-                    `Gaze too smooth — no micro-saccades detected. AI renderer signature.`,
-                    'high', 15
+                    `Gaze unnaturally smooth — sustained micro-saccade absence (3 readings).`,
+                    'medium', 8
                 )
                 break
             case 'blink_edge_artifact':

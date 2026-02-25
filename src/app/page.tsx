@@ -84,6 +84,50 @@ export default function Home() {
         </div>
       </section>
 
+      {/* Document Forensics — Product B */}
+      <section className={styles.forensicsSection}>
+        <div className="container">
+          <div className={styles.forensicsInner}>
+            <div className={styles.forensicsText}>
+              <div className={styles.badge} style={{ marginBottom: '1rem' }}>Nuevo Producto</div>
+              <h2 className="section-title" style={{ textAlign: 'left' }}>
+                Forensia <span className="text-gradient">Documental</span>
+              </h2>
+              <p style={{ color: 'var(--color-text-dim)', lineHeight: 1.6, marginBottom: '1.5rem' }}>
+                Deep-Check detecta imágenes manipuladas, deepfakes en documentos y metadatos falsificados
+                en solicitudes de ayudas, expedientes y procesos de verificación documental.
+              </p>
+              <div className={styles.forensicsPills}>
+                <span className={styles.pill}>ELA — Error Level Analysis</span>
+                <span className={styles.pill}>EXIF Anomaly Detection</span>
+                <span className={styles.pill}>AI Image Signature</span>
+                <span className={styles.pill}>Noise Forensics</span>
+              </div>
+              <Link href="/documents" className="btn btn-primary" style={{ marginTop: '1.5rem', display: 'inline-block' }}>
+                Analizar documento →
+              </Link>
+            </div>
+            <div className={styles.forensicsCards}>
+              <div className={styles.forensicsCard}>
+                <span className={styles.forensicsCardIcon}>🔬</span>
+                <h4>ELA</h4>
+                <p>Detecta regiones editadas comparando artefactos de compresión JPEG</p>
+              </div>
+              <div className={styles.forensicsCard}>
+                <span className={styles.forensicsCardIcon}>📋</span>
+                <h4>EXIF</h4>
+                <p>Identifica software de edición (Photoshop, GIMP, Canva) en metadatos</p>
+              </div>
+              <div className={styles.forensicsCard}>
+                <span className={styles.forensicsCardIcon}>🤖</span>
+                <h4>AI Detection</h4>
+                <p>Distingue fotografías reales de imágenes generadas por IA (Midjourney, DALL-E, SD)</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
       {/* Footer / CTA */}
       <footer className={styles.footer}>
         <div className="container">

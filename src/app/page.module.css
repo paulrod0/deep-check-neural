@@ -173,6 +173,79 @@
   border-color: var(--color-primary);
 }
 
+/* ── Document Forensics section ────────────────────────────── */
+.forensicsSection {
+  padding: 80px 0;
+  background: linear-gradient(180deg, transparent 0%, rgba(0, 207, 255, 0.03) 100%);
+  border-top: 1px solid rgba(0, 207, 255, 0.08);
+}
+
+.forensicsInner {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 60px;
+  align-items: center;
+}
+
+.forensicsText {}
+
+.forensicsPills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.pill {
+  background: rgba(0, 207, 255, 0.08);
+  border: 1px solid rgba(0, 207, 255, 0.2);
+  border-radius: 20px;
+  padding: 4px 14px;
+  font-size: 0.75rem;
+  color: #00cfff;
+  letter-spacing: 0.3px;
+}
+
+.forensicsCards {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.forensicsCard {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(0, 207, 255, 0.1);
+  border-radius: 12px;
+  padding: 20px;
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  transition: border-color 0.2s, background 0.2s;
+}
+.forensicsCard:hover {
+  border-color: rgba(0, 207, 255, 0.3);
+  background: rgba(0, 207, 255, 0.05);
+}
+
+.forensicsCardIcon {
+  font-size: 24px;
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.forensicsCard h4 {
+  margin: 0 0 4px;
+  font-size: 0.95rem;
+  color: #e0e0e0;
+  font-weight: 600;
+}
+
+.forensicsCard p {
+  margin: 0;
+  font-size: 0.82rem;
+  color: var(--color-text-dim);
+  line-height: 1.5;
+}
+
 @media (max-width: 768px) {
   .title {
     font-size: 2.5rem;
@@ -184,5 +257,10 @@
 
   .form {
     flex-direction: column;
+  }
+
+  .forensicsInner {
+    grid-template-columns: 1fr;
+    gap: 40px;
   }
 }
