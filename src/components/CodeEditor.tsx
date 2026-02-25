@@ -507,14 +507,14 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(function CodeEd
                 allFlightsRef.current.push(flightTime)
             }
 
-            // ── Burst window — printable character keys only ──────────────────
-            // Enter, Backspace, Delete, Tab are excluded:
-            //   - Enter causes Monaco to auto-insert indentation (false +N chars)
-            //   - Backspace/Delete are editing operations, not injection bursts
-            //   - Tab in code editors jumps indent levels, not text injection
-            // Window widened to 500ms (was 300ms) so fast human typing (~120 WPM =
-            // ~1 char/100ms = 5 chars/500ms) doesn't approach the burst threshold.
-            if (!BURST_EXCLUDED_KEYS.has(e.key)) {
+            // ── Burst window — real human keystrokes only ─────────────────────
+            // Excluded keys (Enter, Backspace, Delete, Tab) skip burst tracking.
+            // Additionally gate by flightTime > 15ms: Monaco auto-inserts bracket
+            // pairs, closing quotes, and autocomplete suggestions as synthetic events
+            // with 0–2ms flight time (physically impossible for human fingers).
+            // Real minimum neuromotor gap is ~15ms. This single gate eliminates the
+            // most common source of false "inhuman burst" alerts.
+            if (!BURST_EXCLUDED_KEYS.has(e.key) && flightTime > 15) {
                 charWindowRef.current.push(now)
                 charWindowRef.current = charWindowRef.current.filter(t => now - t < 500)
             }
@@ -526,16 +526,24 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(function CodeEd
             }
 
             // ── Calibration ───────────────────────────────────────────────────
+            // Phase 1 (first 50 real keystrokes + 30s): collect enough data to
+            // establish a statistically meaningful initial baseline. 30 samples
+            // was too few — a single anomalous phrase could skew the mean.
+            // Phase 2 (post-calibration): CONTINUE updating the baseline via
+            // Welford's online algorithm on every keystroke. This means the
+            // baseline adapts to the person's current typing state (fatigue,
+            // different keyboard layout section, thinking pauses) rather than
+            // being frozen from the first 50 keystrokes forever.
             if (isCalibratinRef.current) {
                 if (flightTime > 10 && flightTime < 2000) {
                     calibrationPoolRef.current.push(flightTime)
                 }
                 setDisplayMetrics(prev => ({ ...prev, calibrationCount: calibrationPoolRef.current.length }))
 
-                // Require ≥30 samples AND ≥20s elapsed so fast typists don't get
-                // a baseline from only 3 seconds of data (which would over-alert later).
+                // Require ≥50 samples AND ≥30s so the baseline represents a full
+                // range of digrams and typing speeds, not just the opening burst.
                 const msSinceCalibStart = Date.now() - calibrationStartRef.current
-                if (calibrationPoolRef.current.length >= 30 && msSinceCalibStart >= 20000) {
+                if (calibrationPoolRef.current.length >= 50 && msSinceCalibStart >= 30000) {
                     const stats = computeStats(calibrationPoolRef.current)
                     setBaseline({
                         mean: stats.mean,
@@ -546,6 +554,20 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(function CodeEd
                     setIsCalibrating(false)
                 }
             } else if (baselineRef.current) {
+                // ── Adaptive baseline: Welford online update of session mean ──
+                // Instead of comparing against a frozen initial baseline, we slowly
+                // drift the mean/stdDev toward the ongoing session statistics.
+                // Weight: 99% existing baseline + 1% new sample per keystroke.
+                // This makes the system tolerant of mid-session style changes (e.g.
+                // switching from fast-paced to careful typing) without losing
+                // sensitivity to sudden wholesale substitutions.
+                if (flightTime > 10 && flightTime < 2000) {
+                    const bl     = baselineRef.current
+                    const alpha  = 0.01   // exponential smoothing factor
+                    bl.mean      = (1 - alpha) * bl.mean + alpha * flightTime
+                    const newVar = (1 - alpha) * (bl.stdDev ** 2) + alpha * (flightTime - bl.mean) ** 2
+                    bl.stdDev    = Math.sqrt(newVar) || 1
+                }
                 const bl = baselineRef.current
 
                 // ── Z-Score anomaly ───────────────────────────────────────────

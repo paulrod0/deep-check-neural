@@ -14,6 +14,8 @@ export default function Sidebar() {
         { label: 'Global Benchmarks', href: '/dashboard/benchmarks' },
         { label: 'Account Settings', href: '/dashboard/settings' },
         { label: '──────────', href: '#', disabled: true },
+        { label: '⬡ Forensia Documental', href: '/documents' },
+        { label: '──────────', href: '#2', disabled: true },
         { label: '⬡ Enrollment', href: '/enroll' },
         { label: '⬡ Verificar Cert.', href: '/verify' },
         { label: '⬡ API Docs', href: '/docs' },

@@ -17,18 +17,56 @@ const CodeEditorDynamic = dynamic(() => import('@/components/CodeEditor'), {
 
 // ─── Enrollment Contexts ──────────────────────────────────────────────────────
 
+// ─── Quality tiers ────────────────────────────────────────────────────────────
+// How many bigram pairs with ≥5 samples we want for each tier.
+// Prose typing at 60 WPM × 5 min = ~1800 keystrokes → ~150 distinct bigrams × 12 samples.
+// Code typing is slower but more symbol-rich.
+
+type QualityTier = 'iniciando' | 'basico' | 'estandar' | 'avanzado' | 'experto'
+
+function computeEnrollmentQuality(
+    flightTimes: number[],
+    digramAcc: Record<string, number[]>,
+): { score: number; tier: QualityTier; label: string; color: string; next: string } {
+    const n     = flightTimes.length
+    const bigrams5 = Object.values(digramAcc).filter(v => v.length >= 5).length
+
+    // Sample size: 40 pts max (saturates at 600 flight times)
+    const ptsSample  = Math.min(40, (n / 600) * 40)
+    // Bigram coverage: 35 pts max (saturates at 60 distinct bigrams with ≥5 samples)
+    const ptsBigram  = Math.min(35, (bigrams5 / 60) * 35)
+    // Variance quality: 25 pts — human CV (stdDev/mean) should be 0.15–0.9
+    let ptsVariance = 0
+    if (n >= 20) {
+        const mean   = flightTimes.reduce((a, b) => a + b, 0) / n
+        const stdDev = Math.sqrt(flightTimes.reduce((a, b) => a + (b - mean) ** 2, 0) / n)
+        const cv     = stdDev / (mean || 1)
+        if (cv >= 0.15 && cv <= 0.9) ptsVariance = 25
+        else if (cv >= 0.1)          ptsVariance = 12
+    }
+
+    const score = Math.round(ptsSample + ptsBigram + ptsVariance)
+    if (score >= 88) return { score, tier: 'experto',   label: 'Experto',   color: '#00ff9d', next: 'Perfil óptimo' }
+    if (score >= 68) return { score, tier: 'avanzado',  label: 'Avanzado',  color: '#00cfff', next: 'Escribe un poco más para llegar a Experto' }
+    if (score >= 46) return { score, tier: 'estandar',  label: 'Estándar',  color: '#ffd700', next: 'Más texto dará un perfil más fiable' }
+    if (score >= 24) return { score, tier: 'basico',    label: 'Básico',    color: '#ff7f50', next: 'Sigue escribiendo para mejorar la precisión' }
+    return               { score, tier: 'iniciando', label: 'Iniciando', color: '#555',    next: 'Escribe el texto del prompt para comenzar' }
+}
+
 const CONTEXTS: Record<EnrollmentContext, {
     label: string
     description: string
     prompt: string
     language: string
-    minKeys: number
+    minKeys: number       // minimum to unlock "Submit" button
+    recommendedKeys: number  // target for a reliable profile
 }> = {
     prose_es: {
         label: 'Texto en Español',
         description: 'Para exámenes universitarios, ensayos, contratos y documentos legales en español.',
         language: 'plaintext',
-        minKeys: 120,
+        minKeys: 300,
+        recommendedKeys: 500,
         prompt: `Escribe el siguiente texto tal como aparece (no copies y pegues, escríbelo manualmente):
 
 "La verificación biométrica de pulsaciones de teclado analiza patrones únicos de escritura que son tan personales como una huella dactilar. Cada persona tiene su propio ritmo, cadencia y velocidad al escribir. Estos patrones son difíciles de imitar y sirven como una firma digital continua que confirma la identidad del usuario durante toda la sesión de trabajo."
@@ -39,7 +77,8 @@ Continúa escribiendo libremente sobre el tema que prefieras hasta que el indica
         label: 'English Prose',
         description: 'For English-language exams, certifications, journalism, and legal documents.',
         language: 'plaintext',
-        minKeys: 120,
+        minKeys: 300,
+        recommendedKeys: 500,
         prompt: `Type the following text manually (do not copy-paste):
 
 "Keystroke biometric verification analyzes unique typing patterns that are as personal as a fingerprint. Every person has their own rhythm, cadence, and speed when typing. These patterns are difficult to replicate and serve as a continuous digital signature confirming user identity throughout the entire work session."
@@ -75,9 +114,27 @@ def is_prime(num: int) -> bool:
     return True
 
 
+def merge_sort(arr: list) -> list:
+    """Ordenación por mezcla recursiva."""
+    if len(arr) <= 1:
+        return arr
+    mid = len(arr) // 2
+    left  = merge_sort(arr[:mid])
+    right = merge_sort(arr[mid:])
+    result = []
+    i = j = 0
+    while i < len(left) and j < len(right):
+        if left[i] <= right[j]:
+            result.append(left[i]); i += 1
+        else:
+            result.append(right[j]); j += 1
+    return result + left[i:] + right[j:]
+
+
 # Continúa con tu propia implementación hasta completar el perfil
 `,
-        minKeys: 100,
+        minKeys: 200,
+        recommendedKeys: 350,
     },
     code_js: {
         label: 'Código JavaScript/TypeScript',
@@ -86,32 +143,45 @@ def is_prime(num: int) -> bool:
         prompt: `// Escribe este código manualmente (no copies y pegues)
 
 interface User {
-  id: string;
-  name: string;
-  email: string;
-  createdAt: Date;
+  id: string
+  name: string
+  email: string
+  createdAt: Date
 }
 
 async function fetchUser(id: string): Promise<User | null> {
   try {
-    const response = await fetch(\`/api/users/\${id}\`);
-    if (!response.ok) return null;
-    const data = await response.json();
-    return {
-      id: data.id,
-      name: data.name,
-      email: data.email,
-      createdAt: new Date(data.createdAt),
-    };
+    const response = await fetch(\`/api/users/\${id}\`)
+    if (!response.ok) return null
+    const data = await response.json()
+    return { id: data.id, name: data.name, email: data.email, createdAt: new Date(data.createdAt) }
   } catch (error) {
-    console.error('Error fetching user:', error);
-    return null;
+    console.error('Error fetching user:', error)
+    return null
   }
+}
+
+function debounce<T extends (...args: unknown[]) => void>(fn: T, ms: number): T {
+  let timer: ReturnType<typeof setTimeout>
+  return ((...args: unknown[]) => {
+    clearTimeout(timer)
+    timer = setTimeout(() => fn(...args), ms)
+  }) as T
+}
+
+function groupBy<T>(arr: T[], key: keyof T): Record<string, T[]> {
+  return arr.reduce((acc, item) => {
+    const k = String(item[key])
+    if (!acc[k]) acc[k] = []
+    acc[k].push(item)
+    return acc
+  }, {} as Record<string, T[]>)
 }
 
 // Continúa con tu propia implementación
 `,
-        minKeys: 100,
+        minKeys: 200,
+        recommendedKeys: 350,
     },
     code_general: {
         label: 'Código General',
@@ -120,12 +190,13 @@ async function fetchUser(id: string): Promise<User | null> {
         prompt: `Escribe cualquier fragmento de código en el lenguaje de tu elección.
 El sistema analizará tu ritmo de escritura independientemente del lenguaje.
 
-Mínimo recomendado: 100-150 líneas de código real, no pseudocódigo.
 Incluye funciones, condiciones, bucles y operadores para un perfil más rico.
+Cuanto más variado sea el texto, mejor será el perfil biométrico resultante.
 
 Empieza a escribir aquí:
 `,
-        minKeys: 100,
+        minKeys: 200,
+        recommendedKeys: 350,
     },
 }
 
@@ -232,33 +303,67 @@ export default function EnrollPage() {
     // Live biometric accumulator
     const flightTimesRef   = useRef<number[]>([])
     const holdTimesRef     = useRef<number[]>([])
+    // Proper bigram (digram) accumulator: keyed by "prevKey→currKey"
     const digramAccRef     = useRef<Record<string, number[]>>({})
+    // Track previous key to form bigrams
+    const prevKeyRef       = useRef<string>('')
+    // Track enrollment start time for WPM calculation
+    const enrollStartRef   = useRef<number>(0)
+    // Live quality indicator
+    const [quality, setQuality] = useState(() => computeEnrollmentQuality([], {}))
 
     const ctx = CONTEXTS[context]
-    const minKeys = ctx.minKeys
-    const progress = Math.min(100, (keystrokeCount / minKeys) * 100)
+    const minKeys         = ctx.minKeys
+    const recommendedKeys = ctx.recommendedKeys
+    const progress        = Math.min(100, (keystrokeCount / minKeys) * 100)
+    // Show a secondary "recommended" progress once past minKeys
+    const qualityProgress = Math.min(100, (keystrokeCount / recommendedKeys) * 100)
     const ready = keystrokeCount >= minKeys
 
     // ── Accumulate biometric data from CodeEditor events ─────────────────────
+    const SKIP_BIGRAM = new Set(['Backspace', 'Delete', 'Enter', 'Tab', 'Shift', 'Control', 'Alt', 'Meta'])
+
     const handleBiometricEvent = useCallback((event: BiometricEvent) => {
-        if (event.type === 'keystroke') {
-            setKeystrokeCount(prev => prev + 1)
-            if (event.flightTime && event.flightTime > 10 && event.flightTime < 2000) {
-                flightTimesRef.current.push(event.flightTime)
-            }
-            if (event.holdTime && event.holdTime > 10 && event.holdTime < 500) {
-                holdTimesRef.current.push(event.holdTime)
-            }
-            // Accumulate digrams
-            if (event.key) {
-                const dk = event.key
-                if (!digramAccRef.current[dk]) digramAccRef.current[dk] = []
-                if (event.flightTime && event.flightTime > 10 && event.flightTime < 2000) {
-                    digramAccRef.current[dk].push(event.flightTime)
-                }
+        if (event.type !== 'keystroke') return
+
+        setKeystrokeCount(prev => prev + 1)
+
+        // Start timer on first real keystroke
+        if (enrollStartRef.current === 0) enrollStartRef.current = Date.now()
+
+        const currentKey = event.key ?? ''
+        const ft = event.flightTime
+
+        if (ft && ft > 10 && ft < 2000) {
+            flightTimesRef.current.push(ft)
+
+            // ── Bigram (digram) collection ──────────────────────────────
+            // Key: "prevKey→currKey". Only track pairs where both keys are
+            // printable (letters, digits, symbols) — skip modifiers, Backspace, etc.
+            // This captures the real inter-key transition timing, which is what
+            // distinguishes one person's typing from another's.
+            if (prevKeyRef.current && !SKIP_BIGRAM.has(currentKey) && !SKIP_BIGRAM.has(prevKeyRef.current)) {
+                const bigram = `${prevKeyRef.current}→${currentKey}`
+                if (!digramAccRef.current[bigram]) digramAccRef.current[bigram] = []
+                digramAccRef.current[bigram].push(ft)
             }
         }
-    }, [])
+
+        if (event.holdTime && event.holdTime > 10 && event.holdTime < 500) {
+            holdTimesRef.current.push(event.holdTime)
+        }
+
+        // Advance previous key (skip non-character keys so we don't create
+        // spurious "Backspace→a" bigrams — those reflect correction, not rhythm)
+        if (!SKIP_BIGRAM.has(currentKey)) {
+            prevKeyRef.current = currentKey
+        }
+
+        // Recompute quality score every 10 keystrokes
+        if (flightTimesRef.current.length % 10 === 0) {
+            setQuality(computeEnrollmentQuality(flightTimesRef.current, digramAccRef.current))
+        }
+    }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
     // ── Build keystroke profile from accumulated data ─────────────────────────
     function buildProfile(): KeystrokeProfile {
@@ -292,14 +397,35 @@ export default function EnrollPage() {
         const fStats = stats(flights)
         const hStats = stats(holds)
 
-        // Build digram map (only pairs with ≥3 samples)
+        // ── Bigram map: only include pairs with ≥5 samples ──────────────
+        // At <5 samples the per-digram stdDev is too noisy to be useful.
+        // At ≥5 samples we have a meaningful mean and enough variance info.
         const digrams: KeystrokeProfile['digrams'] = {}
-        Object.entries(digramAccRef.current).forEach(([key, vals]) => {
-            if (vals.length >= 3) {
+        Object.entries(digramAccRef.current).forEach(([bigram, vals]) => {
+            if (vals.length >= 5) {
                 const s = stats(vals)
-                digrams[key] = { mean: s.mean, std: s.std, count: vals.length }
+                digrams[bigram] = { mean: Math.round(s.mean), std: Math.round(s.std), count: vals.length }
             }
         })
+
+        // ── WPM calculation ──────────────────────────────────────────────
+        // Based on elapsed time since first keystroke and total keystrokes.
+        // Early portion (first 20% of session) may be slower due to reading
+        // the prompt — we compute both an early and a late WPM to get a range.
+        const elapsedMs  = enrollStartRef.current > 0 ? Date.now() - enrollStartRef.current : 0
+        const elapsedMin = Math.max(0.1, elapsedMs / 60000)
+        const totalWpm   = Math.round((keystrokeCount / 5) / elapsedMin)
+
+        // Compute WPM for the second half of the session (steadier typing)
+        const halfFlights = flights.slice(Math.floor(flights.length / 2))
+        const halfMs      = halfFlights.reduce((s, f) => s + f, 0)
+        const halfMin     = Math.max(0.01, halfMs / 60000)
+        const halfWpm     = halfFlights.length > 20
+            ? Math.round((halfFlights.length / 5) / halfMin)
+            : totalWpm
+
+        const wpmMin = Math.max(10, Math.min(totalWpm, halfWpm) - 10)
+        const wpmMax = Math.max(wpmMin + 5, Math.max(totalWpm, halfWpm) + 10)
 
         return {
             flightMean: Math.round(fStats.mean),
@@ -308,8 +434,8 @@ export default function EnrollPage() {
             holdStd:    Math.round(hStats.std),
             entropy:    parseFloat(entropy(flights).toFixed(2)),
             digrams,
-            wpmMin: 0,
-            wpmMax: 0,
+            wpmMin,
+            wpmMax,
             sampleSize: keystrokeCount,
         }
     }
@@ -526,7 +652,13 @@ export default function EnrollPage() {
                     <ProgressRing pct={progress} size={72} />
                     <div style={{ textAlign: 'right' }}>
                         <div style={{ fontSize: '0.7rem', textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--color-text-muted)', marginBottom: '4px' }}>Pulsaciones</div>
-                        <div style={{ fontSize: '1.4rem', fontWeight: 700, color: ready ? 'var(--color-primary)' : 'var(--color-text)' }}>{keystrokeCount} / {minKeys}</div>
+                        <div style={{ fontSize: '1.4rem', fontWeight: 700, color: ready ? 'var(--color-primary)' : 'var(--color-text)' }}>
+                            {keystrokeCount} / {minKeys}
+                        </div>
+                        {/* Quality badge */}
+                        <div style={{ fontSize: '0.7rem', marginTop: '3px', color: quality.color, fontWeight: 600 }}>
+                            ● {quality.label}
+                        </div>
                     </div>
                     <button
                         className="btn btn-primary"
@@ -553,19 +685,59 @@ export default function EnrollPage() {
                         </div>
                     )}
 
-                    {/* Live stats */}
-                    {keystrokeCount > 20 && (
-                        <div style={{ marginTop: '24px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                            <div style={{ fontSize: '0.7rem', textTransform: 'uppercase', letterSpacing: '0.12em', color: 'var(--color-text-muted)', marginBottom: '4px' }}>Señales captadas</div>
-                            <div style={{ fontSize: '0.78rem', color: 'var(--color-text-muted)' }}>
-                                · Tiempos de vuelo: <span style={{ color: 'var(--color-primary)' }}>{flightTimesRef.current.length}</span>
+                    {/* Live quality panel */}
+                    {keystrokeCount > 10 && (
+                        <div style={{ marginTop: '24px', display: 'flex', flexDirection: 'column', gap: '0' }}>
+                            {/* Quality score block */}
+                            <div style={{ padding: '14px', background: 'rgba(255,255,255,0.03)', border: `1px solid ${quality.color}33`, borderRadius: '10px', marginBottom: '12px' }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                                    <span style={{ fontSize: '0.7rem', textTransform: 'uppercase', letterSpacing: '0.12em', color: 'var(--color-text-muted)' }}>Calidad del perfil</span>
+                                    <span style={{ fontSize: '0.8rem', fontWeight: 700, color: quality.color }}>{quality.label}</span>
+                                </div>
+                                {/* Quality bar */}
+                                <div style={{ height: '5px', background: 'rgba(255,255,255,0.07)', borderRadius: '3px', overflow: 'hidden', marginBottom: '8px' }}>
+                                    <div style={{ height: '100%', width: `${quality.score}%`, background: quality.color, borderRadius: '3px', transition: 'width 0.5s ease' }} />
+                                </div>
+                                <div style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)', lineHeight: 1.5 }}>{quality.next}</div>
                             </div>
-                            <div style={{ fontSize: '0.78rem', color: 'var(--color-text-muted)' }}>
-                                · Pares de digrama: <span style={{ color: 'var(--color-primary)' }}>{Object.keys(digramAccRef.current).length}</span>
-                            </div>
-                            <div style={{ fontSize: '0.78rem', color: 'var(--color-text-muted)' }}>
-                                · Tiempos de pulsación: <span style={{ color: 'var(--color-primary)' }}>{holdTimesRef.current.length}</span>
-                            </div>
+
+                            {/* Recommended target bar (shown only once past minKeys) */}
+                            {ready && (
+                                <div style={{ marginBottom: '12px' }}>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+                                        <span style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)' }}>Hacia perfil recomendado</span>
+                                        <span style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)' }}>{keystrokeCount}/{recommendedKeys}</span>
+                                    </div>
+                                    <div style={{ height: '4px', background: 'rgba(255,255,255,0.07)', borderRadius: '2px', overflow: 'hidden' }}>
+                                        <div style={{ height: '100%', width: `${qualityProgress}%`, background: 'var(--color-primary)', borderRadius: '2px', transition: 'width 0.3s' }} />
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Signal breakdown */}
+                            <div style={{ fontSize: '0.7rem', textTransform: 'uppercase', letterSpacing: '0.12em', color: 'var(--color-text-muted)', marginBottom: '8px' }}>Señales captadas</div>
+                            {[
+                                { label: 'Tiempos de vuelo', value: flightTimesRef.current.length, target: 300, unit: '' },
+                                {
+                                    label: 'Bigrams únicos (≥5 muestras)',
+                                    value: Object.values(digramAccRef.current).filter(v => v.length >= 5).length,
+                                    target: 50,
+                                    unit: '',
+                                },
+                                { label: 'Pulsaciones (hold)', value: holdTimesRef.current.length, target: 200, unit: '' },
+                            ].map(s => (
+                                <div key={s.label} style={{ marginBottom: '8px' }}>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '3px' }}>
+                                        <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>{s.label}</span>
+                                        <span style={{ fontSize: '0.75rem', fontWeight: 600, color: s.value >= s.target ? 'var(--color-primary)' : 'var(--color-text-muted)' }}>
+                                            {s.value}{s.value >= s.target ? ' ✓' : ` / ${s.target}`}
+                                        </span>
+                                    </div>
+                                    <div style={{ height: '3px', background: 'rgba(255,255,255,0.07)', borderRadius: '2px', overflow: 'hidden' }}>
+                                        <div style={{ height: '100%', width: `${Math.min(100, (s.value / s.target) * 100)}%`, background: s.value >= s.target ? 'var(--color-primary)' : '#ffd700', borderRadius: '2px', transition: 'width 0.3s' }} />
+                                    </div>
+                                </div>
+                            ))}
                         </div>
                     )}
                 </div>
