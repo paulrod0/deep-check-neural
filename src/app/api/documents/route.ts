@@ -5,6 +5,7 @@
  */
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { writeAuditLog, extractIP } from '@/lib/auditLog'
 
 function getClient() {
     const url = process.env.NEXT_PUBLIC_SUPABASE_URL!
@@ -16,6 +17,8 @@ function getClient() {
 // ─── POST — save analysis ────────────────────────────────────────────────────
 
 export async function POST(req: NextRequest) {
+    const t0 = Date.now()
+    const ip = extractIP(req.headers)
     try {
         const body = await req.json()
 
@@ -61,9 +64,19 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({ error: error.message }, { status: 500 })
         }
 
+        void writeAuditLog({
+            eventType: 'document_analyzed',
+            endpoint: '/api/documents',
+            method: 'POST',
+            ip,
+            statusCode: 201,
+            durationMs: Date.now() - t0,
+            details: { id: data.id, filename, riskScore, riskLevel, caseRef: caseRef ?? null },
+        })
         return NextResponse.json({ id: data.id, createdAt: data.created_at }, { status: 201 })
     } catch (e) {
         console.error('[api/documents POST] unexpected:', e)
+        void writeAuditLog({ eventType: 'error', endpoint: '/api/documents', method: 'POST', ip, statusCode: 500, durationMs: Date.now() - t0 })
         return NextResponse.json({ error: 'Internal error' }, { status: 500 })
     }
 }

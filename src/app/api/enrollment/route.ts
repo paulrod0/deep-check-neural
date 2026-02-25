@@ -4,9 +4,12 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { saveEnrollmentProfile, EnrollmentProfile, KeystrokeProfile } from '@/lib/db'
+import { writeAuditLog, extractIP } from '@/lib/auditLog'
 import crypto from 'crypto'
 
 export async function POST(req: NextRequest) {
+    const t0 = Date.now()
+    const ip = extractIP(req.headers)
     try {
         const body = await req.json()
         const { candidateName, candidateEmail, context = 'prose_es', profile }: {
@@ -17,6 +20,7 @@ export async function POST(req: NextRequest) {
         } = body
 
         if (!candidateName || !candidateEmail || !profile) {
+            void writeAuditLog({ eventType: 'error', endpoint: '/api/enrollment', method: 'POST', ip, statusCode: 400, durationMs: Date.now() - t0, details: { reason: 'missing_fields' } })
             return NextResponse.json({ success: false, error: 'Missing required fields' }, { status: 400 })
         }
 
@@ -62,6 +66,16 @@ export async function POST(req: NextRequest) {
 
         await saveEnrollmentProfile(ep)
 
+        void writeAuditLog({
+            eventType: 'enrollment_created',
+            endpoint: '/api/enrollment',
+            method: 'POST',
+            ip,
+            statusCode: 200,
+            durationMs: Date.now() - t0,
+            details: { profileId: ep.id, context, sampleSize: profile.sampleSize },
+        })
+
         return NextResponse.json({
             success: true,
             profileId: ep.id,
@@ -70,6 +84,7 @@ export async function POST(req: NextRequest) {
         })
     } catch (e: any) {
         console.error('[/api/enrollment] Error:', e?.message ?? e)
+        void writeAuditLog({ eventType: 'error', endpoint: '/api/enrollment', method: 'POST', ip, statusCode: 500, durationMs: Date.now() - t0 })
         return NextResponse.json(
             { success: false, error: e?.message ?? 'Error interno del servidor' },
             { status: 500 }

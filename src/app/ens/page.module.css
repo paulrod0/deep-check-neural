@@ -1,0 +1,55 @@
+.declarationBox {
+  display: flex;
+  gap: 16px;
+  background: linear-gradient(135deg, #0a1a1a, #0d0d1f);
+  border: 1px solid #00ff9d44;
+  border-left: 4px solid #00ff9d;
+  border-radius: 10px;
+  padding: 24px;
+  margin-bottom: 40px;
+  align-items: flex-start;
+}
+.declarationIcon { font-size: 28px; flex-shrink: 0; margin-top: 2px; }
+.declarationTitle { font-size: 14px; font-weight: 700; color: #00ff9d; margin: 0 0 8px; font-family: monospace; letter-spacing: 0.5px; text-transform: uppercase; }
+.declarationBody { font-size: 14px; color: #aaa; margin: 0; line-height: 1.7; }
+.declarationBody strong { color: #e0e0e0; }
+
+.scoreRow { display: flex; gap: 16px; flex-wrap: wrap; margin-bottom: 16px; }
+.scoreCard {
+  flex: 1;
+  min-width: 120px;
+  background: #0d0d1f;
+  border: 1px solid #1e1e3a;
+  border-radius: 8px;
+  padding: 16px;
+  text-align: center;
+}
+.scoreNum { display: block; font-size: 32px; font-weight: 800; font-family: monospace; }
+.scoreLabel { display: block; font-size: 11px; color: #555; margin-top: 4px; text-transform: uppercase; letter-spacing: 0.5px; }
+
+.progressBar { height: 6px; background: #1e1e3a; border-radius: 3px; overflow: hidden; }
+.progressFill { height: 100%; background: linear-gradient(90deg, #00ff9d, #00cfff); border-radius: 3px; transition: width 0.6s ease; }
+
+.badge {
+  display: inline-block;
+  border: 1px solid;
+  border-radius: 4px;
+  padding: 2px 8px;
+  font-size: 11px;
+  font-family: monospace;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+}
+
+.signatureBlock {
+  background: #0d0d1f;
+  border: 1px solid #1e1e3a;
+  border-radius: 10px;
+  padding: 28px;
+  margin: 40px 0;
+}
+.signatureTitle { font-size: 13px; font-weight: 700; color: #888; margin: 0 0 12px; text-transform: uppercase; letter-spacing: 0.5px; font-family: monospace; }
+.signatureBody { font-size: 13px; color: #666; line-height: 1.7; margin: 0 0 24px; }
+.signatureLine { display: flex; gap: 40px; flex-wrap: wrap; border-top: 1px solid #1e1e3a; padding-top: 20px; }
+.signatureField { font-size: 11px; color: #555; margin: 0 0 6px; text-transform: uppercase; letter-spacing: 0.5px; }
+.signatureValue { font-size: 14px; color: #ccc; margin: 0; font-family: monospace; font-weight: 600; }

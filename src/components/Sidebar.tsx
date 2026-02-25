@@ -19,6 +19,9 @@ export default function Sidebar() {
         { label: '⬡ Enrollment', href: '/enroll' },
         { label: '⬡ Verificar Cert.', href: '/verify' },
         { label: '⬡ API Docs', href: '/docs' },
+        { label: '──────────', href: '#3', disabled: true },
+        { label: '⬡ ENS Básico', href: '/ens' },
+        { label: '⬡ ISO 27001 SoA', href: '/iso27001' },
     ]
 
     return (
