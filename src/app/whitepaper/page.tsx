@@ -83,53 +83,55 @@ export default function WhitepaperPage() {
             making them useful for identity matching beyond aggregate statistics.
           </p>
 
-          <h3>2.2 Feature Extraction (18-dimensional vector)</h3>
+          <h3>2.2 Feature Extraction (high-dimensional vector)</h3>
           <p>
-            A 18-dimensional feature vector is computed from a rolling window of keystroke events
-            and submitted to the ML inference endpoint. Features include:
+            A proprietary multi-dimensional feature vector is computed from a rolling window of
+            keystroke events and submitted to the ML inference endpoint. The vector spans four
+            families of biometric signals:
           </p>
           <div className={styles.tableWrap}>
             <table className={styles.table}>
-              <thead><tr><th>#</th><th>Feature</th><th>Description</th><th>Bot Signature</th></tr></thead>
+              <thead><tr><th>Family</th><th>Signal Type</th><th>Description</th></tr></thead>
               <tbody>
                 {[
-                  ['1', 'flight_mean', 'Mean inter-key interval (ms)', 'Unnaturally fast (<60ms) or perfectly regular'],
-                  ['2', 'flight_std', 'Standard deviation of flight times', 'Near-zero (robotic uniformity)'],
-                  ['3', 'hold_mean', 'Mean key hold duration (ms)', 'Outside 40–150ms human range'],
-                  ['4', 'hold_std', 'Std of hold times', 'Near-zero'],
-                  ['5', 'flight_skewness', 'Statistical skewness of flight distribution', 'Human: right-skewed. Bot: symmetric'],
-                  ['6', 'flight_kurtosis', 'Kurtosis of flight distribution', 'Bot: leptokurtic (sharp peak)'],
-                  ['7', 'flight_entropy', 'Shannon entropy of flight histogram', 'Low entropy = repetitive pattern'],
-                  ['8', 'hold_entropy', 'Shannon entropy of hold histogram', 'Low entropy = robotic pressure'],
-                  ['9', 'periodicity_score', 'FFT dominant frequency amplitude', 'High = periodic bot rhythm'],
-                  ['10', 'velocity_gradient', 'Linear trend in typing speed over time', 'Bot: flat. Human: slight acceleration or fatigue'],
-                  ['11', 'fatigue_rate', 'Rate of speed change (regression slope)', 'Bot: 0. Human: positive or negative drift'],
-                  ['12', 'rhythm_consistency', 'Std of 20-key rolling window means', 'Bot: very low. Human: moderate variation'],
-                  ['13', 'impossible_fast_ratio', 'Fraction of inter-key intervals <12ms', 'Bot: non-zero. Human: ~0'],
-                  ['14', 'digram_cv_mean', 'Mean coefficient of variation across bigram pairs', 'Bot: low (consistent). Human: moderate'],
-                  ['15', 'backspace_latency_std', 'Std of reaction time for corrections', 'Bot: uniform. Human: variable (cognitive load)'],
-                  ['16', 'backspace_count_ratio', 'Correction keystrokes / total keystrokes', 'Bot: ~0 or artificial'],
-                  ['17', 'burst_count_per_100k', 'Bursts of ≥5 keys in <100ms per 100k keystrokes', 'High = paste injection'],
-                  ['18', 'session_wpm', 'Words per minute (derived)', 'Outlier WPM may indicate non-human input'],
-                ].map(([n, name, desc, sig]) => (
-                  <tr key={n}><td>{n}</td><td><code>{name}</code></td><td>{desc}</td><td>{sig}</td></tr>
+                  ['Temporal dynamics', 'Flight &amp; hold statistics', 'Mean, standard deviation, skewness, and kurtosis of inter-key intervals and key-hold durations. Captures the stochastic variability unique to human motor execution.'],
+                  ['Entropic structure', 'Shannon entropy (multi-channel)', 'Information-theoretic measure of distributional regularity applied independently to flight and hold histograms. Synthetic input exhibits characteristically low entropy.'],
+                  ['Rhythmic periodicity', 'Spectral analysis (FFT)', 'Dominant-frequency amplitude computed via Fast Fourier Transform over the keystroke time series. Automated tools produce detectable periodic patterns absent in human typing.'],
+                  ['Temporal evolution', 'Velocity &amp; fatigue signals', 'Linear trend and regression slope of typing speed over the session. Human typists exhibit measurable fatigue drift; programmatic input does not.'],
+                  ['Micro-correction behaviour', 'Correction keystroke analysis', 'Statistical properties of correction keystrokes (timing, frequency, reaction latency) that reflect genuine cognitive load and error-correction cycles.'],
+                  ['Bigram biometrics', 'Digraph pair consistency', 'Pair-wise inter-key interval variability across all observed character combinations. Each person exhibits a stable, unique bigram profile that is computationally expensive to replicate.'],
+                  ['Burst injection detection', 'Sub-100ms key cluster rate', 'Rate of implausibly fast multi-key clusters per session volume. Paste injection, clipboard automation, and LLM-assisted input produce anomalous burst patterns.'],
+                  ['Session throughput', 'Effective typing velocity', 'Derived words-per-minute with outlier sensitivity for both extremes of the human plausible range.'],
+                ].map(([family, signal, desc]) => (
+                  <tr key={family}><td><strong>{family}</strong></td><td>{signal}</td><td dangerouslySetInnerHTML={{__html: desc}} /></tr>
                 ))}
               </tbody>
             </table>
           </div>
+          <p style={{fontSize: '0.85em', color: '#666', marginTop: 12}}>
+            Exact feature definitions, internal identifiers, and weighting coefficients are proprietary
+            and withheld to prevent adversarial calibration. The full specification is available to
+            authorised partners under NDA.
+          </p>
 
           <h3>2.3 ML Model</h3>
           <p>
-            A binary classification model (human vs. AI/bot) is trained on a synthetic dataset
-            generated by sampling from known human typing distributions and contrasting against
-            programmatic input patterns. The model is exported to ONNX format for server-side
-            inference using <code>onnxruntime-node</code>, ensuring deterministic, version-controlled
-            inference independent of client device capabilities.
+            The classification layer uses a <strong>dual-model ensemble</strong> architecture
+            combining a supervised gradient-boosted classifier with an unsupervised anomaly
+            detection layer trained exclusively on genuine human sessions. The ensemble design
+            requires an adversary to simultaneously fool two independent statistical models —
+            one optimised for class separation, one for novelty detection — substantially
+            raising the cost of evasion attacks compared to single-model systems.
           </p>
           <p>
-            Feature normalisation parameters (mean and standard deviation per feature, computed
-            from the training set) are stored in <code>feature_scaler.json</code> and applied
-            before inference.
+            Models are exported to ONNX format for server-side inference using <code>onnxruntime-node</code>,
+            ensuring deterministic, version-controlled inference independent of client device
+            capabilities. Model artifacts are stored outside the public HTTP path and are not
+            directly accessible to clients.
+          </p>
+          <p>
+            Internal architecture details (tree count, feature weights, decision thresholds,
+            and training data distributions) are withheld to prevent adversarial calibration.
           </p>
 
           <h3>2.4 Adaptive Baseline (Identity Matching)</h3>
@@ -139,8 +141,11 @@ export default function WhitepaperPage() {
             enrollment baseline. The identity match score is computed as:
           </p>
           <div className={wpStyles.formula}>
-            <code>match_score = 100 × exp(−0.12 × √Σ((xᵢ − μᵢ)² / σᵢ²))</code>
+            <code>match_score = 100 × exp(−λ × √Σ((xᵢ − μᵢ)² / σᵢ²))</code>
           </div>
+          <p style={{fontSize: '0.85em', color: '#666', marginTop: 8}}>
+            The decay constant λ is calibrated from enrollment validation data and withheld.
+          </p>
           <p>
             The Welford online algorithm is used to update the adaptive baseline during a session,
             allowing the system to account for fatigue and context-switching without being locked

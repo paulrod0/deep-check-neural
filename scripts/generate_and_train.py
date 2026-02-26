@@ -1,18 +1,13 @@
 """
-Deep-Check · Biometric Fraud Detector v2.0
+Deep-Check · Biometric Fraud Detector v2.1
 ===========================================
-Mejoras sobre v1.0:
-  - 9 arquetipos de generación (vs 5) — más cobertura y casos difíciles
-  - Correlaciones entre features (flight_mean ↔ hold_mean, etc.)
-  - Ruido gaussiano cruzado para evitar AUC=1.0 (overfitting sintético)
-  - "Hard negatives": bots que imitan fatigue/velocity para engañar el modelo
-  - "Hard positives": humanos que parecen bots (muy rápidos, muy consistentes)
-  - N=150.000 samples
-  - XGBoost v2 con 500 estimadores, early stopping sobre AUC
-  - Calibración de probabilidades (isotonic regression)
-  - Threshold óptimo por F1 sobre validation set
-  - Cross-validation 5-fold para AUC honesto
-  - Exportación ONNX con verificación
+Mejoras sobre v2.0:
+  - Isolation Forest como segunda capa (detección de anomalías no supervisada)
+    → Ensemble final: 0.70 × XGBoost + 0.30 × IsoForest
+    → El atacante necesita engañar DOS modelos independientes simultáneamente
+  - Artefactos privados en models/ (fuera de public/) — no descargables
+  - Metadata pública sin feature importances ni arquetipos de entrenamiento
+  - IsoForest entrenado SOLO con sesiones humanas → detecta cualquier desviación
 
 Uso:
   python3 scripts/generate_and_train.py
@@ -24,6 +19,7 @@ import pandas as pd
 from sklearn.model_selection import train_test_split, StratifiedKFold
 from sklearn.preprocessing import StandardScaler
 from sklearn.calibration import CalibratedClassifierCV
+from sklearn.ensemble import IsolationForest
 from sklearn.metrics import (roc_auc_score, f1_score, classification_report,
                               precision_recall_curve)
 from xgboost import XGBClassifier
@@ -444,11 +440,96 @@ for feat, imp in fi_sorted[:10]:
     bar = '█' * int(imp * 200)
     print(f"  {feat:<28} {imp:.4f}  {bar}")
 
-# ─── Exportar a ONNX ──────────────────────────────────────────────────────────
+# ─── Isolation Forest (segunda capa — detección de anomalías) ─────────────────
+
+print("\nTraining Isolation Forest on human sessions only...")
+
+# Entrenado SOLO con humanos: aprende qué es "normal"
+# Un bot, por muy bien calibrado que esté, es estadísticamente anómalo
+X_humans = X_train_s[y_train == 0]
+print(f"  Human training samples: {len(X_humans):,}")
+
+isoforest = IsolationForest(
+    n_estimators=300,
+    max_samples=0.8,
+    contamination=0.05,   # estimación de outliers en sesiones humanas
+    max_features=0.85,
+    random_state=42,
+    n_jobs=-1,
+)
+isoforest.fit(X_humans)
+
+# Convertir decision_function a probabilidad de anomalía (0–100)
+# decision_function < 0 → anómalo; > 0 → normal
+iso_scores_val  = -isoforest.decision_function(X_val_s)   # mayor = más anómalo
+iso_scores_test = -isoforest.decision_function(X_test_s)
+
+# Normalizar a [0, 1] usando los percentiles de entrenamiento para robustez
+iso_p5  = float(np.percentile(-isoforest.decision_function(X_train_s), 2))
+iso_p95 = float(np.percentile(-isoforest.decision_function(X_train_s), 98))
+
+def iso_to_prob(raw, p5, p95):
+    return np.clip((raw - p5) / (p95 - p5 + 1e-9), 0, 1)
+
+iso_prob_val  = iso_to_prob(iso_scores_val, iso_p5, iso_p95)
+iso_prob_test = iso_to_prob(iso_scores_test, iso_p5, iso_p95)
+
+iso_auc = roc_auc_score(y_test, iso_prob_test)
+print(f"  IsoForest AUC (standalone): {iso_auc:.4f}")
+
+# ─── Ensemble: 0.70 × XGBoost + 0.30 × IsoForest ─────────────────────────────
+
+ensemble_prob_val  = 0.70 * y_prob_val  + 0.30 * iso_prob_val
+ensemble_prob_test = 0.70 * y_prob_test + 0.30 * iso_prob_test
+
+ens_auc = roc_auc_score(y_test, ensemble_prob_test)
+
+# Re-optimizar threshold para el ensemble
+prec_ens, rec_ens, thr_ens = precision_recall_curve(y_val, ensemble_prob_val)
+f1s_ens = 2 * prec_ens * rec_ens / (prec_ens + rec_ens + 1e-9)
+best_ens_idx = np.argmax(f1s_ens[:-1])
+ensemble_threshold = float(thr_ens[best_ens_idx])
+
+y_pred_ens = (ensemble_prob_test > ensemble_threshold).astype(int)
+f1_ens = f1_score(y_test, y_pred_ens)
+
+print(f"\n{'─'*40}")
+print(f"  XGBoost AUC:     {auc:.4f}")
+print(f"  IsoForest AUC:   {iso_auc:.4f}")
+print(f"  Ensemble AUC:    {ens_auc:.4f}  ← producción")
+print(f"  Ensemble F1:     {f1_ens:.4f}")
+print(f"  Threshold:       {ensemble_threshold:.3f}")
+print(f"{'─'*40}")
+print(classification_report(y_test, y_pred_ens, target_names=['human', 'bot']))
+
+# ─── Exportar IsoForest a ONNX ─────────────────────────────────────────────────
 
 print("\nExporting to ONNX...")
-out_dir = os.path.join(os.path.dirname(__file__), '..', 'public', 'models')
+out_dir = os.path.join(os.path.dirname(__file__), '..', 'models')
 os.makedirs(out_dir, exist_ok=True)
+
+iso_onnx_path = os.path.join(out_dir, 'isoforest.onnx')
+try:
+    from skl2onnx.common.data_types import FloatTensorType
+    from skl2onnx import to_onnx as sk2onnx
+    iso_onnx = sk2onnx(isoforest, X_humans[:1].astype(np.float32))
+    import onnx as onnx_lib2
+    onnx_lib2.save(iso_onnx, iso_onnx_path)
+    iso_size_kb = os.path.getsize(iso_onnx_path) / 1024
+    print(f"  IsoForest ONNX: {iso_onnx_path} ({iso_size_kb:.1f} KB)")
+except Exception as e:
+    # Fallback: guardar parámetros clave como JSON para reconstrucción en TS
+    print(f"  IsoForest ONNX export skipped ({e}), saving JSON params...")
+    iso_params = {
+        'norm_p5': iso_p5,
+        'norm_p95': iso_p95,
+        'xgb_weight': 0.70,
+        'iso_weight': 0.30,
+    }
+    with open(os.path.join(out_dir, 'ensemble_params.json'), 'w') as f:
+        json.dump(iso_params, f, indent=2)
+
+# ─── Exportar XGBoost a ONNX ──────────────────────────────────────────────────
 
 onnx_path = os.path.join(out_dir, 'biometric-fraud-detector.onnx')
 
@@ -491,7 +572,7 @@ for i, (row, label) in enumerate(zip(raw_out, y_test[:5])):
     verdict = 'bot' if p_bot > best_threshold else 'human'
     print(f"  [{i}] p(bot)={p_bot:.3f}  pred={verdict}  true={'bot' if label else 'human'}")
 
-# ─── Guardar artefactos ───────────────────────────────────────────────────────
+# ─── Guardar artefactos (privados — en models/, no en public/) ────────────────
 
 scaler_path   = os.path.join(out_dir, 'feature_scaler.json')
 metadata_path = os.path.join(out_dir, 'model_metadata.json')
@@ -499,38 +580,44 @@ metadata_path = os.path.join(out_dir, 'model_metadata.json')
 with open(scaler_path, 'w') as f:
     json.dump(scaler_params, f, indent=2)
 
+# Metadata privado: incluye feature importances (NO exponer en public/)
 metadata = {
-    'version': '2.0.0',
+    'version': '2.1.0',
     'features': FEATURES,
     'n_features': len(FEATURES),
-    'model_type': 'XGBoostClassifier',
-    'n_estimators': actual_trees,
-    'onnx_size_kb': round(size_kb, 1),
-    'test_auc': round(float(auc), 4),
+    'model_type': 'XGBoostClassifier+IsolationForest',
+    'ensemble': {'xgb_weight': 0.70, 'iso_weight': 0.30},
+    'n_estimators_xgb': actual_trees,
+    'n_estimators_iso': 300,
+    'onnx_xgb_kb': round(size_kb, 1),
+    'test_auc_xgb': round(float(auc), 4),
+    'test_auc_iso': round(float(iso_auc), 4),
+    'test_auc_ensemble': round(float(ens_auc), 4),
     'cv_auc_mean': round(float(np.mean(cv_aucs)), 4),
     'cv_auc_std':  round(float(np.std(cv_aucs)), 4),
-    'optimal_threshold': round(best_threshold, 3),
-    'test_f1': round(float(f1_test), 4),
-    'threshold': best_threshold,
+    'optimal_threshold': round(ensemble_threshold, 3),
+    'test_f1_ensemble': round(float(f1_ens), 4),
+    'threshold': ensemble_threshold,
+    'iso_norm_p5': round(iso_p5, 6),
+    'iso_norm_p95': round(iso_p95, 6),
     'classes': ['human', 'bot'],
     'training_samples': len(X_train),
-    'archetypes': {
-        'humans': ['normal', 'fast_typist', 'nervous', 'mobile'],
-        'bots': ['simple_autotype', 'llm_paste', 'sophisticated', 'fatigue_aware', 'slow'],
-    },
     'calibration': 'isotonic',
-    'feature_importances': fi,
+    'feature_importances': fi,   # privado — no exponer en whitepaper
     'scaler': scaler_params,
 }
 with open(metadata_path, 'w') as f:
     json.dump(metadata, f, indent=2)
 
 print(f"\n{'='*60}")
-print(f"  ✓ biometric-fraud-detector.onnx  ({size_kb:.1f} KB)")
-print(f"  ✓ feature_scaler.json")
-print(f"  ✓ model_metadata.json")
-print(f"  Test AUC:  {auc:.4f}")
-print(f"  CV AUC:    {np.mean(cv_aucs):.4f} ± {np.std(cv_aucs):.4f}")
-print(f"  Threshold: {best_threshold:.3f}")
-print(f"  Test F1:   {f1_test:.4f}")
+print(f"  ✓ models/biometric-fraud-detector.onnx  ({size_kb:.1f} KB)")
+print(f"  ✓ models/isoforest.onnx  (si disponible)")
+print(f"  ✓ models/feature_scaler.json  (PRIVADO)")
+print(f"  ✓ models/model_metadata.json  (PRIVADO)")
+print(f"  XGBoost AUC:  {auc:.4f}")
+print(f"  IsoForest AUC:{iso_auc:.4f}")
+print(f"  Ensemble AUC: {ens_auc:.4f}")
+print(f"  CV AUC:       {np.mean(cv_aucs):.4f} ± {np.std(cv_aucs):.4f}")
+print(f"  Threshold:    {ensemble_threshold:.3f}")
+print(f"  Ensemble F1:  {f1_ens:.4f}")
 print(f"{'='*60}")

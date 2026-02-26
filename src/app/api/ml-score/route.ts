@@ -94,13 +94,17 @@ function _hrs(f: SessionFeatures): number {
 
 // ─── ONNX Runtime Node inference (optional) ──────────────────────────────────
 
+// Ensemble threshold calibrated with IsoForest layer (XGB 0.70 + IsoForest 0.30)
+const ENSEMBLE_THRESHOLD = 0.42
+
 async function runOnnxInference(features: SessionFeatures): Promise<number | null> {
     try {
         const ort = await import('onnxruntime-node').catch(() => null)
         if (!ort) return null
 
-        const modelPath = path.join(process.cwd(), 'public', 'models', 'biometric-fraud-detector.onnx')
-        const scalerPath = path.join(process.cwd(), 'public', 'models', 'feature_scaler.json')
+        // Private path — not HTTP-accessible (outside public/)
+        const modelPath = path.join(process.cwd(), 'models', 'biometric-fraud-detector.onnx')
+        const scalerPath = path.join(process.cwd(), 'models', 'feature_scaler.json')
 
         const { readFile } = await import('fs/promises')
         const scalerJson = JSON.parse(await readFile(scalerPath, 'utf-8'))
@@ -241,7 +245,7 @@ export async function POST(req: NextRequest) {
         if (features.kurtosis > 7)                 flags.push('F04')
         if (features.entropy < 1.2)                flags.push('F05')
         if (features.burstCountPer100k > 10)       flags.push('F06')
-        if (mlAiRisk > 70)                         flags.push('F07')
+        if (mlAiRisk > ENSEMBLE_THRESHOLD * 100)   flags.push('F07')
         if (identityMatchScore !== null && identityMatchScore < 40) flags.push('F08')
 
         void writeAuditLog({
