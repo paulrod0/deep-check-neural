@@ -186,8 +186,49 @@ async function runIsoScore(xgbProb: number): Promise<number> {
 }
 
 // ─── LSTM inference ───────────────────────────────────────────────────────────
+// Estrategia de dos niveles:
+//   1. Si LSTM_LAMBDA_URL está configurado → llamar Lambda AWS (BiLSTMv2 GPU-trained)
+//   2. Fallback → ONNX local (BiLSTMv1, si existe models/lstm/lstm_model.onnx)
 
-async function runLstmInference(rawSeq: RawKeystroke[]): Promise<number | null> {
+async function _callLambdaLstm(rawSeq: RawKeystroke[]): Promise<number | null> {
+    const lambdaUrl    = process.env.LSTM_LAMBDA_URL
+    const lambdaSecret = process.env.LSTM_LAMBDA_SECRET ?? ''
+    if (!lambdaUrl) return null
+
+    try {
+        // Lambda espera { flightTime, holdTime } en ms
+        const lambdaSeq = rawSeq.map(k => ({
+            flightTime: k.flight,
+            holdTime:   k.hold,
+        }))
+
+        const res = await fetch(lambdaUrl, {
+            method:  'POST',
+            headers: {
+                'Content-Type':  'application/json',
+                'Authorization': `Bearer ${lambdaSecret}`,
+            },
+            body: JSON.stringify({ rawSequence: lambdaSeq }),
+            signal: AbortSignal.timeout(12_000),  // 12s timeout
+        })
+
+        if (!res.ok) {
+            console.warn(`[ml-score-v2] Lambda returned ${res.status}`)
+            return null
+        }
+
+        const data = await res.json() as { lstmProb?: number }
+        if (typeof data.lstmProb === 'number') {
+            return Math.max(0, Math.min(1, data.lstmProb))
+        }
+        return null
+    } catch (e) {
+        console.warn('[ml-score-v2] Lambda call failed:', (e as Error).message)
+        return null
+    }
+}
+
+async function _runLocalLstm(rawSeq: RawKeystroke[]): Promise<number | null> {
     try {
         const ort = await import('onnxruntime-node').catch(() => null)
         if (!ort) return null
@@ -195,10 +236,12 @@ async function runLstmInference(rawSeq: RawKeystroke[]): Promise<number | null> 
         const modelPath  = path.join(process.cwd(), 'models', 'lstm', 'lstm_model.onnx')
         const scalerPath = path.join(process.cwd(), 'models', 'lstm', 'lstm_scaler.json')
 
-        const { readFile } = await import('fs/promises')
-        const scaler  = JSON.parse(await readFile(scalerPath, 'utf-8'))
-        const mean    = scaler.mean as number[]   // [4]
-        const std     = scaler.std  as number[]   // [4]
+        const { readFile, access } = await import('fs/promises')
+        await access(modelPath).catch(() => { throw new Error('Local LSTM model not found') })
+
+        const scaler = JSON.parse(await readFile(scalerPath, 'utf-8'))
+        const mean   = scaler.mean as number[]   // [4]
+        const std    = scaler.std  as number[]   // [4]
 
         // Construir tensor [1, SEQ_LEN, 4]: flight, hold, Δflight, Δhold
         const arr = new Float32Array(SEQ_LEN * N_FEAT)
@@ -218,7 +261,6 @@ async function runLstmInference(rawSeq: RawKeystroke[]): Promise<number | null> 
                 arr[i * N_FEAT + j] = (raw[j] - mean[j]) / (std[j] || 1)
             }
         }
-        // Resto ya está en 0 (padding implícito)
 
         const session = await ort.InferenceSession.create(modelPath, { executionProviders: ['cpu'] })
         const tensor  = new ort.Tensor('float32', arr, [1, SEQ_LEN, N_FEAT])
@@ -228,9 +270,18 @@ async function runLstmInference(rawSeq: RawKeystroke[]): Promise<number | null> 
         await session.release()
         return Math.max(0, Math.min(1, botProb))
     } catch (e) {
-        console.warn('[ml-score-v2] LSTM inference failed:', (e as Error).message)
+        console.warn('[ml-score-v2] Local LSTM inference failed:', (e as Error).message)
         return null
     }
+}
+
+async function runLstmInference(rawSeq: RawKeystroke[]): Promise<number | null> {
+    // Intentar Lambda primero (BiLSTMv2 — modelo GPU-trained en AWS)
+    const lambdaResult = await _callLambdaLstm(rawSeq)
+    if (lambdaResult !== null) return lambdaResult
+
+    // Fallback: ONNX local (BiLSTMv1 — modelo CPU-trained local)
+    return _runLocalLstm(rawSeq)
 }
 
 // ─── Route handler ────────────────────────────────────────────────────────────
@@ -273,7 +324,12 @@ export async function POST(req: NextRequest) {
         }
 
         const mlAiRisk      = Math.round(ensembleProb * 100)
-        const inferenceMethod = xgbRaw !== null ? ensembleMode : `heuristic+${ensembleMode.split('+').slice(1).join('+')}`
+        const lstmSource    = lstmProb !== null
+            ? (process.env.LSTM_LAMBDA_URL ? 'lambda' : 'local')
+            : null
+        const inferenceMethod = xgbRaw !== null
+            ? (lstmSource ? `${ensembleMode}(${lstmSource})` : ensembleMode)
+            : `heuristic+${ensembleMode.split('+').slice(1).join('+')}`
 
         // ── 5. Identity match (Mahalanobis) ───────────────────────────────────
         let identityMatchScore: number | null = null
@@ -349,10 +405,11 @@ export async function POST(req: NextRequest) {
             keystrokes: totalKeystrokes,
             // Desglose del ensemble (útil para debugging/presentación)
             ensemble: {
-                xgb:  Math.round(xgbProb * 100),
-                iso:  Math.round(isoProb * 100),
-                lstm: lstmProb !== null ? Math.round(lstmProb * 100) : null,
-                mode: ensembleMode,
+                xgb:        Math.round(xgbProb * 100),
+                iso:        Math.round(isoProb * 100),
+                lstm:       lstmProb !== null ? Math.round(lstmProb * 100) : null,
+                lstmSource: lstmSource,
+                mode:       ensembleMode,
             },
         })
 

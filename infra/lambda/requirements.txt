@@ -1,0 +1,9 @@
+# Deep-Check Lambda · Python dependencies
+# Instalar con:  pip install -r requirements.txt -t ./package/ --platform mlinux_2_x86_64 \
+#                            --implementation cp --python-version 3.11 --only-binary=:all:
+
+# ONNX Runtime — versión CPU-only, compatible con Lambda (Amazon Linux 2)
+onnxruntime==1.18.1
+
+# NumPy — compatible con onnxruntime 1.18.x
+numpy==1.26.4
