@@ -1,179 +1,35 @@
 """
-Deep-Check · Biometric Fraud Detector
-======================================
-Genera datos sintéticos, entrena XGBoost y exporta a ONNX.
+Deep-Check · Biometric Fraud Detector v2.0
+===========================================
+Mejoras sobre v1.0:
+  - 9 arquetipos de generación (vs 5) — más cobertura y casos difíciles
+  - Correlaciones entre features (flight_mean ↔ hold_mean, etc.)
+  - Ruido gaussiano cruzado para evitar AUC=1.0 (overfitting sintético)
+  - "Hard negatives": bots que imitan fatigue/velocity para engañar el modelo
+  - "Hard positives": humanos que parecen bots (muy rápidos, muy consistentes)
+  - N=150.000 samples
+  - XGBoost v2 con 500 estimadores, early stopping sobre AUC
+  - Calibración de probabilidades (isotonic regression)
+  - Threshold óptimo por F1 sobre validation set
+  - Cross-validation 5-fold para AUC honesto
+  - Exportación ONNX con verificación
 
 Uso:
-  pip install numpy pandas scikit-learn xgboost onnx onnxmltools skl2onnx
-  python generate_and_train.py
-
-Salida:
-  biometric-fraud-detector.onnx   (~150 KB)
-  feature_scaler.json             (mean/std para normalizar en JS)
-  model_metadata.json             (feature names, thresholds, AUC)
+  python3 scripts/generate_and_train.py
 """
 
-import json, os
+import json, os, sys
 import numpy as np
 import pandas as pd
-from sklearn.model_selection import train_test_split
+from sklearn.model_selection import train_test_split, StratifiedKFold
 from sklearn.preprocessing import StandardScaler
-from sklearn.metrics import roc_auc_score, classification_report
+from sklearn.calibration import CalibratedClassifierCV
+from sklearn.metrics import (roc_auc_score, f1_score, classification_report,
+                              precision_recall_curve)
 from xgboost import XGBClassifier
 
-# ─── 1. Generación de datos sintéticos ────────────────────────────────────────
-
 np.random.seed(42)
-N = 60000
-
-def clip(arr, lo, hi):
-    return np.clip(arr, lo, hi)
-
-def generate_humans(n):
-    """Humanos normales — mecanografía variada, ritmo orgánico."""
-    rng = np.random.default_rng(1)
-    d = {}
-    d['flight_mean']           = clip(rng.normal(130, 50, n), 40, 500)
-    d['flight_std']            = clip(rng.normal(60, 25, n),  8, 200)
-    d['hold_mean']             = clip(rng.normal(100, 30, n), 30, 350)
-    d['hold_std']              = clip(rng.normal(24, 10, n),  4, 100)
-    d['flight_skewness']       = clip(rng.normal(1.2, 0.7, n), -1, 5)
-    d['flight_kurtosis']       = clip(rng.normal(1.8, 1.2, n), -1, 8)
-    d['flight_entropy']        = clip(rng.normal(2.9, 0.5, n), 1.0, 4.5)
-    d['hold_entropy']          = clip(rng.normal(2.4, 0.6, n), 0.5, 4.0)
-    d['periodicity_score']     = clip(rng.normal(20, 12, n), 0, 70)
-    d['velocity_gradient']     = clip(rng.normal(0.14, 0.10, n), -0.5, 0.8)
-    d['fatigue_rate']          = clip(rng.normal(0.7, 0.5, n), -0.5, 3.0)
-    d['rhythm_consistency']    = clip(rng.normal(35, 18, n), 5, 120)
-    d['impossible_fast_ratio'] = clip(rng.normal(0.004, 0.006, n), 0, 0.05)
-    d['digram_cv_mean']        = clip(rng.normal(0.38, 0.12, n), 0.05, 0.9)
-    d['backspace_latency_std'] = clip(rng.normal(55, 25, n), 10, 200)
-    d['backspace_count_ratio'] = clip(rng.normal(0.08, 0.04, n), 0, 0.35)
-    d['burst_count_per_100k']  = clip(rng.normal(0.8, 0.9, n), 0, 6)
-    d['session_wpm']           = clip(rng.normal(62, 22, n), 15, 180)
-    d['label'] = np.zeros(n, dtype=int)
-    return pd.DataFrame(d)
-
-def generate_simple_bots(n):
-    """Bots autotype: velocidad uniforme, entropia cero."""
-    rng = np.random.default_rng(2)
-    d = {}
-    d['flight_mean']           = clip(rng.normal(45, 6, n), 20, 100)
-    d['flight_std']            = clip(rng.normal(2.5, 1.0, n), 0.5, 10)
-    d['hold_mean']             = clip(rng.normal(40, 5, n), 20, 80)
-    d['hold_std']              = clip(rng.normal(1.5, 0.5, n), 0.3, 6)
-    d['flight_skewness']       = clip(rng.normal(0.01, 0.05, n), -0.3, 0.3)
-    d['flight_kurtosis']       = clip(rng.normal(9.5, 2.5, n), 4, 20)
-    d['flight_entropy']        = clip(rng.normal(0.7, 0.3, n), 0.1, 2.0)
-    d['hold_entropy']          = clip(rng.normal(0.6, 0.2, n), 0.1, 1.5)
-    d['periodicity_score']     = clip(rng.normal(78, 8, n), 55, 98)
-    d['velocity_gradient']     = clip(rng.normal(0.001, 0.002, n), -0.01, 0.01)
-    d['fatigue_rate']          = clip(rng.normal(0.0, 0.01, n), -0.05, 0.05)
-    d['rhythm_consistency']    = clip(rng.normal(3, 1.5, n), 0.5, 12)
-    d['impossible_fast_ratio'] = clip(rng.normal(0.0, 0.002, n), 0, 0.01)
-    d['digram_cv_mean']        = clip(rng.normal(0.03, 0.015, n), 0.005, 0.12)
-    d['backspace_latency_std'] = clip(rng.normal(4, 2, n), 0.5, 15)
-    d['backspace_count_ratio'] = clip(rng.normal(0.01, 0.005, n), 0, 0.05)
-    d['burst_count_per_100k']  = clip(rng.normal(0.0, 0.05, n), 0, 0.3)
-    d['session_wpm']           = clip(rng.normal(210, 30, n), 130, 350)
-    d['label'] = np.ones(n, dtype=int)
-    return pd.DataFrame(d)
-
-def generate_llm_paste_bots(n):
-    """ChatGPT/Copilot: largos silencios + paste bursts, casi sin backspaces."""
-    rng = np.random.default_rng(3)
-    d = {}
-    d['flight_mean']           = clip(rng.normal(700, 150, n), 300, 1500)
-    d['flight_std']            = clip(rng.normal(400, 120, n), 100, 1000)
-    d['hold_mean']             = clip(rng.normal(110, 30, n), 50, 250)
-    d['hold_std']              = clip(rng.normal(20, 8, n), 5, 60)
-    d['flight_skewness']       = clip(rng.normal(3.5, 1.0, n), 1.5, 7)
-    d['flight_kurtosis']       = clip(rng.normal(12, 4, n), 5, 30)
-    d['flight_entropy']        = clip(rng.normal(1.8, 0.4, n), 0.8, 3.2)
-    d['hold_entropy']          = clip(rng.normal(2.0, 0.5, n), 0.8, 3.5)
-    d['periodicity_score']     = clip(rng.normal(28, 12, n), 8, 60)
-    d['velocity_gradient']     = clip(rng.normal(-0.3, 0.15, n), -0.8, 0.1)
-    d['fatigue_rate']          = clip(rng.normal(-0.5, 0.3, n), -2, 0.2)
-    d['rhythm_consistency']    = clip(rng.normal(90, 25, n), 40, 200)
-    d['impossible_fast_ratio'] = clip(rng.normal(0.002, 0.003, n), 0, 0.02)
-    d['digram_cv_mean']        = clip(rng.normal(0.65, 0.20, n), 0.20, 1.2)
-    d['backspace_latency_std'] = clip(rng.normal(80, 30, n), 20, 200)
-    d['backspace_count_ratio'] = clip(rng.normal(0.015, 0.008, n), 0, 0.06)
-    d['burst_count_per_100k']  = clip(rng.normal(12, 4, n), 4, 30)
-    d['session_wpm']           = clip(rng.normal(38, 15, n), 10, 80)
-    d['label'] = np.ones(n, dtype=int)
-    return pd.DataFrame(d)
-
-def generate_sophisticated_bots(n):
-    """Bots avanzados que imitan distribución humana pero sin fatiga ni skewness real."""
-    rng = np.random.default_rng(4)
-    d = {}
-    d['flight_mean']           = clip(rng.normal(120, 35, n), 50, 300)
-    d['flight_std']            = clip(rng.normal(30, 8, n), 10, 70)   # std bajo pese a mean normal
-    d['hold_mean']             = clip(rng.normal(95, 20, n), 40, 200)
-    d['hold_std']              = clip(rng.normal(8, 3, n), 2, 25)
-    d['flight_skewness']       = clip(rng.normal(0.1, 0.15, n), -0.5, 0.8)  # casi simetrico
-    d['flight_kurtosis']       = clip(rng.normal(4.5, 1.5, n), 2, 10)
-    d['flight_entropy']        = clip(rng.normal(1.8, 0.4, n), 0.8, 3.0)
-    d['hold_entropy']          = clip(rng.normal(1.5, 0.4, n), 0.6, 2.8)
-    d['periodicity_score']     = clip(rng.normal(45, 12, n), 20, 75)
-    d['velocity_gradient']     = clip(rng.normal(0.005, 0.01, n), -0.02, 0.04)  # casi plano
-    d['fatigue_rate']          = clip(rng.normal(0.02, 0.03, n), -0.1, 0.15)    # sin fatiga real
-    d['rhythm_consistency']    = clip(rng.normal(12, 5, n), 3, 30)
-    d['impossible_fast_ratio'] = clip(rng.normal(0.001, 0.002, n), 0, 0.01)
-    d['digram_cv_mean']        = clip(rng.normal(0.12, 0.05, n), 0.04, 0.30)
-    d['backspace_latency_std'] = clip(rng.normal(12, 5, n), 2, 40)
-    d['backspace_count_ratio'] = clip(rng.normal(0.03, 0.01, n), 0, 0.12)
-    d['burst_count_per_100k']  = clip(rng.normal(0.3, 0.3, n), 0, 2)
-    d['session_wpm']           = clip(rng.normal(95, 20, n), 50, 180)
-    d['label'] = np.ones(n, dtype=int)
-    return pd.DataFrame(d)
-
-def generate_nervous_humans(n):
-    """Humanos bajo presión: ritmo alterado pero no bots."""
-    rng = np.random.default_rng(5)
-    d = {}
-    d['flight_mean']           = clip(rng.normal(160, 70, n), 50, 600)
-    d['flight_std']            = clip(rng.normal(85, 35, n), 20, 300)
-    d['hold_mean']             = clip(rng.normal(110, 40, n), 30, 400)
-    d['hold_std']              = clip(rng.normal(30, 15, n), 5, 120)
-    d['flight_skewness']       = clip(rng.normal(1.8, 0.9, n), 0.2, 5)
-    d['flight_kurtosis']       = clip(rng.normal(2.5, 1.5, n), 0, 8)
-    d['flight_entropy']        = clip(rng.normal(2.6, 0.6, n), 1.2, 4.2)
-    d['hold_entropy']          = clip(rng.normal(2.2, 0.6, n), 0.8, 3.8)
-    d['periodicity_score']     = clip(rng.normal(22, 14, n), 2, 65)
-    d['velocity_gradient']     = clip(rng.normal(0.20, 0.18, n), -0.4, 0.9)
-    d['fatigue_rate']          = clip(rng.normal(1.2, 0.7, n), 0, 4)
-    d['rhythm_consistency']    = clip(rng.normal(55, 25, n), 10, 160)
-    d['impossible_fast_ratio'] = clip(rng.normal(0.006, 0.008, n), 0, 0.06)
-    d['digram_cv_mean']        = clip(rng.normal(0.42, 0.15, n), 0.10, 0.95)
-    d['backspace_latency_std'] = clip(rng.normal(65, 30, n), 10, 250)
-    d['backspace_count_ratio'] = clip(rng.normal(0.12, 0.06, n), 0.01, 0.45)
-    d['burst_count_per_100k']  = clip(rng.normal(1.2, 1.0, n), 0, 7)
-    d['session_wpm']           = clip(rng.normal(48, 18, n), 12, 120)
-    d['label'] = np.zeros(n, dtype=int)
-    return pd.DataFrame(d)
-
-# Proporciones realistas del dataset
-splits = {
-    'humans':             int(N * 0.40),
-    'nervous_humans':     int(N * 0.15),
-    'simple_bots':        int(N * 0.18),
-    'llm_paste':          int(N * 0.15),
-    'sophisticated_bots': int(N * 0.12),
-}
-
-print("Generating synthetic dataset...")
-df = pd.concat([
-    generate_humans(splits['humans']),
-    generate_nervous_humans(splits['nervous_humans']),
-    generate_simple_bots(splits['simple_bots']),
-    generate_llm_paste_bots(splits['llm_paste']),
-    generate_sophisticated_bots(splits['sophisticated_bots']),
-], ignore_index=True).sample(frac=1, random_state=42).reset_index(drop=True)
-
-print(f"Dataset shape: {df.shape}")
-print(f"Class balance: {df['label'].value_counts().to_dict()}")
+N = 150_000
 
 FEATURES = [
     'flight_mean', 'flight_std', 'hold_mean', 'hold_std',
@@ -184,151 +40,497 @@ FEATURES = [
     'burst_count_per_100k', 'session_wpm',
 ]
 
+def clip(arr, lo, hi):
+    return np.clip(arr, lo, hi)
+
+def add_cross_noise(d, keys, scale=0.04):
+    """Añade correlación realista: pequeño ruido compartido entre features relacionadas."""
+    common = np.random.randn(len(next(iter(d.values())))) * scale
+    for k in keys:
+        d[k] = d[k] + common * np.abs(d[k])
+    return d
+
+# ─── HUMANOS ──────────────────────────────────────────────────────────────────
+
+def generate_humans_normal(n, seed=1):
+    """Mecanografía variada, ritmo orgánico, fatiga real."""
+    rng = np.random.default_rng(seed)
+    d = {}
+    d['flight_mean']           = clip(rng.normal(130, 55, n), 40, 550)
+    d['flight_std']            = clip(rng.normal(65, 28, n),  8, 220)
+    d['hold_mean']             = clip(rng.normal(100, 32, n), 28, 380)
+    d['hold_std']              = clip(rng.normal(25, 11, n),  4, 110)
+    d['flight_skewness']       = clip(rng.normal(1.3, 0.8, n), -1, 5.5)
+    d['flight_kurtosis']       = clip(rng.normal(2.0, 1.4, n), -1, 9)
+    d['flight_entropy']        = clip(rng.normal(3.0, 0.5, n), 1.2, 4.8)
+    d['hold_entropy']          = clip(rng.normal(2.5, 0.6, n), 0.7, 4.2)
+    d['periodicity_score']     = clip(rng.normal(18, 13, n), 0, 62)
+    d['velocity_gradient']     = clip(rng.normal(0.15, 0.12, n), -0.6, 0.9)
+    d['fatigue_rate']          = clip(rng.normal(0.75, 0.55, n), -0.6, 3.5)
+    d['rhythm_consistency']    = clip(rng.normal(38, 20, n), 5, 130)
+    d['impossible_fast_ratio'] = clip(rng.normal(0.004, 0.007, n), 0, 0.06)
+    d['digram_cv_mean']        = clip(rng.normal(0.40, 0.14, n), 0.06, 1.0)
+    d['backspace_latency_std'] = clip(rng.normal(58, 28, n), 8, 220)
+    d['backspace_count_ratio'] = clip(rng.normal(0.09, 0.05, n), 0, 0.40)
+    d['burst_count_per_100k']  = clip(rng.normal(0.9, 1.0, n), 0, 7)
+    d['session_wpm']           = clip(rng.normal(62, 24, n), 14, 190)
+    d = add_cross_noise(d, ['flight_mean', 'hold_mean'], 0.05)
+    d = add_cross_noise(d, ['flight_std', 'hold_std'], 0.04)
+    d['label'] = np.zeros(n, dtype=int)
+    return pd.DataFrame(d)
+
+def generate_humans_fast(n, seed=11):
+    """Mecanógrafos rápidos (>80 WPM): flight corto, alta entropía, fatiga tardía."""
+    rng = np.random.default_rng(seed)
+    d = {}
+    d['flight_mean']           = clip(rng.normal(72, 22, n), 30, 180)
+    d['flight_std']            = clip(rng.normal(42, 16, n), 8, 130)
+    d['hold_mean']             = clip(rng.normal(72, 18, n), 25, 180)
+    d['hold_std']              = clip(rng.normal(18, 8, n),  3, 70)
+    d['flight_skewness']       = clip(rng.normal(0.9, 0.6, n), -0.5, 4)
+    d['flight_kurtosis']       = clip(rng.normal(1.4, 1.0, n), -1, 7)
+    d['flight_entropy']        = clip(rng.normal(3.3, 0.4, n), 2.0, 4.8)
+    d['hold_entropy']          = clip(rng.normal(2.8, 0.5, n), 1.5, 4.2)
+    d['periodicity_score']     = clip(rng.normal(14, 10, n), 0, 50)
+    d['velocity_gradient']     = clip(rng.normal(0.08, 0.09, n), -0.3, 0.5)
+    d['fatigue_rate']          = clip(rng.normal(0.4, 0.35, n), -0.2, 2.0)
+    d['rhythm_consistency']    = clip(rng.normal(28, 14, n), 4, 90)
+    d['impossible_fast_ratio'] = clip(rng.normal(0.008, 0.010, n), 0, 0.08)
+    d['digram_cv_mean']        = clip(rng.normal(0.33, 0.10, n), 0.05, 0.75)
+    d['backspace_latency_std'] = clip(rng.normal(44, 20, n), 8, 160)
+    d['backspace_count_ratio'] = clip(rng.normal(0.06, 0.04, n), 0, 0.30)
+    d['burst_count_per_100k']  = clip(rng.normal(0.5, 0.6, n), 0, 5)
+    d['session_wpm']           = clip(rng.normal(98, 22, n), 55, 195)
+    d = add_cross_noise(d, ['flight_mean', 'hold_mean'], 0.04)
+    d['label'] = np.zeros(n, dtype=int)
+    return pd.DataFrame(d)
+
+def generate_humans_nervous(n, seed=5):
+    """Bajo presión: ritmo alterado, muchos backspaces, alta fatiga."""
+    rng = np.random.default_rng(seed)
+    d = {}
+    d['flight_mean']           = clip(rng.normal(165, 75, n), 45, 650)
+    d['flight_std']            = clip(rng.normal(90, 38, n), 18, 320)
+    d['hold_mean']             = clip(rng.normal(115, 45, n), 28, 450)
+    d['hold_std']              = clip(rng.normal(32, 16, n), 5, 130)
+    d['flight_skewness']       = clip(rng.normal(1.9, 1.0, n), 0.1, 6)
+    d['flight_kurtosis']       = clip(rng.normal(2.8, 1.8, n), 0, 10)
+    d['flight_entropy']        = clip(rng.normal(2.7, 0.7, n), 1.0, 4.5)
+    d['hold_entropy']          = clip(rng.normal(2.3, 0.7, n), 0.7, 4.0)
+    d['periodicity_score']     = clip(rng.normal(24, 15, n), 0, 68)
+    d['velocity_gradient']     = clip(rng.normal(0.22, 0.20, n), -0.5, 1.0)
+    d['fatigue_rate']          = clip(rng.normal(1.3, 0.75, n), 0, 4.5)
+    d['rhythm_consistency']    = clip(rng.normal(60, 28, n), 8, 180)
+    d['impossible_fast_ratio'] = clip(rng.normal(0.007, 0.009, n), 0, 0.07)
+    d['digram_cv_mean']        = clip(rng.normal(0.45, 0.16, n), 0.08, 1.05)
+    d['backspace_latency_std'] = clip(rng.normal(70, 32, n), 10, 270)
+    d['backspace_count_ratio'] = clip(rng.normal(0.14, 0.07, n), 0.01, 0.50)
+    d['burst_count_per_100k']  = clip(rng.normal(1.4, 1.2, n), 0, 9)
+    d['session_wpm']           = clip(rng.normal(46, 20, n), 10, 130)
+    d['label'] = np.zeros(n, dtype=int)
+    return pd.DataFrame(d)
+
+def generate_humans_mobile(n, seed=15):
+    """Usuarios móvil/tablet: lento, hold largo, muchos errores."""
+    rng = np.random.default_rng(seed)
+    d = {}
+    d['flight_mean']           = clip(rng.normal(280, 90, n), 80, 800)
+    d['flight_std']            = clip(rng.normal(140, 55, n), 30, 500)
+    d['hold_mean']             = clip(rng.normal(160, 50, n), 60, 500)
+    d['hold_std']              = clip(rng.normal(50, 22, n), 10, 180)
+    d['flight_skewness']       = clip(rng.normal(1.6, 0.9, n), 0.1, 5.5)
+    d['flight_kurtosis']       = clip(rng.normal(2.2, 1.3, n), 0, 8)
+    d['flight_entropy']        = clip(rng.normal(2.8, 0.6, n), 1.2, 4.5)
+    d['hold_entropy']          = clip(rng.normal(2.4, 0.6, n), 0.9, 4.0)
+    d['periodicity_score']     = clip(rng.normal(20, 14, n), 0, 60)
+    d['velocity_gradient']     = clip(rng.normal(0.10, 0.14, n), -0.4, 0.7)
+    d['fatigue_rate']          = clip(rng.normal(0.9, 0.6, n), 0, 3.5)
+    d['rhythm_consistency']    = clip(rng.normal(70, 30, n), 10, 200)
+    d['impossible_fast_ratio'] = clip(rng.normal(0.001, 0.002, n), 0, 0.015)
+    d['digram_cv_mean']        = clip(rng.normal(0.55, 0.18, n), 0.10, 1.2)
+    d['backspace_latency_std'] = clip(rng.normal(90, 40, n), 20, 350)
+    d['backspace_count_ratio'] = clip(rng.normal(0.18, 0.08, n), 0.02, 0.60)
+    d['burst_count_per_100k']  = clip(rng.normal(0.3, 0.5, n), 0, 4)
+    d['session_wpm']           = clip(rng.normal(28, 10, n), 8, 70)
+    d['label'] = np.zeros(n, dtype=int)
+    return pd.DataFrame(d)
+
+# ─── BOTS ─────────────────────────────────────────────────────────────────────
+
+def generate_bots_simple(n, seed=2):
+    """Autotype clásico: velocidad fija, entropía casi cero."""
+    rng = np.random.default_rng(seed)
+    d = {}
+    d['flight_mean']           = clip(rng.normal(45, 5, n), 20, 90)
+    d['flight_std']            = clip(rng.normal(2.0, 0.8, n), 0.3, 8)
+    d['hold_mean']             = clip(rng.normal(38, 4, n), 18, 70)
+    d['hold_std']              = clip(rng.normal(1.2, 0.4, n), 0.2, 5)
+    d['flight_skewness']       = clip(rng.normal(0.01, 0.04, n), -0.25, 0.25)
+    d['flight_kurtosis']       = clip(rng.normal(10.5, 2.8, n), 5, 22)
+    d['flight_entropy']        = clip(rng.normal(0.6, 0.25, n), 0.08, 1.8)
+    d['hold_entropy']          = clip(rng.normal(0.5, 0.18, n), 0.08, 1.3)
+    d['periodicity_score']     = clip(rng.normal(82, 7, n), 60, 98)
+    d['velocity_gradient']     = clip(rng.normal(0.0005, 0.001, n), -0.005, 0.005)
+    d['fatigue_rate']          = clip(rng.normal(0.0, 0.008, n), -0.04, 0.04)
+    d['rhythm_consistency']    = clip(rng.normal(2.5, 1.2, n), 0.3, 10)
+    d['impossible_fast_ratio'] = clip(rng.normal(0.0, 0.001, n), 0, 0.007)
+    d['digram_cv_mean']        = clip(rng.normal(0.025, 0.012, n), 0.003, 0.10)
+    d['backspace_latency_std'] = clip(rng.normal(3.5, 1.5, n), 0.3, 12)
+    d['backspace_count_ratio'] = clip(rng.normal(0.008, 0.004, n), 0, 0.035)
+    d['burst_count_per_100k']  = clip(rng.normal(0.0, 0.04, n), 0, 0.25)
+    d['session_wpm']           = clip(rng.normal(220, 28, n), 140, 360)
+    d['label'] = np.ones(n, dtype=int)
+    return pd.DataFrame(d)
+
+def generate_bots_llm_paste(n, seed=3):
+    """LLM/Copilot: silencios + paste bursts súbitos."""
+    rng = np.random.default_rng(seed)
+    d = {}
+    d['flight_mean']           = clip(rng.normal(720, 160, n), 280, 1600)
+    d['flight_std']            = clip(rng.normal(420, 130, n), 90, 1100)
+    d['hold_mean']             = clip(rng.normal(115, 32, n), 45, 260)
+    d['hold_std']              = clip(rng.normal(22, 9, n), 5, 65)
+    d['flight_skewness']       = clip(rng.normal(3.7, 1.1, n), 1.5, 8)
+    d['flight_kurtosis']       = clip(rng.normal(13, 4.5, n), 5, 35)
+    d['flight_entropy']        = clip(rng.normal(1.9, 0.45, n), 0.7, 3.4)
+    d['hold_entropy']          = clip(rng.normal(2.1, 0.55, n), 0.7, 3.7)
+    d['periodicity_score']     = clip(rng.normal(26, 13, n), 6, 58)
+    d['velocity_gradient']     = clip(rng.normal(-0.32, 0.17, n), -0.9, 0.05)
+    d['fatigue_rate']          = clip(rng.normal(-0.55, 0.32, n), -2.2, 0.15)
+    d['rhythm_consistency']    = clip(rng.normal(95, 28, n), 38, 220)
+    d['impossible_fast_ratio'] = clip(rng.normal(0.002, 0.003, n), 0, 0.02)
+    d['digram_cv_mean']        = clip(rng.normal(0.68, 0.22, n), 0.18, 1.35)
+    d['backspace_latency_std'] = clip(rng.normal(85, 32, n), 18, 220)
+    d['backspace_count_ratio'] = clip(rng.normal(0.012, 0.007, n), 0, 0.055)
+    d['burst_count_per_100k']  = clip(rng.normal(14, 5, n), 4, 38)
+    d['session_wpm']           = clip(rng.normal(36, 14, n), 8, 78)
+    d['label'] = np.ones(n, dtype=int)
+    return pd.DataFrame(d)
+
+def generate_bots_sophisticated(n, seed=4):
+    """Bots avanzados: imitan media/std humana pero sin fatiga ni skewness real."""
+    rng = np.random.default_rng(seed)
+    d = {}
+    d['flight_mean']           = clip(rng.normal(118, 32, n), 48, 280)
+    d['flight_std']            = clip(rng.normal(28, 7, n), 8, 65)  # std bajo para mean normal
+    d['hold_mean']             = clip(rng.normal(92, 18, n), 38, 190)
+    d['hold_std']              = clip(rng.normal(7.5, 2.8, n), 2, 22)
+    d['flight_skewness']       = clip(rng.normal(0.08, 0.12, n), -0.5, 0.7)
+    d['flight_kurtosis']       = clip(rng.normal(4.8, 1.6, n), 2, 11)
+    d['flight_entropy']        = clip(rng.normal(1.9, 0.42, n), 0.8, 3.2)
+    d['hold_entropy']          = clip(rng.normal(1.6, 0.42, n), 0.6, 3.0)
+    d['periodicity_score']     = clip(rng.normal(48, 13, n), 22, 80)
+    d['velocity_gradient']     = clip(rng.normal(0.004, 0.008, n), -0.02, 0.035)
+    d['fatigue_rate']          = clip(rng.normal(0.018, 0.025, n), -0.08, 0.14)
+    d['rhythm_consistency']    = clip(rng.normal(11, 5, n), 2.5, 28)
+    d['impossible_fast_ratio'] = clip(rng.normal(0.0008, 0.0015, n), 0, 0.008)
+    d['digram_cv_mean']        = clip(rng.normal(0.11, 0.045, n), 0.03, 0.28)
+    d['backspace_latency_std'] = clip(rng.normal(11, 4.5, n), 1.5, 38)
+    d['backspace_count_ratio'] = clip(rng.normal(0.028, 0.010, n), 0, 0.11)
+    d['burst_count_per_100k']  = clip(rng.normal(0.25, 0.28, n), 0, 1.8)
+    d['session_wpm']           = clip(rng.normal(98, 22, n), 48, 185)
+    d['label'] = np.ones(n, dtype=int)
+    return pd.DataFrame(d)
+
+def generate_bots_fatigue_aware(n, seed=44):
+    """NUEVO — Bots que simulan fatigue_rate y velocity_gradient para engañar el modelo.
+    Su punto débil: digram_cv_mean muy bajo, backspace_latency_std casi cero."""
+    rng = np.random.default_rng(seed)
+    d = {}
+    d['flight_mean']           = clip(rng.normal(125, 40, n), 45, 320)
+    d['flight_std']            = clip(rng.normal(38, 12, n), 10, 95)
+    d['hold_mean']             = clip(rng.normal(98, 22, n), 38, 220)
+    d['hold_std']              = clip(rng.normal(10, 3.5, n), 2.5, 30)
+    d['flight_skewness']       = clip(rng.normal(0.9, 0.5, n), -0.2, 3.5)
+    d['flight_kurtosis']       = clip(rng.normal(3.5, 1.5, n), 1, 9)
+    d['flight_entropy']        = clip(rng.normal(2.3, 0.5, n), 1.0, 3.8)
+    d['hold_entropy']          = clip(rng.normal(1.9, 0.5, n), 0.8, 3.2)
+    d['periodicity_score']     = clip(rng.normal(35, 14, n), 10, 72)
+    # Simulan fatiga y gradiente (señal difícil)
+    d['velocity_gradient']     = clip(rng.normal(0.12, 0.09, n), -0.15, 0.45)
+    d['fatigue_rate']          = clip(rng.normal(0.55, 0.35, n), 0.05, 2.2)
+    # Pero traicionan su naturaleza aquí:
+    d['rhythm_consistency']    = clip(rng.normal(8, 3.5, n), 1.5, 22)   # muy bajo
+    d['impossible_fast_ratio'] = clip(rng.normal(0.0005, 0.001, n), 0, 0.006)
+    d['digram_cv_mean']        = clip(rng.normal(0.06, 0.025, n), 0.01, 0.18)  # muy bajo
+    d['backspace_latency_std'] = clip(rng.normal(7, 3, n), 0.5, 22)    # casi uniforme
+    d['backspace_count_ratio'] = clip(rng.normal(0.02, 0.008, n), 0, 0.08)
+    d['burst_count_per_100k']  = clip(rng.normal(0.15, 0.18, n), 0, 1.2)
+    d['session_wpm']           = clip(rng.normal(85, 18, n), 42, 160)
+    d['label'] = np.ones(n, dtype=int)
+    return pd.DataFrame(d)
+
+def generate_bots_slow(n, seed=55):
+    """NUEVO — Bots lentos que imitan WPM bajo. Fallan en entropía y correlaciones."""
+    rng = np.random.default_rng(seed)
+    d = {}
+    d['flight_mean']           = clip(rng.normal(220, 55, n), 80, 600)
+    d['flight_std']            = clip(rng.normal(12, 4.5, n), 2, 38)   # std muy bajo = no humano
+    d['hold_mean']             = clip(rng.normal(160, 40, n), 60, 450)
+    d['hold_std']              = clip(rng.normal(6, 2.5, n), 1, 20)
+    d['flight_skewness']       = clip(rng.normal(0.03, 0.06, n), -0.3, 0.3)
+    d['flight_kurtosis']       = clip(rng.normal(8.5, 2.5, n), 3.5, 18)
+    d['flight_entropy']        = clip(rng.normal(0.9, 0.35, n), 0.2, 2.2)
+    d['hold_entropy']          = clip(rng.normal(0.7, 0.28, n), 0.1, 1.6)
+    d['periodicity_score']     = clip(rng.normal(70, 10, n), 45, 92)
+    d['velocity_gradient']     = clip(rng.normal(0.001, 0.002, n), -0.008, 0.008)
+    d['fatigue_rate']          = clip(rng.normal(0.002, 0.005, n), -0.02, 0.025)
+    d['rhythm_consistency']    = clip(rng.normal(4, 2, n), 0.5, 14)
+    d['impossible_fast_ratio'] = clip(rng.normal(0.0, 0.0008, n), 0, 0.005)
+    d['digram_cv_mean']        = clip(rng.normal(0.02, 0.01, n), 0.002, 0.08)
+    d['backspace_latency_std'] = clip(rng.normal(4.5, 2, n), 0.4, 16)
+    d['backspace_count_ratio'] = clip(rng.normal(0.006, 0.003, n), 0, 0.025)
+    d['burst_count_per_100k']  = clip(rng.normal(0.0, 0.03, n), 0, 0.18)
+    d['session_wpm']           = clip(rng.normal(32, 8, n), 12, 68)
+    d['label'] = np.ones(n, dtype=int)
+    return pd.DataFrame(d)
+
+# ─── Dataset ──────────────────────────────────────────────────────────────────
+
+# Proporciones: 55% humanos / 45% bots (ligeramente desbalanceado, como en producción)
+splits = {
+    # Humanos (55% del total)
+    'humans_normal':   int(N * 0.25),
+    'humans_fast':     int(N * 0.10),
+    'humans_nervous':  int(N * 0.12),
+    'humans_mobile':   int(N * 0.08),
+    # Bots (45% del total)
+    'bots_simple':         int(N * 0.10),
+    'bots_llm_paste':      int(N * 0.10),
+    'bots_sophisticated':  int(N * 0.12),
+    'bots_fatigue_aware':  int(N * 0.08),
+    'bots_slow':           int(N * 0.05),
+}
+
+print("=" * 60)
+print("Deep-Check · Biometric Model Training v2.0")
+print("=" * 60)
+print(f"\nGenerating {N:,} synthetic samples...")
+
+df = pd.concat([
+    generate_humans_normal(splits['humans_normal']),
+    generate_humans_fast(splits['humans_fast']),
+    generate_humans_nervous(splits['humans_nervous']),
+    generate_humans_mobile(splits['humans_mobile']),
+    generate_bots_simple(splits['bots_simple']),
+    generate_bots_llm_paste(splits['bots_llm_paste']),
+    generate_bots_sophisticated(splits['bots_sophisticated']),
+    generate_bots_fatigue_aware(splits['bots_fatigue_aware']),
+    generate_bots_slow(splits['bots_slow']),
+], ignore_index=True).sample(frac=1, random_state=42).reset_index(drop=True)
+
+counts = df['label'].value_counts()
+print(f"  Humans: {counts.get(0, 0):,}  ({counts.get(0,0)/len(df)*100:.1f}%)")
+print(f"  Bots:   {counts.get(1, 0):,}  ({counts.get(1,0)/len(df)*100:.1f}%)")
+print(f"  Total:  {len(df):,}")
+
 X = df[FEATURES].values.astype(np.float32)
 y = df['label'].values
+
+# ─── Split: 70% train / 15% val / 15% test ───────────────────────────────────
 
 X_train, X_test, y_train, y_test = train_test_split(
     X, y, test_size=0.15, random_state=42, stratify=y
 )
 X_train, X_val, y_train, y_val = train_test_split(
-    X_train, y_train, test_size=0.12, random_state=42, stratify=y_train
-)
+    X_train, y_train, test_size=0.176, random_state=42, stratify=y_train
+)  # 0.176 × 0.85 ≈ 0.15 del total
 
-print(f"Train: {len(X_train)}, Val: {len(X_val)}, Test: {len(X_test)}")
+print(f"\nSplit → Train: {len(X_train):,}  Val: {len(X_val):,}  Test: {len(X_test):,}")
 
-# ─── 2. Normalización ──────────────────────────────────────────────────────────
+# ─── Normalización ────────────────────────────────────────────────────────────
 
 scaler = StandardScaler()
 X_train_s = scaler.fit_transform(X_train)
 X_val_s   = scaler.transform(X_val)
 X_test_s  = scaler.transform(X_test)
 
-# Guardar parámetros del scaler para normalización en JS/TS
 scaler_params = {
     'features': FEATURES,
     'mean': scaler.mean_.tolist(),
     'std':  scaler.scale_.tolist(),
 }
-with open('feature_scaler.json', 'w') as f:
-    json.dump(scaler_params, f, indent=2)
-print("Saved feature_scaler.json")
 
-# ─── 3. Entrenamiento XGBoost ──────────────────────────────────────────────────
+# ─── Entrenamiento XGBoost ────────────────────────────────────────────────────
 
-print("\nTraining XGBoost model...")
+print("\nTraining XGBoost v2 (500 estimators, early stopping)...")
+
 model = XGBClassifier(
-    n_estimators=300,
-    max_depth=5,
-    learning_rate=0.08,
-    subsample=0.8,
-    colsample_bytree=0.8,
-    min_child_weight=3,
-    reg_alpha=0.1,
-    reg_lambda=1.0,
-    scale_pos_weight=1,       # clases balanceadas
+    n_estimators=500,
+    max_depth=6,
+    learning_rate=0.05,
+    subsample=0.85,
+    colsample_bytree=0.80,
+    colsample_bylevel=0.80,
+    min_child_weight=5,
+    reg_alpha=0.2,        # L1
+    reg_lambda=1.5,       # L2
+    gamma=0.1,            # min split gain
+    scale_pos_weight=counts.get(0, 1) / counts.get(1, 1),  # class balance
     eval_metric='auc',
-    early_stopping_rounds=25,
+    early_stopping_rounds=30,
     random_state=42,
     n_jobs=-1,
     tree_method='hist',
+    verbosity=0,
 )
 
 model.fit(
     X_train_s, y_train,
     eval_set=[(X_val_s, y_val)],
-    verbose=50,
+    verbose=100,
 )
 
-# Evaluación
-y_prob_test = model.predict_proba(X_test_s)[:, 1]
-y_pred_test = (y_prob_test > 0.5).astype(int)
+actual_trees = model.best_iteration + 1 if hasattr(model, 'best_iteration') else model.n_estimators
+print(f"Best iteration: {actual_trees} trees (early stopping)")
+
+# ─── Calibración de probabilidades ───────────────────────────────────────────
+
+print("\nCalibrating probabilities (isotonic regression)...")
+calibrated = CalibratedClassifierCV(model, method='isotonic', cv='prefit')
+calibrated.fit(X_val_s, y_val)
+
+# ─── Evaluación ───────────────────────────────────────────────────────────────
+
+y_prob_test = calibrated.predict_proba(X_test_s)[:, 1]
 auc = roc_auc_score(y_test, y_prob_test)
 
-print(f"\nTest AUC-ROC: {auc:.4f}")
+# Threshold óptimo por F1 sobre validation set
+y_prob_val = calibrated.predict_proba(X_val_s)[:, 1]
+precisions, recalls, thresholds = precision_recall_curve(y_val, y_prob_val)
+f1s = 2 * precisions * recalls / (precisions + recalls + 1e-9)
+best_idx = np.argmax(f1s[:-1])
+best_threshold = float(thresholds[best_idx])
+best_f1_val = float(f1s[best_idx])
+
+y_pred_test = (y_prob_test > best_threshold).astype(int)
+f1_test = f1_score(y_test, y_pred_test)
+
+print(f"\n{'─'*40}")
+print(f"  Test AUC-ROC:      {auc:.4f}")
+print(f"  Optimal threshold: {best_threshold:.3f} (by F1 on val)")
+print(f"  Val F1 @ threshold:{best_f1_val:.4f}")
+print(f"  Test F1 @ threshold:{f1_test:.4f}")
+print(f"{'─'*40}")
 print(classification_report(y_test, y_pred_test, target_names=['human', 'bot']))
 
-# Feature importance
-fi = pd.DataFrame({'feature': FEATURES, 'importance': model.feature_importances_})
-fi = fi.sort_values('importance', ascending=False)
-print("\nTop-10 feature importances:")
-print(fi.head(10).to_string(index=False))
+# ─── Cross-validation AUC honesto ─────────────────────────────────────────────
 
-# ─── 4. Exportar a ONNX ───────────────────────────────────────────────────────
+print("5-fold Stratified CV AUC (honest estimate)...")
+skf = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
+cv_aucs = []
+for fold, (tr_idx, va_idx) in enumerate(skf.split(X_train_s, y_train)):
+    cv_model = XGBClassifier(
+        n_estimators=actual_trees,  # usar el nº de árboles encontrado por early stopping
+        max_depth=6, learning_rate=0.05, subsample=0.85,
+        colsample_bytree=0.80, min_child_weight=5,
+        reg_alpha=0.2, reg_lambda=1.5, gamma=0.1,
+        random_state=42, n_jobs=-1, tree_method='hist', verbosity=0,
+    )
+    cv_model.fit(X_train_s[tr_idx], y_train[tr_idx])
+    cv_prob = cv_model.predict_proba(X_train_s[va_idx])[:, 1]
+    fold_auc = roc_auc_score(y_train[va_idx], cv_prob)
+    cv_aucs.append(fold_auc)
+    print(f"  Fold {fold+1}: AUC={fold_auc:.4f}")
+
+print(f"\n  CV AUC: {np.mean(cv_aucs):.4f} ± {np.std(cv_aucs):.4f}")
+
+# ─── Feature importance ───────────────────────────────────────────────────────
+
+fi = dict(zip(FEATURES, model.feature_importances_.tolist()))
+fi_sorted = sorted(fi.items(), key=lambda x: x[1], reverse=True)
+print("\nTop-10 feature importances:")
+for feat, imp in fi_sorted[:10]:
+    bar = '█' * int(imp * 200)
+    print(f"  {feat:<28} {imp:.4f}  {bar}")
+
+# ─── Exportar a ONNX ──────────────────────────────────────────────────────────
 
 print("\nExporting to ONNX...")
-from skl2onnx.common.data_types import FloatTensorType
+out_dir = os.path.join(os.path.dirname(__file__), '..', 'public', 'models')
+os.makedirs(out_dir, exist_ok=True)
 
-# XGBoost → ONNX via onnxmltools (path 1) or skl2onnx to_onnx (path 2)
+onnx_path = os.path.join(out_dir, 'biometric-fraud-detector.onnx')
+
 onnx_model = None
 try:
-    from onnxmltools import convert_xgboost
-    from onnxmltools.convert.common.data_types import FloatTensorType as OnnxFloat
-    onnx_model = convert_xgboost(
-        model,
-        initial_types=[('input', OnnxFloat([None, len(FEATURES)]))],
-    )
-    print("Used onnxmltools path")
+    from skl2onnx.common.data_types import FloatTensorType
+    from skl2onnx import to_onnx
+    initial_type = [('float_input', FloatTensorType([None, len(FEATURES)]))]
+    onnx_model = to_onnx(model, X_train_s[:1].astype(np.float32),
+                          initial_types=initial_type,
+                          options={'zipmap': False})
+    print("  Exported via skl2onnx")
 except Exception as e1:
-    print(f"onnxmltools failed ({e1}), trying skl2onnx...")
     try:
-        from skl2onnx import to_onnx
-        initial_type = [('float_input', FloatTensorType([None, len(FEATURES)]))]
-        onnx_model = to_onnx(model, X_train_s[:1].astype(np.float32),
-                              initial_types=initial_type,
-                              options={'zipmap': False})
-        print("Used skl2onnx path")
+        from onnxmltools import convert_xgboost
+        from onnxmltools.convert.common.data_types import FloatTensorType as OnnxFloat
+        onnx_model = convert_xgboost(model, initial_types=[('input', OnnxFloat([None, len(FEATURES)]))])
+        print("  Exported via onnxmltools")
     except Exception as e2:
-        print(f"skl2onnx failed ({e2}), trying native XGBoost ONNX...")
-        model.save_model('model_xgb.json')
-        import subprocess, sys
-        subprocess.check_call([sys.executable, '-m', 'pip', 'install', '-q', 'onnxconverter-common'])
-        from xgboost import XGBClassifier
-        # Rebuild a tiny model for export if above fails
-        raise RuntimeError(f"Could not export to ONNX. Errors: {e1} | {e2}")
+        print(f"  ONNX export failed: {e1} | {e2}")
+        sys.exit(1)
 
-import onnx
-onnx_path = 'biometric-fraud-detector.onnx'
-onnx.save(onnx_model, onnx_path)
+import onnx as onnx_lib
+onnx_lib.save(onnx_model, onnx_path)
 size_kb = os.path.getsize(onnx_path) / 1024
-print(f"Saved {onnx_path} ({size_kb:.1f} KB)")
+print(f"  Saved: {onnx_path} ({size_kb:.1f} KB)")
 
-# ─── 5. Verificación con ONNX Runtime ─────────────────────────────────────────
+# ─── Verificación ONNX Runtime ────────────────────────────────────────────────
 
 import onnxruntime as ort
 sess = ort.InferenceSession(onnx_path, providers=['CPUExecutionProvider'])
 input_name  = sess.get_inputs()[0].name
-output_name = sess.get_outputs()[1].name   # probabilities
+output_name = sess.get_outputs()[1].name
 
 sample = X_test_s[:5].astype(np.float32)
-probs  = sess.run([output_name], {input_name: sample})[0]
+raw_out = sess.run([output_name], {input_name: sample})[0]
 print("\nONNX verification (5 samples):")
-for i, (prob, label) in enumerate(zip(probs, y_test[:5])):
-    # prob puede ser array [[p_human, p_bot]] o dict
-    if hasattr(prob, '__iter__') and not isinstance(prob, dict):
-        p_bot = float(prob[1]) if len(prob) > 1 else float(prob[0])
-    else:
-        p_bot = float(prob.get(1, 0))
-    print(f"  Sample {i}: bot_prob={p_bot:.3f}, true_label={label}")
+for i, (row, label) in enumerate(zip(raw_out, y_test[:5])):
+    p_bot = float(row[1]) if hasattr(row, '__len__') and len(row) > 1 else float(row)
+    verdict = 'bot' if p_bot > best_threshold else 'human'
+    print(f"  [{i}] p(bot)={p_bot:.3f}  pred={verdict}  true={'bot' if label else 'human'}")
 
-# ─── 6. Metadata ──────────────────────────────────────────────────────────────
+# ─── Guardar artefactos ───────────────────────────────────────────────────────
+
+scaler_path   = os.path.join(out_dir, 'feature_scaler.json')
+metadata_path = os.path.join(out_dir, 'model_metadata.json')
+
+with open(scaler_path, 'w') as f:
+    json.dump(scaler_params, f, indent=2)
 
 metadata = {
-    'version': '1.0.0',
+    'version': '2.0.0',
     'features': FEATURES,
     'n_features': len(FEATURES),
     'model_type': 'XGBoostClassifier',
-    'n_estimators': model.n_estimators,
+    'n_estimators': actual_trees,
     'onnx_size_kb': round(size_kb, 1),
-    'test_auc': round(auc, 4),
-    'threshold': 0.5,
+    'test_auc': round(float(auc), 4),
+    'cv_auc_mean': round(float(np.mean(cv_aucs)), 4),
+    'cv_auc_std':  round(float(np.std(cv_aucs)), 4),
+    'optimal_threshold': round(best_threshold, 3),
+    'test_f1': round(float(f1_test), 4),
+    'threshold': best_threshold,
     'classes': ['human', 'bot'],
     'training_samples': len(X_train),
-    'feature_importances': dict(zip(FEATURES, model.feature_importances_.tolist())),
+    'archetypes': {
+        'humans': ['normal', 'fast_typist', 'nervous', 'mobile'],
+        'bots': ['simple_autotype', 'llm_paste', 'sophisticated', 'fatigue_aware', 'slow'],
+    },
+    'calibration': 'isotonic',
+    'feature_importances': fi,
     'scaler': scaler_params,
 }
-with open('model_metadata.json', 'w') as f:
+with open(metadata_path, 'w') as f:
     json.dump(metadata, f, indent=2)
-print("\nSaved model_metadata.json")
-print("\n✓ Training complete! Copy these files to public/models/ in the Next.js project:")
-print(f"  - {onnx_path}")
-print(f"  - model_metadata.json")
+
+print(f"\n{'='*60}")
+print(f"  ✓ biometric-fraud-detector.onnx  ({size_kb:.1f} KB)")
+print(f"  ✓ feature_scaler.json")
+print(f"  ✓ model_metadata.json")
+print(f"  Test AUC:  {auc:.4f}")
+print(f"  CV AUC:    {np.mean(cv_aucs):.4f} ± {np.std(cv_aucs):.4f}")
+print(f"  Threshold: {best_threshold:.3f}")
+print(f"  Test F1:   {f1_test:.4f}")
+print(f"{'='*60}")
