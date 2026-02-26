@@ -1,0 +1,43 @@
+{
+  "version": "1.0.0",
+  "model_type": "BiLSTM+AttentionPool",
+  "architecture": {
+    "lstm1_hidden": 64,
+    "lstm2_hidden": 32,
+    "bidirectional": true,
+    "pooling": "attention",
+    "n_params": 79874
+  },
+  "seq_len": 120,
+  "n_features": 4,
+  "feature_names": [
+    "flight_ms",
+    "hold_ms",
+    "delta_flight",
+    "delta_hold"
+  ],
+  "training_samples": 56032,
+  "best_val_auc": 1.0,
+  "test_auc": 1.0,
+  "test_f1": 0.9998,
+  "threshold": 0.5,
+  "normalization": {
+    "mean": [
+      154.62648010253906,
+      84.80825805664062,
+      -0.11984794586896896,
+      -0.039743684232234955
+    ],
+    "std": [
+      166.1494903564453,
+      57.76534652709961,
+      109.7037124633789,
+      31.7216739654541
+    ],
+    "seq_len": 120,
+    "n_features": 4
+  },
+  "ensemble_role": "third_layer",
+  "ensemble_weight": 0.25,
+  "note": "LSTM trained on raw keystroke sequences. No hand-crafted features. Detects temporal micro-patterns invisible to statistical aggregation."
+}
