@@ -1,10 +1,10 @@
 'use client'
 
-import React, { useState, useEffect } from 'react'
+import React, { Suspense, useState, useEffect } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import styles from './page.module.css'
 
-export default function DashboardLoginPage() {
+function LoginForm() {
     const [password, setPassword] = useState('')
     const [error, setError]       = useState('')
     const [loading, setLoading]   = useState(false)
@@ -82,5 +82,13 @@ export default function DashboardLoginPage() {
                 </p>
             </div>
         </div>
+    )
+}
+
+export default function DashboardLoginPage() {
+    return (
+        <Suspense>
+            <LoginForm />
+        </Suspense>
     )
 }
