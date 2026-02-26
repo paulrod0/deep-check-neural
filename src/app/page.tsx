@@ -165,6 +165,7 @@ export default function Home() {
             <Link href="/whitepaper">Whitepaper</Link>
             <Link href="/ens">ENS Básico</Link>
             <Link href="/iso27001">ISO 27001 SoA</Link>
+            <Link href="/dpia">DPIA</Link>
             <a href="/.well-known/security.txt">security.txt</a>
           </div>
 
