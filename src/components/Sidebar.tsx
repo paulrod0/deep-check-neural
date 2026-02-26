@@ -22,6 +22,7 @@ export default function Sidebar() {
         { label: '──────────', href: '#3', disabled: true },
         { label: '⬡ ENS Básico', href: '/ens' },
         { label: '⬡ ISO 27001 SoA', href: '/iso27001' },
+        { label: '⬡ DPIA', href: '/dpia' },
     ]
 
     return (
