@@ -2,8 +2,21 @@
 
 import React, { useRef, useState, useEffect, useCallback, forwardRef, useImperativeHandle } from 'react'
 import type { RawSessionData } from '@/lib/biometricFeatures'
-import Editor, { OnMount } from '@monaco-editor/react'
+import Editor, { loader, OnMount } from '@monaco-editor/react'
 import styles from './CodeEditor.module.css'
+
+// ─── Monaco local setup (avoid CDN load — blocked by CSP) ────────────────────
+// Use the locally installed monaco-editor package and provide an empty worker
+// so the editor initialises in single-threaded mode (no IntelliSense, but the
+// editor renders and keystroke capture works perfectly for biometric analysis).
+if (typeof window !== 'undefined' && !(window as any).__monacoReady) {
+    ;(window as any).__monacoReady = true
+    ;(self as any).MonacoEnvironment = {
+        getWorker: (_moduleId: unknown, _label: string): Worker =>
+            new Worker(URL.createObjectURL(new Blob([''], { type: 'application/javascript' }))),
+    }
+    import('monaco-editor').then(monaco => loader.config({ monaco })).catch(() => {})
+}
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
