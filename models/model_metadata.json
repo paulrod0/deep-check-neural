@@ -1,5 +1,5 @@
 {
-  "version": "2.0.0",
+  "version": "2.1.0",
   "features": [
     "flight_mean",
     "flight_std",
@@ -21,35 +21,29 @@
     "session_wpm"
   ],
   "n_features": 18,
-  "model_type": "XGBoostClassifier",
-  "n_estimators": 89,
-  "onnx_size_kb": 112.4,
-  "test_auc": 1.0,
+  "model_type": "XGBoostClassifier+IsolationForest",
+  "ensemble": {
+    "xgb_weight": 0.7,
+    "iso_weight": 0.3
+  },
+  "n_estimators_xgb": 89,
+  "n_estimators_iso": 300,
+  "onnx_xgb_kb": 112.4,
+  "test_auc_xgb": 1.0,
+  "test_auc_iso": 0.9787,
+  "test_auc_ensemble": 1.0,
   "cv_auc_mean": 1.0,
   "cv_auc_std": 0.0,
-  "optimal_threshold": 0.5,
-  "test_f1": 0.9994,
-  "threshold": 0.5,
+  "optimal_threshold": 0.42,
+  "test_f1_ensemble": 0.9997,
+  "threshold": 0.4196648129715285,
+  "iso_norm_p5": -0.085428,
+  "iso_norm_p95": 0.253701,
   "classes": [
     "human",
     "bot"
   ],
   "training_samples": 105060,
-  "archetypes": {
-    "humans": [
-      "normal",
-      "fast_typist",
-      "nervous",
-      "mobile"
-    ],
-    "bots": [
-      "simple_autotype",
-      "llm_paste",
-      "sophisticated",
-      "fatigue_aware",
-      "slow"
-    ]
-  },
   "calibration": "isotonic",
   "feature_importances": {
     "flight_mean": 0.07675480842590332,
