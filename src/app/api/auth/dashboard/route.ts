@@ -43,11 +43,12 @@ export async function POST(req: NextRequest) {
     try {
         const { password } = await req.json()
 
-        const isValid = typeof password === 'string' &&
-            crypto.timingSafeEqual(
-                Buffer.from(password.slice(0, 200)),
-                Buffer.from(ADMIN_PASSWORD.slice(0, 200).padEnd(password.length, '\0'))
-            ) && password === ADMIN_PASSWORD
+        // Hash both values to a fixed-length digest before comparing —
+        // avoids the length-mismatch crash in timingSafeEqual and prevents
+        // timing oracles that leak password length.
+        const hash = (s: string) => crypto.createHash('sha256').update(s).digest()
+        const isValid = typeof password === 'string' && password.length > 0 &&
+            crypto.timingSafeEqual(hash(password), hash(ADMIN_PASSWORD))
 
         if (!isValid) {
             // Log failed attempt
