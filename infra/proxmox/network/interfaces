@@ -1,0 +1,45 @@
+# /etc/network/interfaces — Proxmox VE Network Config
+# DeepCheck Server · Xeon E5-2630v4
+#
+# Architecture:
+#   vmbr0 → WAN bridge  (físico → router/internet)
+#   vmbr1 → LAN interno (10.10.0.0/24, sólo VMs/LXC)
+#   wg0   → WireGuard   (10.10.100.0/24, acceso MacBook)
+#
+# INSTRUCCIÓN: Copia a /etc/network/interfaces en Proxmox.
+# Ajusta 'ens18' / 'eth0' al nombre real de tu NIC.
+# Ver nombre con: ip link show
+
+source /etc/network/interfaces.d/*
+
+auto lo
+iface lo inet loopback
+
+# ── NIC física principal ──────────────────────────────────────────────────────
+# Ajustar 'enp3s0' al nombre real de tu interfaz (ip link show)
+auto enp3s0
+iface enp3s0 inet manual
+
+# ── vmbr0: Bridge WAN (conectado al router) ───────────────────────────────────
+auto vmbr0
+iface vmbr0 inet static
+    address  192.168.1.100/24          # IP del servidor en tu red local
+    gateway  192.168.1.1               # IP de tu router
+    dns-nameservers 1.1.1.1 8.8.8.8
+    bridge-ports enp3s0
+    bridge-stp off
+    bridge-fd 0
+    bridge-vlan-aware yes
+
+# ── vmbr1: Bridge LAN interno (solo VMs — sin acceso directo a internet) ──────
+# Las VMs se comunican entre sí en 10.10.0.0/24.
+# El host hace NAT para darles acceso a internet via vmbr0.
+auto vmbr1
+iface vmbr1 inet static
+    address  10.10.0.1/24
+    bridge-ports none
+    bridge-stp off
+    bridge-fd 0
+    post-up   iptables -t nat -A POSTROUTING -s '10.10.0.0/24' -o vmbr0 -j MASQUERADE
+    post-down iptables -t nat -D POSTROUTING -s '10.10.0.0/24' -o vmbr0 -j MASQUERADE
+    post-up   echo 1 > /proc/sys/net/ipv4/ip_forward
