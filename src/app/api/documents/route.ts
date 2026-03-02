@@ -61,7 +61,7 @@ export async function POST(req: NextRequest) {
 
         if (error) {
             console.error('[api/documents POST]', error.message)
-            return NextResponse.json({ error: error.message }, { status: 500 })
+            return NextResponse.json({ error: 'Internal error' }, { status: 500 })
         }
 
         void writeAuditLog({

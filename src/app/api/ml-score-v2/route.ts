@@ -192,8 +192,12 @@ async function runIsoScore(xgbProb: number): Promise<number> {
 
 async function _callLambdaLstm(rawSeq: RawKeystroke[]): Promise<number | null> {
     const lambdaUrl    = process.env.LSTM_LAMBDA_URL
-    const lambdaSecret = process.env.LSTM_LAMBDA_SECRET ?? ''
+    const lambdaSecret = process.env.LSTM_LAMBDA_SECRET
     if (!lambdaUrl) return null
+    if (!lambdaSecret) {
+        console.error('[ml-score-v2] LSTM_LAMBDA_URL is set but LSTM_LAMBDA_SECRET is missing — skipping Lambda call')
+        return null
+    }
 
     try {
         // Lambda espera { flightTime, holdTime } en ms
