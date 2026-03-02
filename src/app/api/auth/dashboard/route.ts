@@ -9,9 +9,9 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import crypto from 'crypto'
 
-const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD ?? 'deep-check-admin-2026'
-// In production: set ADMIN_PASSWORD as an env var in Vercel dashboard.
-// Never commit real passwords to the repo.
+// ADMIN_PASSWORD must be set as an env var — no hardcoded fallback.
+// Set in Vercel dashboard or .env.local for dev.
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || null
 
 function getClient() {
     return createClient(
@@ -35,14 +35,20 @@ export async function POST(req: NextRequest) {
     const ip = getIP(req)
     const ipHash = hashIP(ip)
 
+    if (!ADMIN_PASSWORD) {
+        console.error('[auth/dashboard] ADMIN_PASSWORD env var not configured')
+        return NextResponse.json({ error: 'Service unavailable' }, { status: 503 })
+    }
+
     try {
         const { password } = await req.json()
 
-        const isValid = typeof password === 'string' &&
-            crypto.timingSafeEqual(
-                Buffer.from(password.slice(0, 200)),
-                Buffer.from(ADMIN_PASSWORD.slice(0, 200).padEnd(password.length, '\0'))
-            ) && password === ADMIN_PASSWORD
+        // Hash both values to a fixed-length digest before comparing —
+        // avoids the length-mismatch crash in timingSafeEqual and prevents
+        // timing oracles that leak password length.
+        const hash = (s: string) => crypto.createHash('sha256').update(s).digest()
+        const isValid = typeof password === 'string' && password.length > 0 &&
+            crypto.timingSafeEqual(hash(password), hash(ADMIN_PASSWORD))
 
         if (!isValid) {
             // Log failed attempt

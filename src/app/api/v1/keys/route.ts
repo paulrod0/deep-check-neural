@@ -4,18 +4,17 @@
  * POST /api/v1/keys   — Create a new API key (admin only)
  * GET  /api/v1/keys   — List all API keys
  *
- * Protected by DEEPCHECK_ADMIN_SECRET env var
+ * Protected by admin session cookie (dc_admin_session).
  */
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createApiKey, getApiKeysList } from '@/lib/db'
-
-const ADMIN_SECRET = process.env.DEEPCHECK_ADMIN_SECRET ?? 'dev-admin-secret'
+import { validateAdminSession } from '@/lib/adminAuth'
 
 function cors(res: NextResponse) {
     res.headers.set('Access-Control-Allow-Origin', '*')
     res.headers.set('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
-    res.headers.set('Access-Control-Allow-Headers', 'Authorization, Content-Type, X-Admin-Secret')
+    res.headers.set('Access-Control-Allow-Headers', 'Authorization, Content-Type')
     return res
 }
 
@@ -24,8 +23,7 @@ export async function OPTIONS() {
 }
 
 export async function GET(req: NextRequest) {
-    const secret = req.headers.get('x-admin-secret')
-    if (secret !== ADMIN_SECRET) {
+    if (!await validateAdminSession(req)) {
         return cors(NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 }))
     }
 
@@ -40,8 +38,7 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-    const secret = req.headers.get('x-admin-secret')
-    if (secret !== ADMIN_SECRET) {
+    if (!await validateAdminSession(req)) {
         return cors(NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 }))
     }
 
