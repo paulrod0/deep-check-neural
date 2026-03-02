@@ -4,8 +4,6 @@ import React, { useState, useEffect } from 'react'
 import Link from 'next/link'
 import styles from '../page.module.css'
 
-const ADMIN_SECRET = 'dev-admin-secret'   // In production: read from env/UI input
-
 interface ApiKey {
     key: string
     name: string
@@ -28,7 +26,7 @@ export default function SettingsPage() {
     async function loadKeys() {
         setLoadingKeys(true)
         try {
-            const res = await fetch('/api/v1/keys', { headers: { 'X-Admin-Secret': ADMIN_SECRET } })
+            const res = await fetch('/api/v1/keys')
             const json = await res.json()
             if (json.success) setApiKeys(json.data)
         } finally {
@@ -46,7 +44,7 @@ export default function SettingsPage() {
         try {
             const res = await fetch('/api/v1/keys', {
                 method: 'POST',
-                headers: { 'X-Admin-Secret': ADMIN_SECRET, 'Content-Type': 'application/json' },
+                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     name: newKeyName,
                     permissions: ['read', 'write'],
