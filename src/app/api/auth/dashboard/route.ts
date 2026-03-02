@@ -9,9 +9,9 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import crypto from 'crypto'
 
-const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD ?? 'deep-check-admin-2026'
-// In production: set ADMIN_PASSWORD as an env var in Vercel dashboard.
-// Never commit real passwords to the repo.
+// ADMIN_PASSWORD must be set as an env var — no hardcoded fallback.
+// Set in Vercel dashboard or .env.local for dev.
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || null
 
 function getClient() {
     return createClient(
@@ -34,6 +34,11 @@ function getIP(req: NextRequest): string {
 export async function POST(req: NextRequest) {
     const ip = getIP(req)
     const ipHash = hashIP(ip)
+
+    if (!ADMIN_PASSWORD) {
+        console.error('[auth/dashboard] ADMIN_PASSWORD env var not configured')
+        return NextResponse.json({ error: 'Service unavailable' }, { status: 503 })
+    }
 
     try {
         const { password } = await req.json()

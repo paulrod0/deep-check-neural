@@ -1,8 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAssessments, saveAssessment, Assessment } from '@/lib/db';
 import { writeAuditLog, extractIP } from '@/lib/auditLog'
+import { validateAdminSession } from '@/lib/adminAuth'
 
 export async function GET(req: NextRequest) {
+    if (!await validateAdminSession(req)) {
+        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
     const assessments = await getAssessments();
     void writeAuditLog({
         eventType: 'data_access',
