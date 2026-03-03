@@ -4,6 +4,8 @@ import React, { useState, useCallback, useRef, useEffect } from 'react'
 import Link from 'next/link'
 import { analyzeImage, riskLevelColor, riskLevelLabel, type ForensicsReport, type RiskLevel } from '@/lib/imageForensics'
 import { classifyDocument, runCloneDetection, renderCloneOverlay, type DocumentClassification, type CloneDetectionResult } from '@/lib/documentClassifier'
+import { analyzeWithNeural, type NeuralForensicsResult } from '@/lib/neuralForensics'
+import NeuralAnalysisPanel from './NeuralAnalysisPanel'
 import styles from './page.module.css'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -331,12 +333,44 @@ function RecentList({ items }: { items: RecentAnalysis[] }) {
     )
 }
 
+// ─── Analysis Mode Toggle ─────────────────────────────────────────────────────
+
+type AnalysisMode = 'standard' | 'neural'
+
+function ModeToggle({ mode, onChange }: { mode: AnalysisMode; onChange: (m: AnalysisMode) => void }) {
+    return (
+        <div style={{
+            display: 'inline-flex', borderRadius: 8, overflow: 'hidden',
+            border: '1px solid #2a2a4a', marginBottom: 20, fontFamily: 'monospace',
+        }}>
+            {(['standard', 'neural'] as AnalysisMode[]).map(m => (
+                <button
+                    key={m}
+                    onClick={() => onChange(m)}
+                    style={{
+                        padding: '8px 20px', fontSize: 13, fontWeight: 600,
+                        cursor: 'pointer', border: 'none', fontFamily: 'monospace',
+                        background: mode === m ? '#00c89d' : 'transparent',
+                        color: mode === m ? '#000' : '#666',
+                        transition: 'all 0.2s',
+                    }}
+                >
+                    {m === 'standard' ? '⚗️ Estándar' : '🧠 Neural IA'}
+                </button>
+            ))}
+        </div>
+    )
+}
+
 // ─── Main page ────────────────────────────────────────────────────────────────
 
 export default function DocumentsPage() {
     const [file, setFile] = useState<File | null>(null)
     const [analysisStep, setAnalysisStep] = useState<string | null>(null)
     const [report, setReport] = useState<FullReport | null>(null)
+    const [neuralReport, setNeuralReport] = useState<NeuralForensicsResult | null>(null)
+    const [neuralRunning, setNeuralRunning] = useState(false)
+    const [analysisMode, setAnalysisMode] = useState<AnalysisMode>('standard')
     const [saving, setSaving] = useState(false)
     const [savedId, setSavedId] = useState<string | null>(null)
     const [recent, setRecent] = useState<RecentAnalysis[]>([])
@@ -353,6 +387,7 @@ export default function DocumentsPage() {
     const handleFile = useCallback(async (f: File) => {
         setFile(f)
         setReport(null)
+        setNeuralReport(null)
         setSavedId(null)
         setError(null)
 
@@ -392,12 +427,26 @@ export default function DocumentsPage() {
             await new Promise(r => setTimeout(r, 100))
             setAnalysisStep(null)
 
-            setReport({ ...result, docClassification, cloneResult, cloneOverlayUrl })
+            const finalReport = { ...result, docClassification, cloneResult, cloneOverlayUrl }
+            setReport(finalReport)
+
+            // Neural mode: run enhanced analysis after standard results are shown
+            if (analysisMode === 'neural') {
+                setNeuralRunning(true)
+                try {
+                    const nResult = await analyzeWithNeural(img)
+                    setNeuralReport(nResult)
+                } catch (ne) {
+                    console.error('Neural analysis error:', ne)
+                } finally {
+                    setNeuralRunning(false)
+                }
+            }
         } catch (e) {
             setAnalysisStep(null)
             setError(e instanceof Error ? e.message : 'Error analizando la imagen')
         }
-    }, [])
+    }, [analysisMode])
 
     const handleSave = useCallback(async (caseRef: string) => {
         if (!report || !file) return
@@ -468,6 +517,21 @@ export default function DocumentsPage() {
             </div>
 
             <div className={styles.content}>
+                {/* Analysis mode selector */}
+                {!analysisStep && !report && (
+                    <div style={{ textAlign: 'center' }}>
+                        <ModeToggle mode={analysisMode} onChange={m => { setAnalysisMode(m); setNeuralReport(null) }} />
+                        {analysisMode === 'neural' && (
+                            <p style={{
+                                fontSize: 12, color: '#888', marginBottom: 12, fontFamily: 'monospace',
+                            }}>
+                                🧠 Análisis neural: multi-escala ELA + DCT + consistencia regional + firma IA
+                                {' '}— más preciso, más lento (~3-8s extra)
+                            </p>
+                        )}
+                    </div>
+                )}
+
                 {/* Upload */}
                 {!analysisStep && !report && (
                     <UploadZone onFile={handleFile} />
@@ -494,7 +558,30 @@ export default function DocumentsPage() {
                             saving={saving}
                             savedId={savedId}
                         />
-                        <button className={styles.newBtn} onClick={() => { setFile(null); setReport(null); setSavedId(null) }}>
+
+                        {/* Neural analysis — shows when mode is neural */}
+                        {analysisMode === 'neural' && (
+                            <div style={{ marginTop: 8 }}>
+                                {neuralRunning && (
+                                    <div style={{
+                                        border: '1px solid #2a2a4a', borderRadius: 12, padding: 24,
+                                        textAlign: 'center', color: '#888', fontFamily: 'monospace',
+                                        background: 'rgba(0,0,0,0.3)',
+                                    }}>
+                                        <div style={{ fontSize: 24, marginBottom: 8 }}>🧠</div>
+                                        <p>Ejecutando análisis neural…</p>
+                                        <p style={{ fontSize: 11, opacity: 0.6 }}>
+                                            ELA multi-escala · DCT · consistencia regional · correlación cromática
+                                        </p>
+                                    </div>
+                                )}
+                                {neuralReport && !neuralRunning && (
+                                    <NeuralAnalysisPanel result={neuralReport} />
+                                )}
+                            </div>
+                        )}
+
+                        <button className={styles.newBtn} onClick={() => { setFile(null); setReport(null); setNeuralReport(null); setSavedId(null) }}>
                             + Analizar otra imagen
                         </button>
                     </>
