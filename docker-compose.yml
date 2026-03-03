@@ -1,0 +1,115 @@
+###############################################################################
+# Deep-Check — On-Premise Docker Compose
+#
+# Stack:
+#   • app    — Next.js application (port 3000)
+#   • db     — PostgreSQL 16 with pgcrypto (biometric data)
+#   • rest   — PostgREST (REST API over PostgreSQL, Supabase-compatible)
+#   • nginx  — Reverse proxy with TLS termination (port 443 / 80)
+#
+# Quick start:
+#   cp .env.onpremise.example .env
+#   docker compose up -d
+#   docker compose exec db psql -U deepcheck -d deepcheck -f /docker-entrypoint-initdb.d/init.sql
+###############################################################################
+
+version: '3.9'
+
+services:
+
+  # ── PostgreSQL ──────────────────────────────────────────────────────────────
+  db:
+    image: postgres:16-alpine
+    container_name: deepcheck-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${DB_USER:-deepcheck}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD in .env}
+      POSTGRES_DB: ${DB_NAME:-deepcheck}
+    volumes:
+      - db_data:/var/lib/postgresql/data
+      - ./docker/init.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
+    ports:
+      - "127.0.0.1:5432:5432"   # only local — not exposed externally
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-deepcheck}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── PostgREST (Supabase-compatible REST layer) ───────────────────────────────
+  rest:
+    image: postgrest/postgrest:v12.2.0
+    container_name: deepcheck-rest
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      PGRST_DB_URI: postgres://${DB_USER:-deepcheck}:${DB_PASSWORD}@db:5432/${DB_NAME:-deepcheck}
+      PGRST_DB_SCHEMA: public
+      PGRST_DB_ANON_ROLE: deepcheck_anon
+      PGRST_JWT_SECRET: ${PGRST_JWT_SECRET:?Set PGRST_JWT_SECRET in .env}
+      PGRST_DB_MAX_ROWS: 1000
+      PGRST_SERVER_PORT: 3001
+    ports:
+      - "127.0.0.1:3001:3001"
+
+  # ── Next.js app ──────────────────────────────────────────────────────────────
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_SUPABASE_URL: http://rest:3001
+        NEXT_PUBLIC_SUPABASE_ANON_KEY: ${PGRST_JWT_ANON_KEY:?Set PGRST_JWT_ANON_KEY in .env}
+        NEXT_PUBLIC_DEPLOY_MODE: onpremise
+    container_name: deepcheck-app
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      # Database (via PostgREST — same API as Supabase)
+      NEXT_PUBLIC_SUPABASE_URL: http://rest:3001
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: ${PGRST_JWT_ANON_KEY}
+      SUPABASE_SERVICE_ROLE_KEY: ${PGRST_JWT_SERVICE_KEY:?Set PGRST_JWT_SERVICE_KEY in .env}
+      # Auth
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:?Set ADMIN_PASSWORD in .env}
+      # ML Lambda (optional — can run local inference)
+      LSTM_LAMBDA_URL: ${LSTM_LAMBDA_URL:-}
+      LSTM_LAMBDA_SECRET: ${LSTM_LAMBDA_SECRET:-}
+      # On-premise flag
+      DEPLOY_MODE: onpremise
+      NODE_ENV: production
+    ports:
+      - "127.0.0.1:3000:3000"
+    volumes:
+      - models_data:/app/models:ro   # ML models (read-only at runtime)
+
+  # ── Nginx reverse proxy ──────────────────────────────────────────────────────
+  nginx:
+    image: nginx:1.25-alpine
+    container_name: deepcheck-nginx
+    restart: unless-stopped
+    depends_on:
+      - app
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./docker/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./docker/certs:/etc/nginx/certs:ro   # place your TLS certs here
+      - nginx_logs:/var/log/nginx
+
+volumes:
+  db_data:
+    driver: local
+  models_data:
+    driver: local
+  nginx_logs:
+    driver: local
+
+networks:
+  default:
+    name: deepcheck-net
