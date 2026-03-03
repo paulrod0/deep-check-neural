@@ -336,7 +336,7 @@ export default async function DocumentReportPage({ params }: { params: Promise<{
                     elaScore={doc.ela_score}
                     exifScore={doc.exif_score}
                     noiseScore={doc.noise_score}
-                    alerts={doc.alerts}
+                    alerts={doc.alerts as import('@/lib/imageForensics').ForensicAlert[]}
                     findings={doc.findings ?? {}}
                     documentType={(doc.findings?.docType as import('@/lib/documentClassifier').DocumentType) ?? undefined}
                     cloneRegionsCount={doc.findings?.cloneRegions}
