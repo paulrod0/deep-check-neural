@@ -60,6 +60,8 @@ const securityHeaders = [
 ]
 
 const nextConfig: NextConfig = {
+  // Required for Docker standalone deployment (node server.js)
+  output: 'standalone',
   async headers() {
     return [
       {

@@ -3,9 +3,16 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react'
 import Link from 'next/link'
 import { analyzeImage, riskLevelColor, riskLevelLabel, type ForensicsReport, type RiskLevel } from '@/lib/imageForensics'
+import { classifyDocument, runCloneDetection, renderCloneOverlay, type DocumentClassification, type CloneDetectionResult } from '@/lib/documentClassifier'
 import styles from './page.module.css'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
+
+interface FullReport extends ForensicsReport {
+    docClassification?: DocumentClassification
+    cloneResult?: CloneDetectionResult
+    cloneOverlayUrl?: string
+}
 
 interface RecentAnalysis {
     id: string
@@ -62,8 +69,8 @@ function UploadZone({ onFile }: { onFile: (file: File) => void }) {
 // ─── Progress bar ─────────────────────────────────────────────────────────────
 
 function AnalysisProgress({ step }: { step: string }) {
-    const steps = ['ELA', 'EXIF', 'Ruido', 'Score']
-    const idx = ['ELA', 'EXIF', 'Ruido', 'Score'].indexOf(step)
+    const steps = ['ELA', 'EXIF', 'Ruido', 'Tipo', 'Clonado', 'Score']
+    const idx = steps.indexOf(step)
     return (
         <div className={styles.progressContainer}>
             <div className={styles.scannerLine} />
@@ -105,10 +112,55 @@ function ScoreRing({ score, level }: { score: number; level: RiskLevel }) {
     )
 }
 
+// ─── Doc type badge ───────────────────────────────────────────────────────────
+
+function DocTypeBadge({ classification }: { classification: DocumentClassification }) {
+    return (
+        <div style={{
+            display: 'inline-flex', alignItems: 'center', gap: 8,
+            padding: '6px 14px', borderRadius: 20,
+            background: 'rgba(0,200,155,0.1)', border: '1px solid rgba(0,200,155,0.3)',
+            fontSize: 13, color: '#00c89d', fontWeight: 600,
+        }}>
+            <span>{classification.icon}</span>
+            <span>{classification.label}</span>
+            <span style={{ opacity: 0.6, fontSize: 11 }}>
+                ({Math.round(classification.confidence * 100)}% confianza)
+            </span>
+        </div>
+    )
+}
+
+// ─── Clone detection badge ────────────────────────────────────────────────────
+
+function CloneBadge({ result }: { result: CloneDetectionResult }) {
+    const color = result.riskLevel === 'high_risk' ? '#ff4444'
+        : result.riskLevel === 'suspicious' ? '#ffaa00' : '#00c89d'
+    const label = result.riskLevel === 'high_risk' ? 'Clonado detectado'
+        : result.riskLevel === 'suspicious' ? 'Posible clonado'
+        : 'Sin clonado'
+    return (
+        <div style={{
+            display: 'inline-flex', alignItems: 'center', gap: 8,
+            padding: '6px 14px', borderRadius: 20,
+            background: `${color}18`, border: `1px solid ${color}55`,
+            fontSize: 13, color, fontWeight: 600,
+        }}>
+            <span>🔍</span>
+            <span>{label}</span>
+            {result.suspiciousBlocks.length > 0 && (
+                <span style={{ opacity: 0.7, fontSize: 11 }}>
+                    ({result.suspiciousBlocks.length} pares)
+                </span>
+            )}
+        </div>
+    )
+}
+
 // ─── Result panel ─────────────────────────────────────────────────────────────
 
 function ResultPanel({ report, file, onSave, saving, savedId }: {
-    report: ForensicsReport
+    report: FullReport
     file: File
     onSave: (caseRef: string) => void
     saving: boolean
@@ -127,6 +179,11 @@ function ResultPanel({ report, file, onSave, saving, savedId }: {
                     <p className={styles.resultMeta}>
                         {(file.size / 1024).toFixed(0)} KB &middot; Análisis en {report.analysisMs}ms
                     </p>
+                    {/* Doc type + clone badges */}
+                    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 8 }}>
+                        {report.docClassification && <DocTypeBadge classification={report.docClassification} />}
+                        {report.cloneResult && <CloneBadge result={report.cloneResult} />}
+                    </div>
                 </div>
                 <div className={styles.verdictBadge} style={{ borderColor: color, color }}>
                     {label}
@@ -163,6 +220,16 @@ function ResultPanel({ report, file, onSave, saving, savedId }: {
                     <img src={report.ela.heatmapDataUrl} alt="ELA heatmap" className={styles.elaImg} />
                     <p className={styles.elaHint}>Zonas brillantes = posible edición</p>
                 </div>
+
+                {/* Clone overlay */}
+                {report.cloneOverlayUrl && report.cloneResult && report.cloneResult.suspiciousBlocks.length > 0 && (
+                    <div className={styles.elaPreview}>
+                        <p className={styles.elaLabel}>Clone Map</p>
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img src={report.cloneOverlayUrl} alt="Clone detection overlay" className={styles.elaImg} />
+                        <p className={styles.elaHint}>{report.cloneResult.suspiciousBlocks.length} regiones duplicadas</p>
+                    </div>
+                )}
             </div>
 
             {/* Alerts */}
@@ -269,7 +336,7 @@ function RecentList({ items }: { items: RecentAnalysis[] }) {
 export default function DocumentsPage() {
     const [file, setFile] = useState<File | null>(null)
     const [analysisStep, setAnalysisStep] = useState<string | null>(null)
-    const [report, setReport] = useState<ForensicsReport | null>(null)
+    const [report, setReport] = useState<FullReport | null>(null)
     const [saving, setSaving] = useState(false)
     const [savedId, setSavedId] = useState<string | null>(null)
     const [recent, setRecent] = useState<RecentAnalysis[]>([])
@@ -289,22 +356,43 @@ export default function DocumentsPage() {
         setSavedId(null)
         setError(null)
 
-        // Fake step progression for UX — analysis is fast but multi-phase
+        // Multi-phase analysis with progress feedback
         setAnalysisStep('ELA')
         try {
             const t0 = performance.now()
             const result = await analyzeImage(f)
-            // Ensure at least 600ms of visible progress
             const elapsed = performance.now() - t0
             if (elapsed < 600) await new Promise(r => setTimeout(r, 600 - elapsed))
+
             setAnalysisStep('EXIF')
-            await new Promise(r => setTimeout(r, 200))
-            setAnalysisStep('Ruido')
-            await new Promise(r => setTimeout(r, 200))
-            setAnalysisStep('Score')
             await new Promise(r => setTimeout(r, 150))
+
+            setAnalysisStep('Ruido')
+            await new Promise(r => setTimeout(r, 150))
+
+            setAnalysisStep('Tipo')
+            const dataUrl = await new Promise<string>((res, rej) => {
+                const reader = new FileReader()
+                reader.onload = e => res(e.target!.result as string)
+                reader.onerror = rej
+                reader.readAsDataURL(f)
+            })
+            const img = await new Promise<HTMLImageElement>((res, rej) => {
+                const i = new Image(); i.onload = () => res(i); i.onerror = rej; i.src = dataUrl
+            })
+            const docClassification = classifyDocument(img)
+
+            setAnalysisStep('Clonado')
+            const cloneResult = await runCloneDetection(img)
+            const cloneOverlayUrl = cloneResult.suspiciousBlocks.length > 0
+                ? renderCloneOverlay(img, cloneResult)
+                : undefined
+
+            setAnalysisStep('Score')
+            await new Promise(r => setTimeout(r, 100))
             setAnalysisStep(null)
-            setReport(result)
+
+            setReport({ ...result, docClassification, cloneResult, cloneOverlayUrl })
         } catch (e) {
             setAnalysisStep(null)
             setError(e instanceof Error ? e.message : 'Error analizando la imagen')
@@ -333,6 +421,10 @@ export default function DocumentsPage() {
                         ela:   { score: report.elaScore, suspiciousRegions: report.ela.suspiciousRegions, meanDiff: report.ela.meanDiff },
                         noise: { score: report.noiseScore, uniformityScore: report.noise.uniformityScore, laplacianVariance: report.noise.laplacianVariance },
                         exif:  { flags: report.exif.flags, software: report.exif.software, dateTime: report.exif.dateTime },
+                        docType: report.docClassification?.type ?? null,
+                        docTypeConfidence: report.docClassification?.confidence ?? null,
+                        cloneScore: report.cloneResult?.score ?? null,
+                        cloneRegions: report.cloneResult?.suspiciousBlocks?.length ?? 0,
                     },
                     thumbnailUrl: report.thumbnail,
                     elaImageUrl:  report.ela.heatmapDataUrl,
