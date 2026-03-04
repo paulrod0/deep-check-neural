@@ -8,7 +8,7 @@ export default function Home() {
       <nav className={styles.nav}>
         <div className="container" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div className={styles.logo}>Deep-Check<span style={{ color: 'var(--color-primary)' }}>.</span></div>
-          <a href="#demo" className="btn btn-primary">Book Demo</a>
+          <Link href="/pricing" className="btn btn-primary">Ver planes</Link>
         </div>
       </nav>
 
@@ -131,12 +131,12 @@ export default function Home() {
       {/* Footer / CTA */}
       <footer className={styles.footer}>
         <div className="container">
-          <h2>Standardize Trust.</h2>
-          <p>Join the waitlist for the Enterprise Beta.</p>
-          <form className={styles.form}>
-            <input type="email" placeholder="enter@enterprise.com" className={styles.input} />
-            <button className="btn btn-primary">Get Early Access</button>
-          </form>
+          <h2>Empieza hoy. Sin tarjeta de crédito.</h2>
+          <p>Verifica identidades y analiza documentos en minutos. Plan gratuito disponible.</p>
+          <div style={{ display: 'flex', gap: '1rem', justifyContent: 'center', flexWrap: 'wrap', marginTop: '1.5rem' }}>
+            <Link href="/pricing" className="btn btn-primary">Ver planes y precios →</Link>
+            <Link href="/auth/login" className="btn btn-outline">Iniciar sesión</Link>
+          </div>
 
           {/* Trust badges */}
           <div className={styles.trustBadges}>
