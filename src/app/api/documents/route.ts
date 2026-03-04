@@ -6,6 +6,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { writeAuditLog, extractIP } from '@/lib/auditLog'
+import { getOrgFromSession } from '@/lib/auth'
+import { checkDocLimit, incrementDocUsage } from '@/lib/planLimits'
 
 function getClient() {
     const url = process.env.NEXT_PUBLIC_SUPABASE_URL!
@@ -20,6 +22,18 @@ export async function POST(req: NextRequest) {
     const t0 = Date.now()
     const ip = extractIP(req.headers)
     try {
+        // ── Plan gating ──────────────────────────────────────────────────────
+        const org = await getOrgFromSession(req)
+        if (org) {
+            const { allowed, used, limit } = await checkDocLimit(org.id)
+            if (!allowed) {
+                return NextResponse.json(
+                    { error: 'Límite del plan alcanzado', used, limit, upgradeUrl: '/pricing' },
+                    { status: 403 }
+                )
+            }
+        }
+
         const body = await req.json()
 
         const {
@@ -63,6 +77,8 @@ export async function POST(req: NextRequest) {
             console.error('[api/documents POST]', error.message)
             return NextResponse.json({ error: 'Internal error' }, { status: 500 })
         }
+
+        if (org) void incrementDocUsage(org.id)
 
         void writeAuditLog({
             eventType: 'document_analyzed',

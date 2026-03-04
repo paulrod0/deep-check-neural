@@ -24,10 +24,11 @@ function verifySignature(payload: string, signature: string): boolean {
 
 // ─── Plan mapping (variant IDs → plan name) ───────────────────────────────────
 
-function variantToPlan(variantId: string | number): 'pro' | 'enterprise' {
+function variantToPlan(variantId: string | number): 'starter' | 'pro' | 'enterprise' {
   const vid = String(variantId)
   if (vid === String(process.env.LEMONSQUEEZY_ENTERPRISE_VARIANT_ID)) return 'enterprise'
-  return 'pro' // default all paid variants to pro
+  if (vid === String(process.env.LEMONSQUEEZY_STARTER_VARIANT_ID))    return 'starter'
+  return 'pro' // default all other paid variants to pro
 }
 
 // ─── Webhook handler ──────────────────────────────────────────────────────────

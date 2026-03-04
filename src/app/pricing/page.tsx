@@ -6,7 +6,8 @@ export const metadata: Metadata = {
   description: 'Verificación continua de identidad y forensia documental. Comienza gratis, escala según necesites.',
 }
 
-const PRO_CHECKOUT = process.env.NEXT_PUBLIC_LS_PRO_CHECKOUT_URL ?? '#'
+const STARTER_CHECKOUT = process.env.NEXT_PUBLIC_PADDLE_STARTER_CHECKOUT_URL ?? '#'
+const PRO_CHECKOUT     = process.env.NEXT_PUBLIC_PADDLE_PRO_CHECKOUT_URL     ?? '#'
 const ENTERPRISE_EMAIL = 'pablo@hiumsolutions.com'
 
 const features = {
@@ -19,6 +20,17 @@ const features = {
     { label: 'Webhooks',                             ok: false },
     { label: 'Enrollment biométrico',                ok: false },
     { label: 'Soporte prioritario',                  ok: false },
+    { label: 'Despliegue on-premise',                ok: false },
+  ],
+  starter: [
+    { label: '50 sesiones de verificación / mes',   ok: true  },
+    { label: '20 análisis forenses / mes',           ok: true  },
+    { label: 'Dashboard de gestión',                 ok: true  },
+    { label: 'Certificados PDF verificables',        ok: true  },
+    { label: 'API REST + API key',                   ok: false },
+    { label: 'Webhooks',                             ok: false },
+    { label: 'Enrollment biométrico',                ok: false },
+    { label: 'Soporte por email (72h)',               ok: true  },
     { label: 'Despliegue on-premise',                ok: false },
   ],
   pro: [
@@ -104,9 +116,9 @@ export default function PricingPage() {
       {/* ── Pricing cards ── */}
       <section id="planes" style={{
         display: 'grid',
-        gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
-        gap: '1.5rem',
-        maxWidth: '1100px',
+        gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))',
+        gap: '1.25rem',
+        maxWidth: '1200px',
         margin: '0 auto',
         padding: '0 2rem 5rem',
         alignItems: 'start',
@@ -139,6 +151,37 @@ export default function PricingPage() {
           </Link>
         </div>
 
+        {/* STARTER */}
+        <div style={{
+          background: 'var(--color-surface)',
+          border: '1px solid var(--color-border)',
+          borderRadius: '16px',
+          padding: '2rem',
+        }}>
+          <div style={{ marginBottom: '1.5rem' }}>
+            <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.15em', marginBottom: '0.5rem' }}>Para emprender</div>
+            <div style={{ fontSize: '0.9rem', fontWeight: 700, color: '#fff', marginBottom: '0.25rem' }}>Starter</div>
+            <div style={{ display: 'flex', alignItems: 'baseline', gap: '0.3rem' }}>
+              <span style={{ fontSize: '2.5rem', fontWeight: 800, color: '#fff' }}>29€</span>
+              <span style={{ color: 'var(--color-text-muted)' }}>/mes</span>
+            </div>
+            <div style={{ fontSize: '0.78rem', color: 'var(--color-text-muted)', marginTop: '0.25rem' }}>Facturado mensualmente · IVA incluido</div>
+          </div>
+          <ul style={{ listStyle: 'none', padding: 0, margin: '0 0 2rem', display: 'flex', flexDirection: 'column', gap: '0.7rem' }}>
+            {features.starter.map(f => (
+              <li key={f.label} style={{ display: 'flex', alignItems: 'center', fontSize: '0.88rem', color: f.ok ? '#fff' : 'var(--color-text-muted)' }}>
+                <Check ok={f.ok} />{f.label}
+              </li>
+            ))}
+          </ul>
+          <a href={STARTER_CHECKOUT} className="btn btn-outline" style={{ width: '100%', justifyContent: 'center', display: 'flex' }}>
+            Suscribirse →
+          </a>
+          <p style={{ color: 'var(--color-text-muted)', fontSize: '0.75rem', textAlign: 'center', marginTop: '0.75rem' }}>
+            Cancela cuando quieras · Pago seguro por Paddle
+          </p>
+        </div>
+
         {/* PRO — highlighted */}
         <div style={{
           background: 'var(--color-surface)',
@@ -160,7 +203,7 @@ export default function PricingPage() {
             <div style={{ fontSize: '0.75rem', color: 'var(--color-primary)', textTransform: 'uppercase', letterSpacing: '0.15em', marginBottom: '0.5rem' }}>Para equipos y empresas</div>
             <div style={{ fontSize: '0.9rem', fontWeight: 700, color: '#fff', marginBottom: '0.25rem' }}>Pro</div>
             <div style={{ display: 'flex', alignItems: 'baseline', gap: '0.3rem' }}>
-              <span style={{ fontSize: '2.5rem', fontWeight: 800, color: 'var(--color-primary)' }}>49€</span>
+              <span style={{ fontSize: '2.5rem', fontWeight: 800, color: 'var(--color-primary)' }}>79€</span>
               <span style={{ color: 'var(--color-text-muted)' }}>/mes</span>
             </div>
             <div style={{ fontSize: '0.78rem', color: 'var(--color-text-muted)', marginTop: '0.25rem' }}>Facturado mensualmente · IVA incluido</div>
@@ -176,7 +219,7 @@ export default function PricingPage() {
             Suscribirse →
           </a>
           <p style={{ color: 'var(--color-text-muted)', fontSize: '0.75rem', textAlign: 'center', marginTop: '0.75rem' }}>
-            Cancela cuando quieras · Pago seguro por LemonSqueezy
+            Cancela cuando quieras · Pago seguro por Paddle
           </p>
         </div>
 
@@ -226,7 +269,11 @@ export default function PricingPage() {
           },
           {
             q: '¿Puedo cancelar en cualquier momento?',
-            a: 'Sí. El plan Pro es mensual y puedes cancelar desde el portal de facturación. Mantienes el acceso hasta el final del período pagado.',
+            a: 'Sí. Los planes Starter y Pro son mensuales y puedes cancelar desde el portal de facturación. Mantienes el acceso hasta el final del período pagado.',
+          },
+          {
+            q: '¿Qué diferencia hay entre Starter y Pro?',
+            a: 'El plan Starter incluye 50 sesiones y 20 análisis documentales por mes, ideal para equipos pequeños. El plan Pro es ilimitado e incluye además API REST, webhooks y enrollment biométrico para integraciones avanzadas.',
           },
           {
             q: '¿Qué es el plan Enterprise on-premise?',

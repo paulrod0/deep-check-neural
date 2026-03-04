@@ -9,17 +9,19 @@ const supabase = createClient(
 
 export const PLAN_LIMITS: Record<string, { sessions: number; docs: number; api: boolean }> = {
   free:       { sessions: 10,       docs: 5,        api: false },
+  starter:    { sessions: 50,       docs: 20,       api: false },
   pro:        { sessions: Infinity, docs: Infinity,  api: true  },
   enterprise: { sessions: Infinity, docs: Infinity,  api: true  },
 }
 
 export const PLAN_LABELS: Record<string, string> = {
   free:       'Free',
+  starter:    'Starter',
   pro:        'Pro',
   enterprise: 'Enterprise',
 }
 
-export type PlanTier = 'free' | 'pro' | 'enterprise'
+export type PlanTier = 'free' | 'starter' | 'pro' | 'enterprise'
 
 export interface Organization {
   id:                 string
