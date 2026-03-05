@@ -1,0 +1,513 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CV — Pablo López Rodríguez</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'Inter', sans-serif;
+    background: #fff;
+    color: #1a1a2e;
+    font-size: 9.5pt;
+    line-height: 1.45;
+  }
+
+  .page {
+    display: grid;
+    grid-template-columns: 210px 1fr;
+    min-height: 100vh;
+  }
+
+  /* ── SIDEBAR ── */
+  .sidebar {
+    background: #1a1a2e;
+    color: #e8e8f0;
+    padding: 28px 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 22px;
+  }
+
+  .photo-wrap {
+    display: flex;
+    justify-content: center;
+  }
+
+  .photo-wrap img {
+    width: 120px;
+    height: 120px;
+    border-radius: 50%;
+    object-fit: cover;
+    border: 3px solid #00ff9d;
+  }
+
+  .photo-placeholder {
+    width: 120px;
+    height: 120px;
+    border-radius: 50%;
+    background: #2a2a4e;
+    border: 3px solid #00ff9d;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 36pt;
+    color: #00ff9d;
+  }
+
+  .sidebar-section-title {
+    font-size: 7.5pt;
+    font-weight: 700;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: #00ff9d;
+    margin-bottom: 10px;
+    padding-bottom: 4px;
+    border-bottom: 1px solid #2a2a4e;
+  }
+
+  .contact-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    margin-bottom: 7px;
+    font-size: 8.5pt;
+    color: #b0b0cc;
+  }
+
+  .contact-icon {
+    font-size: 11pt;
+    flex-shrink: 0;
+    margin-top: 1px;
+  }
+
+  .skill-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 5px;
+  }
+
+  .skill-name {
+    font-size: 8pt;
+    color: #b0b0cc;
+    width: 90px;
+    flex-shrink: 0;
+  }
+
+  .skill-bar-bg {
+    flex: 1;
+    height: 4px;
+    background: #2a2a4e;
+    border-radius: 2px;
+  }
+
+  .skill-bar {
+    height: 4px;
+    background: linear-gradient(90deg, #00ff9d, #7000ff);
+    border-radius: 2px;
+  }
+
+  .lang-badge {
+    display: inline-block;
+    background: #2a2a4e;
+    border: 1px solid #00ff9d;
+    color: #00ff9d;
+    font-size: 7.5pt;
+    font-weight: 600;
+    padding: 2px 8px;
+    border-radius: 10px;
+    margin-top: 4px;
+  }
+
+  /* ── MAIN ── */
+  .main {
+    padding: 28px 28px 28px 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+  }
+
+  .name-block {
+    border-bottom: 2px solid #1a1a2e;
+    padding-bottom: 12px;
+  }
+
+  .name-block .firstname {
+    font-size: 28pt;
+    font-weight: 800;
+    color: #1a1a2e;
+    line-height: 1;
+    letter-spacing: -0.02em;
+  }
+
+  .name-block .lastname {
+    font-size: 18pt;
+    font-weight: 400;
+    color: #444;
+    letter-spacing: 0.05em;
+  }
+
+  .name-block .title {
+    font-size: 9pt;
+    color: #00aa66;
+    font-weight: 600;
+    margin-top: 4px;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+  }
+
+  .section-title {
+    font-size: 8pt;
+    font-weight: 700;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: #00aa66;
+    margin-bottom: 10px;
+    padding-bottom: 4px;
+    border-bottom: 1.5px solid #e8e8f0;
+  }
+
+  .profile-text {
+    font-size: 9pt;
+    color: #444;
+    line-height: 1.6;
+  }
+
+  /* Experience */
+  .exp-item {
+    margin-bottom: 14px;
+    padding-left: 12px;
+    border-left: 2.5px solid #00ff9d;
+  }
+
+  .exp-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 3px;
+  }
+
+  .exp-company {
+    font-size: 9.5pt;
+    font-weight: 700;
+    color: #1a1a2e;
+  }
+
+  .exp-dates {
+    font-size: 7.5pt;
+    color: #888;
+    font-weight: 500;
+    white-space: nowrap;
+    margin-left: 8px;
+    flex-shrink: 0;
+  }
+
+  .exp-role {
+    font-size: 8.5pt;
+    color: #00aa66;
+    font-weight: 600;
+    margin-bottom: 4px;
+  }
+
+  .exp-desc {
+    font-size: 8.5pt;
+    color: #444;
+    line-height: 1.55;
+  }
+
+  .exp-desc ul {
+    padding-left: 14px;
+    margin-top: 4px;
+  }
+
+  .exp-desc li {
+    margin-bottom: 2px;
+  }
+
+  /* Studies */
+  .edu-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+
+  .edu-item {
+    background: #f8f8fc;
+    border-left: 2.5px solid #1a1a2e;
+    padding: 6px 10px;
+    border-radius: 0 4px 4px 0;
+  }
+
+  .edu-name {
+    font-size: 8.5pt;
+    font-weight: 600;
+    color: #1a1a2e;
+  }
+
+  .edu-year {
+    font-size: 7.5pt;
+    color: #888;
+    margin-top: 1px;
+  }
+
+  /* Print */
+  @media print {
+    body { font-size: 9pt; }
+    .page { min-height: auto; }
+    @page {
+      size: A4;
+      margin: 0;
+    }
+  }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <!-- ── SIDEBAR ── -->
+  <aside class="sidebar">
+
+    <div class="photo-wrap">
+      <div class="photo-placeholder">P</div>
+    </div>
+
+    <!-- Contacto -->
+    <div>
+      <div class="sidebar-section-title">Contacto</div>
+      <div class="contact-item">
+        <span class="contact-icon">📍</span>
+        <span>Calle 28 de febrero, 9<br>41310 Brenes, Sevilla</span>
+      </div>
+      <div class="contact-item">
+        <span class="contact-icon">✉️</span>
+        <span>Pablo.lprdz@gmail.com</span>
+      </div>
+      <div class="contact-item">
+        <span class="contact-icon">📱</span>
+        <span>+34 650 068 486</span>
+      </div>
+      <div class="contact-item">
+        <span class="contact-icon">💻</span>
+        <span>github.com/paulrod0</span>
+      </div>
+    </div>
+
+    <!-- Tecnologías -->
+    <div>
+      <div class="sidebar-section-title">Tecnologías</div>
+
+      <div class="skill-item">
+        <span class="skill-name">Python</span>
+        <div class="skill-bar-bg"><div class="skill-bar" style="width:90%"></div></div>
+      </div>
+      <div class="skill-item">
+        <span class="skill-name">JavaScript</span>
+        <div class="skill-bar-bg"><div class="skill-bar" style="width:85%"></div></div>
+      </div>
+      <div class="skill-item">
+        <span class="skill-name">Java</span>
+        <div class="skill-bar-bg"><div class="skill-bar" style="width:75%"></div></div>
+      </div>
+      <div class="skill-item">
+        <span class="skill-name">Scala / Spark</span>
+        <div class="skill-bar-bg"><div class="skill-bar" style="width:80%"></div></div>
+      </div>
+      <div class="skill-item">
+        <span class="skill-name">SQL / MySQL</span>
+        <div class="skill-bar-bg"><div class="skill-bar" style="width:85%"></div></div>
+      </div>
+      <div class="skill-item">
+        <span class="skill-name">AWS</span>
+        <div class="skill-bar-bg"><div class="skill-bar" style="width:80%"></div></div>
+      </div>
+      <div class="skill-item">
+        <span class="skill-name">Snowflake</span>
+        <div class="skill-bar-bg"><div class="skill-bar" style="width:75%"></div></div>
+      </div>
+      <div class="skill-item">
+        <span class="skill-name">HTML / CSS</span>
+        <div class="skill-bar-bg"><div class="skill-bar" style="width:85%"></div></div>
+      </div>
+      <div class="skill-item">
+        <span class="skill-name">PowerBI</span>
+        <div class="skill-bar-bg"><div class="skill-bar" style="width:70%"></div></div>
+      </div>
+      <div class="skill-item">
+        <span class="skill-name">Hadoop</span>
+        <div class="skill-bar-bg"><div class="skill-bar" style="width:70%"></div></div>
+      </div>
+      <div class="skill-item">
+        <span class="skill-name">SAP / Salesforce</span>
+        <div class="skill-bar-bg"><div class="skill-bar" style="width:60%"></div></div>
+      </div>
+    </div>
+
+    <!-- Idiomas -->
+    <div>
+      <div class="sidebar-section-title">Idiomas</div>
+      <div class="contact-item" style="flex-direction:column; gap:4px;">
+        <span>🇪🇸 Español — Nativo</span>
+        <span>🇬🇧 Inglés — B2 <span class="lang-badge">Cambridge</span></span>
+      </div>
+    </div>
+
+    <!-- Herramientas -->
+    <div>
+      <div class="sidebar-section-title">Herramientas</div>
+      <div style="color:#b0b0cc; font-size:8pt; line-height:1.8;">
+        ETLs · Active Directory · Windows Server<br>
+        Microsoft Visio · Microsoft Project<br>
+        ServiceNow · Fortinet · Linux<br>
+        SQLite · Git / GitHub · Jenkins<br>
+        Plotly Dash · Seaborn · Excel
+      </div>
+    </div>
+
+  </aside>
+
+  <!-- ── MAIN ── -->
+  <main class="main">
+
+    <!-- Nombre -->
+    <div class="name-block">
+      <div class="firstname">PABLO</div>
+      <div class="lastname">LÓPEZ RODRÍGUEZ</div>
+      <div class="title">Ingeniero de Software &amp; Datos · Fundador de Deep-Check</div>
+    </div>
+
+    <!-- Perfil -->
+    <div>
+      <div class="section-title">Perfil</div>
+      <p class="profile-text">
+        Ingeniero de Software y Datos con más de 4 años de experiencia en desarrollo full-stack,
+        ingeniería de datos a gran escala y liderazgo técnico. Especializado en arquitecturas cloud (AWS),
+        pipelines ETL con Spark/Scala y soluciones de inteligencia artificial aplicadas a procesos empresariales.
+        Fundador de <strong>Deep-Check</strong>, plataforma SaaS de verificación continua de identidad y forensia
+        documental con IA, cumplimiento RGPD nativo y arquitectura privacy-by-design.
+        Enfoque dinámico, proactivo y orientado a resultados en entornos de alta demanda.
+      </p>
+    </div>
+
+    <!-- Experiencia -->
+    <div>
+      <div class="section-title">Experiencia</div>
+
+      <div class="exp-item">
+        <div class="exp-header">
+          <div class="exp-company">Santander Consumer Finance — NFQ</div>
+          <div class="exp-dates">Dic. 2024 – May. 2025</div>
+        </div>
+        <div class="exp-role">Ingeniero de Datos — Gobernanza y Calidad (Openbank)</div>
+        <div class="exp-desc">
+          <ul>
+            <li>Desarrolló y refactorizó herramientas de análisis de datos con Python para el equipo de Data Quality.</li>
+            <li>Construyó un modelo de calidad de datos para garantizar consistencia y precisión en los pipelines.</li>
+            <li>Diseñó y ejecutó procesos ETL con <strong>Spark</strong> para transformación de datos a gran escala.</li>
+            <li>Integró <strong>Snowflake</strong> como almacén de datos cloud; uso de S3 y EC2 para validación de entornos.</li>
+            <li>Implementó CI/CD con <strong>Jenkins</strong> y procesamiento distribuido con <strong>Hadoop</strong>.</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="exp-item">
+        <div class="exp-header">
+          <div class="exp-company">Elmya</div>
+          <div class="exp-dates">Mar. 2024 – Oct. 2024</div>
+        </div>
+        <div class="exp-role">Jefe del Departamento de Desarrollo</div>
+        <div class="exp-desc">
+          Lideró el área tecnológica, dirigiendo proyectos de automatización e IA:
+          <ul>
+            <li><strong>Sistema QR en AutoCAD:</strong> Desarrolló acceso a versiones actualizadas de planos técnicos mediante QR. Implementó funciones de seguridad con hashing en bases de datos.</li>
+            <li><strong>Cálculo de movimiento de tierras:</strong> Programa de optimización para instalación de pilotes con IA, Scala/PySpark para ETL y dashboards interactivos con Plotly Dash.</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="exp-item">
+        <div class="exp-header">
+          <div class="exp-company">Airbus Defense — Accenture</div>
+          <div class="exp-dates">Ene. 2023 – Mar. 2024</div>
+        </div>
+        <div class="exp-role">Big Data Engineer (Departamento Militar y Defensa)</div>
+        <div class="exp-desc">
+          <ul>
+            <li>Análisis y extracción de datos para programa interno de inventario del sector defensa.</li>
+            <li>Implementó <strong>AWS S3, Glue y Athena</strong> para ingesta distribuida y consultas a gran escala.</li>
+            <li>ETL con <strong>Scala y PySpark</strong>; visualización con Seaborn y Plotly Dash; versionado con GitHub y Hadoop.</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="exp-item">
+        <div class="exp-header">
+          <div class="exp-company">Fujitsu</div>
+          <div class="exp-dates">Sep. 2022 – Ene. 2023</div>
+        </div>
+        <div class="exp-role">Ingeniero de Datos &amp; Técnico de Incidencias</div>
+        <div class="exp-desc">
+          <ul>
+            <li>Administrador de base de datos y desarrollador de plataforma web interna de ticketing (MySQL, Java, HTML, CSS, JavaScript).</li>
+            <li>Creó herramientas de monitorización con Python y Bash scripting.</li>
+            <li>Modernizó la arquitectura de datos integrando Snowflake con AWS S3 y Lambda.</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="exp-item">
+        <div class="exp-header">
+          <div class="exp-company">Dupla.ai</div>
+          <div class="exp-dates">Oct. 2020 – Dic. 2021</div>
+        </div>
+        <div class="exp-role">Desarrollador JavaScript</div>
+        <div class="exp-desc">
+          Colaboró en la integración de componentes UI interactivos en plataforma web enfocada en inteligencia artificial.
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Formación -->
+    <div>
+      <div class="section-title">Formación</div>
+      <div class="edu-grid">
+        <div class="edu-item">
+          <div class="edu-name">🎓 Ingeniería de Software</div>
+          <div class="edu-year">2024</div>
+        </div>
+        <div class="edu-item">
+          <div class="edu-name">☁️ IT Support — Google</div>
+          <div class="edu-year">2022 · Certificado</div>
+        </div>
+        <div class="edu-item">
+          <div class="edu-name">🐍 Python</div>
+          <div class="edu-year">Curso certificado</div>
+        </div>
+        <div class="edu-item">
+          <div class="edu-name">☕ Java</div>
+          <div class="edu-year">Curso certificado</div>
+        </div>
+        <div class="edu-item">
+          <div class="edu-name">🌐 HTML · CSS · JavaScript · Spark</div>
+          <div class="edu-year">Curso certificado</div>
+        </div>
+        <div class="edu-item">
+          <div class="edu-name">🎫 Ticketing y Monitorización</div>
+          <div class="edu-year">Curso interno</div>
+        </div>
+        <div class="edu-item">
+          <div class="edu-name">🇬🇧 Inglés B2</div>
+          <div class="edu-year">Cambridge Certificate</div>
+        </div>
+      </div>
+    </div>
+
+  </main>
+</div>
+</body>
+</html>
