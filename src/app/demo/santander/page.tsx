@@ -1,6 +1,35 @@
-import React from 'react'
+'use client'
+import React, { useState, useEffect } from 'react'
 
-export default function SantanderDemoPage() {
+const DEMO_PASSWORD = 'san2026'
+const STORAGE_KEY = 'dc_demo_san'
+
+function PasswordGate({ onUnlock }: { onUnlock: () => void }) {
+  const [input, setInput] = useState('')
+  const [error, setError] = useState(false)
+  const [shake, setShake] = useState(false)
+  const submit = () => {
+    if (input === DEMO_PASSWORD) { localStorage.setItem(STORAGE_KEY, '1'); onUnlock() }
+    else { setError(true); setShake(true); setTimeout(() => setShake(false), 500) }
+  }
+  return (
+    <div style={{ minHeight: '100vh', backgroundColor: '#1a1a1a', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: "'Inter','Segoe UI',Arial,sans-serif" }}>
+      <div style={{ backgroundColor: '#ffffff', borderRadius: '16px', padding: '48px 40px', width: '100%', maxWidth: '400px', boxShadow: '0 24px 64px rgba(0,0,0,0.5)', textAlign: 'center', animation: shake ? 'shake 0.4s' : 'none' }}>
+        <div style={{ width: '56px', height: '56px', backgroundColor: '#EC0000', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 24px', fontSize: '1.8rem' }}>🔒</div>
+        <h1 style={{ fontSize: '1.5rem', fontWeight: 800, color: '#1a1a1a', margin: '0 0 8px' }}>Deep-Check</h1>
+        <p style={{ color: '#666666', fontSize: '0.9rem', margin: '0 0 32px' }}>Demo confidencial · Banco Santander</p>
+        <input type="password" placeholder="Clave de acceso" value={input} onChange={e => { setInput(e.target.value); setError(false) }} onKeyDown={e => e.key === 'Enter' && submit()}
+          style={{ width: '100%', padding: '12px 16px', border: `1.5px solid ${error ? '#ef4444' : '#d1d5db'}`, borderRadius: '8px', fontSize: '1rem', outline: 'none', boxSizing: 'border-box', marginBottom: '8px' }} autoFocus />
+        {error && <p style={{ color: '#ef4444', fontSize: '0.85rem', margin: '0 0 12px' }}>Clave incorrecta</p>}
+        <button onClick={submit} style={{ width: '100%', backgroundColor: '#EC0000', color: '#ffffff', border: 'none', padding: '13px', borderRadius: '8px', fontSize: '1rem', fontWeight: 600, cursor: 'pointer', marginTop: error ? '0' : '12px' }}>Acceder</button>
+        <p style={{ color: '#9ca3af', fontSize: '0.75rem', marginTop: '24px' }}>Acceso restringido · No compartir</p>
+      </div>
+      <style>{`@keyframes shake { 0%,100%{transform:translateX(0)} 20%,60%{transform:translateX(-8px)} 40%,80%{transform:translateX(8px)} }`}</style>
+    </div>
+  )
+}
+
+function SantanderDemoContent() {
   return (
     <div style={{ fontFamily: "'Inter', 'Segoe UI', Arial, sans-serif", margin: 0, padding: 0, backgroundColor: '#ffffff' }}>
 
@@ -66,7 +95,8 @@ export default function SantanderDemoPage() {
               Deep-Check verifica la autenticidad de documentos de identidad, nóminas y extractos bancarios en tiempo real — reduciendo el fraude en onboarding hasta un 87% y acelerando el KYC de días a segundos.
             </p>
             <div style={{ marginTop: '32px', display: 'flex', gap: '16px', flexWrap: 'wrap' }}>
-              <button style={{
+              <a href="/dashboard" style={{
+                display: 'inline-block',
                 backgroundColor: '#EC0000',
                 color: '#ffffff',
                 padding: '14px 32px',
@@ -75,10 +105,12 @@ export default function SantanderDemoPage() {
                 fontSize: '1rem',
                 fontWeight: 600,
                 cursor: 'pointer',
+                textDecoration: 'none',
               }}>
                 Ver demo en vivo
-              </button>
-              <button style={{
+              </a>
+              <a href="mailto:info@hiumsolutions.com?subject=Piloto Santander" style={{
+                display: 'inline-block',
                 backgroundColor: 'transparent',
                 color: '#ffffff',
                 padding: '14px 32px',
@@ -87,9 +119,10 @@ export default function SantanderDemoPage() {
                 fontSize: '1rem',
                 fontWeight: 600,
                 cursor: 'pointer',
+                textDecoration: 'none',
               }}>
                 Solicitar POC
-              </button>
+              </a>
             </div>
           </div>
 
@@ -549,7 +582,7 @@ export default function SantanderDemoPage() {
           Sin coste. Sin compromiso. Con datos reales del Santander en entorno sandbox.
         </p>
         <a
-          href="mailto:pablo@deep-check.com?subject=Piloto Santander"
+          href="mailto:info@hiumsolutions.com?subject=Piloto Santander"
           style={{
             display: 'inline-block',
             backgroundColor: '#ffffff',
@@ -575,4 +608,13 @@ export default function SantanderDemoPage() {
 
     </div>
   )
+}
+
+export default function SantanderDemoPage() {
+  const [unlocked, setUnlocked] = useState(false)
+  useEffect(() => {
+    if (localStorage.getItem(STORAGE_KEY) === '1') setUnlocked(true)
+  }, [])
+  if (!unlocked) return <PasswordGate onUnlock={() => setUnlocked(true)} />
+  return <SantanderDemoContent />
 }

@@ -1,6 +1,35 @@
-import React from 'react'
+'use client'
+import React, { useState, useEffect } from 'react'
 
-export default function BBVADemoPage() {
+const DEMO_PASSWORD = 'bbva2026'
+const STORAGE_KEY = 'dc_demo_bbva'
+
+function PasswordGate({ onUnlock }: { onUnlock: () => void }) {
+  const [input, setInput] = useState('')
+  const [error, setError] = useState(false)
+  const [shake, setShake] = useState(false)
+  const submit = () => {
+    if (input === DEMO_PASSWORD) { localStorage.setItem(STORAGE_KEY, '1'); onUnlock() }
+    else { setError(true); setShake(true); setTimeout(() => setShake(false), 500) }
+  }
+  return (
+    <div style={{ minHeight: '100vh', backgroundColor: '#072146', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: "'Inter','Segoe UI',Arial,sans-serif" }}>
+      <div style={{ backgroundColor: '#ffffff', borderRadius: '16px', padding: '48px 40px', width: '100%', maxWidth: '400px', boxShadow: '0 24px 64px rgba(0,0,0,0.5)', textAlign: 'center', animation: shake ? 'shake 0.4s' : 'none' }}>
+        <div style={{ width: '56px', height: '56px', backgroundColor: '#004481', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 24px', fontSize: '1.8rem' }}>🔒</div>
+        <h1 style={{ fontSize: '1.5rem', fontWeight: 800, color: '#1a2332', margin: '0 0 8px' }}>Deep-Check</h1>
+        <p style={{ color: '#5a6a7e', fontSize: '0.9rem', margin: '0 0 32px' }}>Demo confidencial · BBVA</p>
+        <input type="password" placeholder="Clave de acceso" value={input} onChange={e => { setInput(e.target.value); setError(false) }} onKeyDown={e => e.key === 'Enter' && submit()}
+          style={{ width: '100%', padding: '12px 16px', border: `1.5px solid ${error ? '#ef4444' : '#d1e3f8'}`, borderRadius: '8px', fontSize: '1rem', outline: 'none', boxSizing: 'border-box', marginBottom: '8px' }} autoFocus />
+        {error && <p style={{ color: '#ef4444', fontSize: '0.85rem', margin: '0 0 12px' }}>Clave incorrecta</p>}
+        <button onClick={submit} style={{ width: '100%', backgroundColor: '#004481', color: '#ffffff', border: 'none', padding: '13px', borderRadius: '8px', fontSize: '1rem', fontWeight: 600, cursor: 'pointer', marginTop: error ? '0' : '12px' }}>Acceder</button>
+        <p style={{ color: '#9ca3af', fontSize: '0.75rem', marginTop: '24px' }}>Acceso restringido · No compartir</p>
+      </div>
+      <style>{`@keyframes shake { 0%,100%{transform:translateX(0)} 20%,60%{transform:translateX(-8px)} 40%,80%{transform:translateX(8px)} }`}</style>
+    </div>
+  )
+}
+
+function BBVADemoContent() {
   return (
     <div style={{ fontFamily: "'Segoe UI', system-ui, -apple-system, sans-serif", color: '#1a2332', margin: 0, padding: 0 }}>
 
@@ -38,7 +67,7 @@ export default function BBVADemoPage() {
                 Ver demo en vivo
               </a>
               <a
-                href="mailto:pablo@deep-check.com"
+                href="mailto:info@hiumsolutions.com"
                 style={{ backgroundColor: 'transparent', border: '1.5px solid #ffffff', color: '#ffffff', padding: '14px 32px', borderRadius: '6px', fontWeight: 600, fontSize: '1rem', textDecoration: 'none', display: 'inline-block', cursor: 'pointer' }}
               >
                 Hablar con el equipo
@@ -399,7 +428,7 @@ export default function BBVADemoPage() {
           Sin lock-in · NDA en el primer día · Respuesta en 24h
         </p>
         <a
-          href="mailto:pablo@deep-check.com?subject=Piloto BBVA"
+          href="mailto:info@hiumsolutions.com?subject=Piloto BBVA"
           style={{ backgroundColor: '#5BC4F5', color: '#004481', padding: '18px 48px', fontSize: '1.1rem', borderRadius: '6px', fontWeight: 700, textDecoration: 'none', display: 'inline-block', cursor: 'pointer' }}
         >
           Contactar con el equipo →
@@ -419,4 +448,13 @@ export default function BBVADemoPage() {
 
     </div>
   )
+}
+
+export default function BBVADemoPage() {
+  const [unlocked, setUnlocked] = useState(false)
+  useEffect(() => {
+    if (localStorage.getItem(STORAGE_KEY) === '1') setUnlocked(true)
+  }, [])
+  if (!unlocked) return <PasswordGate onUnlock={() => setUnlocked(true)} />
+  return <BBVADemoContent />
 }
