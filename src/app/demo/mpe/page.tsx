@@ -1,3 +1,4 @@
+'use client'
 /**
  * /src/app/demo/mpe/page.tsx
  *
@@ -5,7 +6,52 @@
  * Pure inline styles. No Tailwind utility classes.
  */
 
-import React from 'react'
+import React, { useState, useEffect } from 'react'
+
+const DEMO_PASSWORD = 'mpe2026'
+const STORAGE_KEY = 'dc_demo_mpe'
+
+function PasswordGate({ onUnlock }: { onUnlock: () => void }) {
+  const [input, setInput] = useState('')
+  const [error, setError] = useState(false)
+  const [shake, setShake] = useState(false)
+
+  const submit = () => {
+    if (input === DEMO_PASSWORD) {
+      localStorage.setItem(STORAGE_KEY, '1')
+      onUnlock()
+    } else {
+      setError(true)
+      setShake(true)
+      setTimeout(() => setShake(false), 500)
+    }
+  }
+
+  return (
+    <div style={{ minHeight: '100vh', backgroundColor: '#0f172a', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: "'Inter','Segoe UI',Arial,sans-serif" }}>
+      <div style={{ backgroundColor: '#ffffff', borderRadius: '16px', padding: '48px 40px', width: '100%', maxWidth: '400px', boxShadow: '0 24px 64px rgba(0,0,0,0.3)', textAlign: 'center', animation: shake ? 'shake 0.4s' : 'none' }}>
+        <div style={{ width: '56px', height: '56px', backgroundColor: '#1e3a8a', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 24px', fontSize: '1.8rem' }}>🔒</div>
+        <h1 style={{ fontSize: '1.5rem', fontWeight: 800, color: '#111827', margin: '0 0 8px' }}>Deep-Check</h1>
+        <p style={{ color: '#6b7280', fontSize: '0.9rem', margin: '0 0 32px' }}>Demo confidencial · Formaciones MPE</p>
+        <input
+          type="password"
+          placeholder="Clave de acceso"
+          value={input}
+          onChange={e => { setInput(e.target.value); setError(false) }}
+          onKeyDown={e => e.key === 'Enter' && submit()}
+          style={{ width: '100%', padding: '12px 16px', border: `1.5px solid ${error ? '#ef4444' : '#d1d5db'}`, borderRadius: '8px', fontSize: '1rem', outline: 'none', boxSizing: 'border-box', marginBottom: '8px' }}
+          autoFocus
+        />
+        {error && <p style={{ color: '#ef4444', fontSize: '0.85rem', margin: '0 0 12px' }}>Clave incorrecta</p>}
+        <button onClick={submit} style={{ width: '100%', backgroundColor: '#2563eb', color: '#ffffff', border: 'none', padding: '13px', borderRadius: '8px', fontSize: '1rem', fontWeight: 600, cursor: 'pointer', marginTop: error ? '0' : '12px' }}>
+          Acceder
+        </button>
+        <p style={{ color: '#9ca3af', fontSize: '0.75rem', marginTop: '24px' }}>Acceso restringido · No compartir</p>
+      </div>
+      <style>{`@keyframes shake { 0%,100%{transform:translateX(0)} 20%,60%{transform:translateX(-8px)} 40%,80%{transform:translateX(8px)} }`}</style>
+    </div>
+  )
+}
 
 /* ─── Styles ────────────────────────────────────────────────────────────────── */
 
@@ -146,7 +192,7 @@ function FraudCard() {
 
 /* ─── Page ──────────────────────────────────────────────────────────────────── */
 
-export default function MPEDemoPage() {
+function MPEDemoContent() {
   /* ── Top bar ──────────────────────────────────────────────────────────────── */
   const topBarStyle: React.CSSProperties = {
     background: C.blueDark,
@@ -700,4 +746,13 @@ export default function MPEDemoPage() {
 
     </div>
   )
+}
+
+export default function MPEDemoPage() {
+  const [unlocked, setUnlocked] = useState(false)
+  useEffect(() => {
+    if (localStorage.getItem(STORAGE_KEY) === '1') setUnlocked(true)
+  }, [])
+  if (!unlocked) return <PasswordGate onUnlock={() => setUnlocked(true)} />
+  return <MPEDemoContent />
 }
