@@ -424,6 +424,7 @@ function FrameTable({
     const next = Math.floor(highlightedIdx / PER_PAGE)
     if (targetPageRef.current !== next) {
       targetPageRef.current = next
+      // eslint-disable-next-line react-compiler/react-compiler
       setPage(next)
     }
   }, [highlightedIdx])
@@ -781,6 +782,7 @@ function VideoPreview({ file }: { file: File }) {
   useEffect(() => {
     const objUrl = URL.createObjectURL(file)
     url.current = objUrl
+    // eslint-disable-next-line react-compiler/react-compiler
     setSrc(objUrl)
     return () => URL.revokeObjectURL(objUrl)
   }, [file])
