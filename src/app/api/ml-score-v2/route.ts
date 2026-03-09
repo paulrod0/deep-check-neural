@@ -417,12 +417,13 @@ export async function POST(req: NextRequest) {
             },
         })
 
-    } catch (err: any) {
-        console.error('[/api/ml-score-v2]', err?.message)
+    } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : String(err)
+        console.error('[/api/ml-score-v2]', msg)
         void writeAuditLog({
             eventType: 'error', endpoint: '/api/ml-score-v2', method: 'POST',
             ip, statusCode: 500, durationMs: Date.now() - t0,
         })
-        return NextResponse.json({ success: false, error: err?.message ?? 'Server error' }, { status: 500 })
+        return NextResponse.json({ success: false, error: msg ?? 'Server error' }, { status: 500 })
     }
 }

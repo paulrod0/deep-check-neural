@@ -669,7 +669,6 @@ async function runEXIF(file: File): Promise<EXIFResult> {
   let score                         = 0
   const flags: string[]             = []
   let software: string | undefined
-  let dateTime: string | undefined
   let gpsPresent                    = false
   let editSoftwareDetected          = false
   let dateTimeInconsistency         = false
@@ -735,7 +734,7 @@ async function runEXIF(file: File): Promise<EXIFResult> {
   // ── Date/time inconsistency ──
   const dto = raw.DateTimeOriginal as string | undefined
   const dtd = raw.DateTime        as string | undefined
-  dateTime  = dto ?? dtd
+  const dateTime = dto ?? dtd
 
   if (dto && dtd && dto !== dtd) {
     const toMs = (s: string) => {

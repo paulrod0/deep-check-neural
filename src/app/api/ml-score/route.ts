@@ -275,11 +275,12 @@ export async function POST(req: NextRequest) {
             keystrokes: totalKeystrokes,
         })
 
-    } catch (err: any) {
-        console.error('[/api/ml-score]', err?.message)
+    } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : String(err)
+        console.error('[/api/ml-score]', msg)
         void writeAuditLog({ eventType: 'error', endpoint: '/api/ml-score', method: 'POST', ip, statusCode: 500, durationMs: Date.now() - t0 })
         return NextResponse.json(
-            { success: false, error: err?.message ?? 'Server error' },
+            { success: false, error: msg ?? 'Server error' },
             { status: 500 }
         )
     }

@@ -89,7 +89,7 @@ export interface ApiKey {
 
 // ─── Row ↔ Type mappers ───────────────────────────────────────────────────────
 
-function rowToAssessment(row: any): Assessment {
+function rowToAssessment(row: Record<string, unknown>): Assessment {
     return {
         id:                   row.id,
         candidateName:        row.candidate_name,
@@ -141,7 +141,7 @@ function assessmentToRow(a: Assessment) {
     }
 }
 
-function rowToProfile(row: any): EnrollmentProfile {
+function rowToProfile(row: Record<string, unknown>): EnrollmentProfile {
     return {
         id:               row.id,
         candidateName:    row.candidate_name,
@@ -167,7 +167,7 @@ function profileToRow(ep: EnrollmentProfile) {
     }
 }
 
-function rowToApiKey(row: any): ApiKey {
+function rowToApiKey(row: Record<string, unknown>): ApiKey {
     return {
         key:         row.key,
         name:        row.name,
