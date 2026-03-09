@@ -78,7 +78,7 @@ export default function Home() {
             <div className={styles.card}>
               <div className={styles.icon}>🤖</div>
               <h3>Code Forensics</h3>
-              <p>Detects if code "appears" instantly (LLM Copy/Paste) or evolves naturally. Calculates Perplexity Scores.</p>
+              <p>Detects if code &quot;appears&quot; instantly (LLM Copy/Paste) or evolves naturally. Calculates Perplexity Scores.</p>
             </div>
           </div>
         </div>

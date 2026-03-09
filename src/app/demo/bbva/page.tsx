@@ -1,5 +1,5 @@
 'use client'
-import React, { useState, useEffect } from 'react'
+import React, { useState } from 'react'
 
 const DEMO_PASSWORD = 'bbva2026'
 const STORAGE_KEY = 'dc_demo_bbva'
@@ -123,7 +123,7 @@ function BBVADemoContent() {
       <div style={{ backgroundColor: '#5BC4F5', padding: '32px 40px' }}>
         <div style={{ maxWidth: '1100px', margin: '0 auto', textAlign: 'center' }}>
           <p style={{ color: '#004481', fontSize: '1.1rem', fontStyle: 'italic', fontWeight: 500, margin: 0, lineHeight: 1.7 }}>
-            "BBVA fue pionero en banca digital. Deep-Check es el siguiente paso: verificación forense de documentos nativamente digital y transparente para el cliente."
+            &quot;BBVA fue pionero en banca digital. Deep-Check es el siguiente paso: verificación forense de documentos nativamente digital y transparente para el cliente.&quot;
           </p>
         </div>
       </div>
@@ -451,10 +451,7 @@ function BBVADemoContent() {
 }
 
 export default function BBVADemoPage() {
-  const [unlocked, setUnlocked] = useState(false)
-  useEffect(() => {
-    if (localStorage.getItem(STORAGE_KEY) === '1') setUnlocked(true)
-  }, [])
+  const [unlocked, setUnlocked] = useState(() => localStorage.getItem(STORAGE_KEY) === '1')
   if (!unlocked) return <PasswordGate onUnlock={() => setUnlocked(true)} />
   return <BBVADemoContent />
 }
