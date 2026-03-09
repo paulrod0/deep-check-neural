@@ -47,7 +47,7 @@ interface EvidenceEntry {
 
 // ─── Session Report ───────────────────────────────────────────────────────────
 
-function SessionReport({ assessment, onRestart }: { assessment: any; onRestart: () => void }) {
+function SessionReport({ assessment, onRestart }: { assessment: Record<string, unknown>; onRestart: () => void }) {
     const scoreColor = assessment.score > 85 ? 'var(--color-primary)' : assessment.score > 60 ? '#ffd700' : '#ff4d4d'
     const statusLabel = assessment.status === 'passed' ? 'PASSED' : assessment.status === 'review' ? 'UNDER REVIEW' : 'FLAGGED'
     const [exportingPDF, setExportingPDF] = React.useState(false)
@@ -282,7 +282,7 @@ export default function InterviewPage() {
     const [alerts, setAlerts]                     = useState<AlertEntry[]>([])
     const [isSaving, setIsSaving]                 = useState(false)
     const [sessionEnded, setSessionEnded]         = useState(false)
-    const [lastAssessment, setLastAssessment]     = useState<any>(null)
+    const [lastAssessment, setLastAssessment]     = useState<Record<string, unknown> | null>(null)
     const [evidence, setEvidence]                 = useState<EvidenceEntry[]>([])
     // GDPR consent gate — session cannot start until candidate consents
     const [biometricConsent, setBiometricConsent] = useState(false)
@@ -713,7 +713,7 @@ export default function InterviewPage() {
             addAlert('Window focus lost — candidate switched application', 'medium', 3, 'Focus Lost')
         }
 
-        const isExtended = (window.screen as any).isExtended || (window.screen.availWidth > window.screen.width * 1.5)
+        const isExtended = (window.screen as Screen & { isExtended?: boolean }).isExtended || (window.screen.availWidth > window.screen.width * 1.5)
         if (isExtended) {
             addAlert('Extended display detected — dual monitor environment', 'low', 0)
         }
@@ -919,9 +919,9 @@ export default function InterviewPage() {
                     >
                         ✓ Acepto — Iniciar sesión verificada
                     </button>
-                    <a href="/" style={{ fontSize: '0.8rem', color: '#444', textDecoration: 'none' }}>
+                    <Link href="/" style={{ fontSize: '0.8rem', color: '#444', textDecoration: 'none' }}>
                         Cancelar y volver
-                    </a>
+                    </Link>
                 </div>
             </div>
         )

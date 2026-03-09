@@ -49,7 +49,7 @@ export default function DashboardPage() {
             try {
                 const res = await fetch('/api/assessments')
                 const data = await res.json()
-                setAllCandidates(data.map((a: any) => ({
+                setAllCandidates(data.map((a: Record<string, unknown>) => ({
                     id: a.id,
                     name: a.candidateName,
                     role: a.role,
@@ -214,7 +214,7 @@ export default function DashboardPage() {
                             {/* Status filter */}
                             <select
                                 value={statusFilter}
-                                onChange={e => setStatusFilter(e.target.value as any)}
+                                onChange={e => setStatusFilter(e.target.value as 'all' | 'passed' | 'review' | 'flagged')}
                                 style={{
                                     background: 'var(--color-surface)',
                                     border: '1px solid var(--color-border)',
