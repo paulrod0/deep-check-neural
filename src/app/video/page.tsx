@@ -418,12 +418,15 @@ function FrameTable({
   const totalPages = Math.ceil(frameResults.length / PER_PAGE)
   const slice = frameResults.slice(page * PER_PAGE, (page + 1) * PER_PAGE)
 
+  const targetPageRef = useRef(0)
   useEffect(() => {
-    if (highlightedIdx !== null) {
-      const targetPage = Math.floor(highlightedIdx / PER_PAGE)
-      if (page !== targetPage) setPage(targetPage)
+    if (highlightedIdx === null) return
+    const next = Math.floor(highlightedIdx / PER_PAGE)
+    if (targetPageRef.current !== next) {
+      targetPageRef.current = next
+      setPage(next)
     }
-  }, [highlightedIdx, page])
+  }, [highlightedIdx])
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -778,9 +781,9 @@ function VideoPreview({ file }: { file: File }) {
   useEffect(() => {
     const objUrl = URL.createObjectURL(file)
     url.current = objUrl
-    if (src !== objUrl) setSrc(objUrl)
+    setSrc(objUrl)
     return () => URL.revokeObjectURL(objUrl)
-  }, [file, src])
+  }, [file])
 
   if (!src) return null
 

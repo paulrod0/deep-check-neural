@@ -9,9 +9,9 @@ import styles from './CodeEditor.module.css'
 // Use the locally installed monaco-editor package and provide an empty worker
 // so the editor initialises in single-threaded mode (no IntelliSense, but the
 // editor renders and keystroke capture works perfectly for biometric analysis).
-if (typeof window !== 'undefined' && !(window as any).__monacoReady) {
-    ;(window as any).__monacoReady = true
-    ;(self as any).MonacoEnvironment = {
+if (typeof window !== 'undefined' && !(window as Window & { __monacoReady?: boolean }).__monacoReady) {
+    ;(window as Window & { __monacoReady?: boolean }).__monacoReady = true
+    ;(self as typeof self & { MonacoEnvironment?: unknown }).MonacoEnvironment = {
         getWorker: (_moduleId: unknown, _label: string): Worker =>
             new Worker(URL.createObjectURL(new Blob([''], { type: 'application/javascript' }))),
     }
