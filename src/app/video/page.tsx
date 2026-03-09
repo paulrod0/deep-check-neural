@@ -421,9 +421,9 @@ function FrameTable({
   useEffect(() => {
     if (highlightedIdx !== null) {
       const targetPage = Math.floor(highlightedIdx / PER_PAGE)
-      setPage(targetPage)
+      if (page !== targetPage) setPage(targetPage)
     }
-  }, [highlightedIdx])
+  }, [highlightedIdx, page])
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -778,9 +778,9 @@ function VideoPreview({ file }: { file: File }) {
   useEffect(() => {
     const objUrl = URL.createObjectURL(file)
     url.current = objUrl
-    setSrc(objUrl)
+    if (src !== objUrl) setSrc(objUrl)
     return () => URL.revokeObjectURL(objUrl)
-  }, [file])
+  }, [file, src])
 
   if (!src) return null
 
@@ -794,7 +794,7 @@ function VideoPreview({ file }: { file: File }) {
       flexDirection: 'column',
       alignItems: 'center',
     }}>
-      {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
+      { }
       <video
         src={src}
         controls
@@ -975,7 +975,7 @@ export default function VideoForensicsPage() {
       setStage('extracting')
       setExtractPct(0)
 
-      let extractedFrames = await extractFrames(
+      const extractedFrames = await extractFrames(
         videoFile,
         cfg.fps,
         cfg.maxFrames,

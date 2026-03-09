@@ -380,7 +380,7 @@ const VerificationCamera = forwardRef<VerificationCameraHandle, VerificationCame
         const gazeHistoryRef   = useRef<GazeDirection[]>([])
         const gazeRatioHistRef = useRef<number[]>([])   // raw ratios for stability (saccade analysis)
         const lastGazeEventRef = useRef<GazeDirection>('center')
-        const sessionStartRef  = useRef<number>(performance.now())
+        const sessionStartRef  = useRef<number>(0)  // set on mount
 
         // Blink tracking
         const blinkStateRef    = useRef<BlinkState>({ closedFrames: 0, isInBlink: false, blinkStart: 0 })
@@ -439,6 +439,9 @@ const VerificationCamera = forwardRef<VerificationCameraHandle, VerificationCame
             getBlinkRate:     () => blinkRateRef.current,
             getFaceMetrics:   () => faceMetricsRef.current,
         }))
+
+        // ── Initialise timing refs on mount ───────────────────────────────────
+        useEffect(() => { sessionStartRef.current = performance.now() }, [])
 
         // ── Load models ───────────────────────────────────────────────────────
         useEffect(() => {

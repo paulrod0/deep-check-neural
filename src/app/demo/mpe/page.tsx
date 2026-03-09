@@ -6,7 +6,7 @@
  * Pure inline styles. No Tailwind utility classes.
  */
 
-import React, { useState, useEffect } from 'react'
+import React, { useState } from 'react'
 
 const DEMO_PASSWORD = 'mpe2026'
 const STORAGE_KEY = 'dc_demo_mpe'
@@ -749,10 +749,7 @@ function MPEDemoContent() {
 }
 
 export default function MPEDemoPage() {
-  const [unlocked, setUnlocked] = useState(false)
-  useEffect(() => {
-    if (localStorage.getItem(STORAGE_KEY) === '1') setUnlocked(true)
-  }, [])
+  const [unlocked, setUnlocked] = useState(() => localStorage.getItem(STORAGE_KEY) === '1')
   if (!unlocked) return <PasswordGate onUnlock={() => setUnlocked(true)} />
   return <MPEDemoContent />
 }
