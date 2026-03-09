@@ -93,7 +93,7 @@ export default function SettingsPage() {
                     <h4 style={{ marginBottom: '16px', fontSize: '0.9rem' }}>Nueva API Key</h4>
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px', marginBottom: '16px' }}>
                         <div>
-                            <label style={{ display: 'block', fontSize: '0.78rem', color: 'var(--color-text-muted)', marginBottom: '6px' }}>Nombre (ej. "Moodle - Universidad XYZ")</label>
+                            <label style={{ display: 'block', fontSize: '0.78rem', color: 'var(--color-text-muted)', marginBottom: '6px' }}>Nombre (ej. &quot;Moodle - Universidad XYZ&quot;)</label>
                             <input
                                 value={newKeyName} onChange={e => setNewKeyName(e.target.value)}
                                 placeholder="Nombre de la integración"
@@ -176,7 +176,7 @@ export default function SettingsPage() {
                         <h3 style={{ marginBottom: '12px' }}>Verification Thresholds</h3>
                         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
                             <div>
-                                <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--color-text-muted)', marginBottom: '8px' }}>Min. "Passed" Score</label>
+                                <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--color-text-muted)', marginBottom: '8px' }}>Min. &quot;Passed&quot; Score</label>
                                 <input type="number" defaultValue={85} style={{ background: 'var(--color-bg)', border: '1px solid var(--color-border)', padding: '10px', borderRadius: '8px', color: 'white', width: '100%' }} />
                             </div>
                             <div>

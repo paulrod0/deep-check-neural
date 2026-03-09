@@ -411,21 +411,21 @@ function SantanderDemoContent() {
               </div>
               <div style={{ color: '#ffffff' }}>{'{'}</div>
               <div style={{ paddingLeft: '16px' }}>
-                <span style={{ color: '#a78bfa' }}>"document"</span>
+                <span style={{ color: '#a78bfa' }}>&quot;document&quot;</span>
                 <span style={{ color: '#ffffff' }}>: </span>
-                <span style={{ color: '#34d399' }}>"base64..."</span>
+                <span style={{ color: '#34d399' }}>&quot;base64...&quot;</span>
                 <span style={{ color: '#ffffff' }}>,</span>
               </div>
               <div style={{ paddingLeft: '16px' }}>
-                <span style={{ color: '#a78bfa' }}>"type"</span>
+                <span style={{ color: '#a78bfa' }}>&quot;type&quot;</span>
                 <span style={{ color: '#ffffff' }}>: </span>
-                <span style={{ color: '#34d399' }}>"nomina"</span>
+                <span style={{ color: '#34d399' }}>&quot;nomina&quot;</span>
                 <span style={{ color: '#ffffff' }}>,</span>
               </div>
               <div style={{ paddingLeft: '16px' }}>
-                <span style={{ color: '#a78bfa' }}>"org_id"</span>
+                <span style={{ color: '#a78bfa' }}>&quot;org_id&quot;</span>
                 <span style={{ color: '#ffffff' }}>: </span>
-                <span style={{ color: '#34d399' }}>"santander-es"</span>
+                <span style={{ color: '#34d399' }}>&quot;santander-es&quot;</span>
               </div>
               <div style={{ color: '#ffffff' }}>{'}'}</div>
               <div style={{ marginTop: '16px' }}>
@@ -433,27 +433,27 @@ function SantanderDemoContent() {
               </div>
               <div style={{ color: '#ffffff' }}>{'{'}</div>
               <div style={{ paddingLeft: '16px' }}>
-                <span style={{ color: '#a78bfa' }}>"verdict"</span>
+                <span style={{ color: '#a78bfa' }}>&quot;verdict&quot;</span>
                 <span style={{ color: '#ffffff' }}>: </span>
-                <span style={{ color: '#34d399' }}>"suspicious"</span>
+                <span style={{ color: '#34d399' }}>&quot;suspicious&quot;</span>
                 <span style={{ color: '#ffffff' }}>,</span>
               </div>
               <div style={{ paddingLeft: '16px' }}>
-                <span style={{ color: '#a78bfa' }}>"confidence"</span>
+                <span style={{ color: '#a78bfa' }}>&quot;confidence&quot;</span>
                 <span style={{ color: '#ffffff' }}>: </span>
                 <span style={{ color: '#fb923c' }}>0.83</span>
                 <span style={{ color: '#ffffff' }}>,</span>
               </div>
               <div style={{ paddingLeft: '16px' }}>
-                <span style={{ color: '#a78bfa' }}>"anomalies"</span>
+                <span style={{ color: '#a78bfa' }}>&quot;anomalies&quot;</span>
                 <span style={{ color: '#ffffff' }}>: [</span>
               </div>
               <div style={{ paddingLeft: '32px' }}>
-                <span style={{ color: '#34d399' }}>"Fuente tipográfica no coincide"</span>
+                <span style={{ color: '#34d399' }}>&quot;Fuente tipográfica no coincide&quot;</span>
                 <span style={{ color: '#ffffff' }}>,</span>
               </div>
               <div style={{ paddingLeft: '32px' }}>
-                <span style={{ color: '#34d399' }}>"Metadatos alterados"</span>
+                <span style={{ color: '#34d399' }}>&quot;Metadatos alterados&quot;</span>
               </div>
               <div style={{ paddingLeft: '16px' }}>
                 <span style={{ color: '#ffffff' }}>]</span>
