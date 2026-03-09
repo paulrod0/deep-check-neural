@@ -135,7 +135,7 @@ export default function VerifyPage({ params }: { params: Promise<{ id: string }>
             const data = await res.json()
             setResult(data)
         } catch {
-            setResult({ valid: false, verified: null, hashMatch: null, integrity: { storedHash: null, expectedHash: '', tampered: false }, session: null as any, verdict: '', error: 'Error de red al verificar el certificado.' })
+            setResult({ valid: false, verified: null, hashMatch: null, integrity: { storedHash: null, expectedHash: '', tampered: false }, session: null as unknown as VerifyResult['session'], verdict: '', error: 'Error de red al verificar el certificado.' })
         } finally {
             setLoading(false)
         }

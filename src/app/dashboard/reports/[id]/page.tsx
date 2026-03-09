@@ -9,7 +9,7 @@ type AssessmentStatus = 'passed' | 'review' | 'flagged'
 
 export default function ReportDetailPage({ params }: { params: Promise<{ id: string }> }) {
     const { id } = React.use(params)
-    const [assessment, setAssessment] = useState<any>(null)
+    const [assessment, setAssessment] = useState<Record<string, unknown> | null>(null)
     const [isLoading, setIsLoading] = useState(true)
     const [actionState, setActionState] = useState<'idle' | 'saving' | 'done'>('idle')
     const [actionLabel, setActionLabel] = useState('')
@@ -135,7 +135,7 @@ export default function ReportDetailPage({ params }: { params: Promise<{ id: str
                             <p style={{ opacity: 0.5, fontSize: '0.9rem' }}>No suspicious incidents recorded.</p>
                         ) : (
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', maxHeight: '320px', overflowY: 'auto' }}>
-                                {assessment.alerts.map((alert: any, i: number) => {
+                                {assessment.alerts.map((alert: Record<string, unknown>, i: number) => {
                                     const msg = typeof alert === 'string' ? alert : alert.message || JSON.stringify(alert)
                                     const sev = typeof alert === 'object' ? alert.severity : 'medium'
                                     const sevColor = sev === 'high' ? '#ff4d4d' : sev === 'medium' ? '#ffd700' : '#888'
@@ -154,7 +154,7 @@ export default function ReportDetailPage({ params }: { params: Promise<{ id: str
                         <section className={styles.tableSection} style={{ padding: '32px' }}>
                             <h3 style={{ marginBottom: '24px' }}>Forensic Evidence ({assessment.evidence.length} captures)</h3>
                             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: '16px' }}>
-                                {assessment.evidence.map((item: any, i: number) => (
+                                {assessment.evidence.map((item: Record<string, unknown>, i: number) => (
                                     <div key={i} style={{ background: 'rgba(255,255,255,0.02)', padding: '10px', borderRadius: '10px', border: '1px solid var(--color-border)' }}>
                                         <div style={{ position: 'relative', width: '100%', aspectRatio: '4/3', overflow: 'hidden', borderRadius: '8px', marginBottom: '10px' }}>
                                             <img src={item.image} alt={item.reason} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />

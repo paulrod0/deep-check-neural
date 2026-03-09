@@ -8,7 +8,7 @@ import styles from './Sidebar.module.css'
 export default function Sidebar() {
     const pathname = usePathname()
 
-    const navItems = [
+    const navItems: Array<{ label: string; href: string; disabled?: boolean }> = [
         { label: 'Overview', href: '/dashboard' },
         { label: 'Assessments', href: '/dashboard/assessments' },
         { label: 'Global Benchmarks', href: '/dashboard/benchmarks' },
@@ -37,7 +37,7 @@ export default function Sidebar() {
                     const isActive = pathname === item.href
                     return (
                         <li key={item.href}>
-                            {(item as any).disabled ? (
+                            {item.disabled ? (
                                 <span className={styles.navItem} style={{ opacity: 0.2, cursor: 'default', fontSize: '0.6rem', letterSpacing: '0.1em' }}>
                                     {item.label}
                                 </span>
