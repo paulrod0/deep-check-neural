@@ -381,7 +381,7 @@ export default async function DocumentReportPage({ params }: { params: Promise<{
                     </div>
 
                     {/* DCT XAI */}
-                    {doc.dct_score > 0 && (
+                    {(
                         <div style={{ padding: '12px 16px', background: doc.dct_score >= 60 ? 'rgba(255,68,68,0.07)' : 'rgba(255,255,255,0.03)', border: `1px solid ${doc.dct_score >= 60 ? 'rgba(255,68,68,0.3)' : 'rgba(255,255,255,0.08)'}`, borderRadius: 8 }}>
                             <p style={{ margin: 0, fontSize: 12, color: doc.dct_score >= 60 ? '#ff4444' : '#888', fontWeight: 700, letterSpacing: 1 }}>ANÁLISIS DCT — DOBLE JPEG</p>
                             <p style={{ margin: '4px 0 0', fontSize: 13, color: '#c0c0c0' }}>
@@ -393,7 +393,7 @@ export default async function DocumentReportPage({ params }: { params: Promise<{
                     )}
 
                     {/* Edge XAI */}
-                    {doc.edge_score > 0 && (
+                    {(
                         <div style={{ padding: '12px 16px', background: doc.edge_score >= 60 ? 'rgba(255,68,68,0.07)' : 'rgba(255,255,255,0.03)', border: `1px solid ${doc.edge_score >= 60 ? 'rgba(255,68,68,0.3)' : 'rgba(255,255,255,0.08)'}`, borderRadius: 8 }}>
                             <p style={{ margin: 0, fontSize: 12, color: doc.edge_score >= 60 ? '#ff4444' : '#888', fontWeight: 700, letterSpacing: 1 }}>ANÁLISIS DE CONTORNOS (EDGE)</p>
                             <p style={{ margin: '4px 0 0', fontSize: 13, color: '#c0c0c0' }}>
@@ -405,7 +405,7 @@ export default async function DocumentReportPage({ params }: { params: Promise<{
                     )}
 
                     {/* Chroma XAI */}
-                    {doc.chroma_score > 0 && (
+                    {(
                         <div style={{ padding: '12px 16px', background: doc.chroma_score >= 60 ? 'rgba(255,68,68,0.07)' : 'rgba(255,255,255,0.03)', border: `1px solid ${doc.chroma_score >= 60 ? 'rgba(255,68,68,0.3)' : 'rgba(255,255,255,0.08)'}`, borderRadius: 8 }}>
                             <p style={{ margin: 0, fontSize: 12, color: doc.chroma_score >= 60 ? '#ff4444' : '#888', fontWeight: 700, letterSpacing: 1 }}>ANÁLISIS CROMÁTICO (CHROMA)</p>
                             <p style={{ margin: '4px 0 0', fontSize: 13, color: '#c0c0c0' }}>
