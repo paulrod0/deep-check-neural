@@ -71,7 +71,7 @@ function UploadZone({ onFile }: { onFile: (file: File) => void }) {
 // ─── Progress bar ─────────────────────────────────────────────────────────────
 
 function AnalysisProgress({ step }: { step: string }) {
-    const steps = ['ELA', 'EXIF', 'Ruido', 'Tipo', 'Clonado', 'Score']
+    const steps = ['ELA', 'EXIF', 'PRNU', 'DCT', 'Chroma', 'Tipo', 'Clonado', 'Score']
     const idx = steps.indexOf(step)
     return (
         <div className={styles.progressContainer}>
@@ -402,8 +402,14 @@ export default function DocumentsPage() {
             setAnalysisStep('EXIF')
             await new Promise(r => setTimeout(r, 150))
 
-            setAnalysisStep('Ruido')
+            setAnalysisStep('PRNU')
             await new Promise(r => setTimeout(r, 150))
+
+            setAnalysisStep('DCT')
+            await new Promise(r => setTimeout(r, 100))
+
+            setAnalysisStep('Chroma')
+            await new Promise(r => setTimeout(r, 100))
 
             setAnalysisStep('Tipo')
             const dataUrl = await new Promise<string>((res, rej) => {
@@ -459,12 +465,18 @@ export default function DocumentsPage() {
                     filename:     file.name,
                     fileSize:     file.size,
                     mimeType:     file.type,
-                    riskScore:    report.riskScore,
-                    riskLevel:    report.riskLevel,
-                    elaScore:     report.elaScore,
-                    exifScore:    report.exifScore,
-                    noiseScore:   report.noiseScore,
-                    alerts:       report.alerts,
+                    riskScore:            report.riskScore,
+                    riskLevel:            report.riskLevel,
+                    elaScore:             report.elaScore,
+                    exifScore:            report.exifScore,
+                    noiseScore:           report.noiseScore,
+                    dctScore:             report.dctScore             ?? 0,
+                    chromaScore:          report.chromaScore          ?? 0,
+                    edgeScore:            report.edgeScore            ?? 0,
+                    manipulationProb:     report.manipulationProb     ?? 0,
+                    confidenceLevel:      report.confidenceLevel      ?? 0,
+                    signalsAboveThresh:   report.signalsAboveThresh   ?? 0,
+                    alerts:               report.alerts,
                     exifData:     report.exif.raw,
                     findings: {
                         ela:   { score: report.elaScore, suspiciousRegions: report.ela.suspiciousRegions, meanDiff: report.ela.meanDiff },
