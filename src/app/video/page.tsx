@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useCallback, useRef, useEffect } from 'react'
+import React, { useState, useCallback, useRef, useEffect, startTransition } from 'react'
 import Link from 'next/link'
 import {
   extractFrames,
@@ -413,21 +413,11 @@ function FrameTable({
   frameResults: FrameAnalysisResult[]
   highlightedIdx: number | null
 }) {
-  const [page, setPage] = useState(0)
+  const [userPage, setUserPage] = useState(0)
   const PER_PAGE = 10
+  const page = highlightedIdx !== null ? Math.floor(highlightedIdx / PER_PAGE) : userPage
   const totalPages = Math.ceil(frameResults.length / PER_PAGE)
   const slice = frameResults.slice(page * PER_PAGE, (page + 1) * PER_PAGE)
-
-  const targetPageRef = useRef(0)
-  useEffect(() => {
-    if (highlightedIdx === null) return
-    const next = Math.floor(highlightedIdx / PER_PAGE)
-    if (targetPageRef.current !== next) {
-      targetPageRef.current = next
-      // eslint-disable-next-line react-compiler/react-compiler
-      setPage(next)
-    }
-  }, [highlightedIdx])
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -501,7 +491,7 @@ function FrameTable({
       {totalPages > 1 && (
         <div style={{ display: 'flex', justifyContent: 'center', gap: 8, marginTop: 8 }}>
           <button
-            onClick={() => setPage(p => Math.max(0, p - 1))}
+            onClick={() => setUserPage(p => Math.max(0, p - 1))}
             disabled={page === 0}
             style={{
               background: 'transparent',
@@ -520,7 +510,7 @@ function FrameTable({
             {page + 1} / {totalPages}
           </span>
           <button
-            onClick={() => setPage(p => Math.min(totalPages - 1, p + 1))}
+            onClick={() => setUserPage(p => Math.min(totalPages - 1, p + 1))}
             disabled={page === totalPages - 1}
             style={{
               background: 'transparent',
@@ -782,8 +772,7 @@ function VideoPreview({ file }: { file: File }) {
   useEffect(() => {
     const objUrl = URL.createObjectURL(file)
     url.current = objUrl
-    // eslint-disable-next-line react-compiler/react-compiler
-    setSrc(objUrl)
+    startTransition(() => setSrc(objUrl))
     return () => URL.revokeObjectURL(objUrl)
   }, [file])
 
