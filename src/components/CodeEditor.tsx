@@ -342,7 +342,7 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(function CodeEd
     const lastKeyRef           = useRef<string>('')
     const activeKeysRef        = useRef<Map<string, number>>(new Map())
     const calibrationPoolRef   = useRef<number[]>([])
-    const calibrationStartRef  = useRef<number>(Date.now())  // for time-based calibration gate
+    const calibrationStartRef  = useRef<number>(0)  // for time-based calibration gate; set on mount
     const charWindowRef        = useRef<number[]>([])
     const recentFlightsRef     = useRef<number[]>([])
     const allFlightsRef        = useRef<number[]>([])    // full session — for fatigue
@@ -369,22 +369,26 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(function CodeEd
     // Fatigue — fire at most every 10s
     const lastFatigueCheckRef  = useRef<number>(0)
 
-    const sessionStartRef = useRef<number>(Date.now())
+    const sessionStartRef = useRef<number>(0)  // set on mount
 
     // Per-session threshold jitter: shift key detection boundaries by a small
     // pseudorandom amount derived from session start time so no two sessions
     // share the exact same detection surface.
-    const _tj = useRef((() => {
-        const seed = Date.now() % 1000 / 1000  // 0..1
-        return {
+    const _tj = useRef({ gapMs: 11, burstCh: 17, zThr: 4.9 })  // defaults; overwritten on mount
+
+    useEffect(() => { baselineRef.current = baseline }, [baseline])
+    useEffect(() => { isCalibratinRef.current = isCalibrating }, [isCalibrating])
+    useEffect(() => {
+        const now = Date.now()
+        calibrationStartRef.current = now
+        sessionStartRef.current = now
+        const seed = now % 1000 / 1000  // 0..1
+        _tj.current = {
             gapMs:   12 - seed * 2,             // 10..12ms
             burstCh: 15 + Math.round(seed * 4), // 15..19
             zThr:    4.5 + seed * 0.8,          // 4.5..5.3σ
         }
-    })())
-
-    useEffect(() => { baselineRef.current = baseline }, [baseline])
-    useEffect(() => { isCalibratinRef.current = isCalibrating }, [isCalibrating])
+    }, [])
 
     // ── Expose session data to parent (for ML inference at end of session) ────
     useImperativeHandle(ref, () => ({

@@ -1,5 +1,5 @@
 'use client'
-import React, { useState, useEffect } from 'react'
+import React, { useState } from 'react'
 
 const DEMO_PASSWORD = 'san2026'
 const STORAGE_KEY = 'dc_demo_san'
@@ -611,10 +611,7 @@ function SantanderDemoContent() {
 }
 
 export default function SantanderDemoPage() {
-  const [unlocked, setUnlocked] = useState(false)
-  useEffect(() => {
-    if (localStorage.getItem(STORAGE_KEY) === '1') setUnlocked(true)
-  }, [])
+  const [unlocked, setUnlocked] = useState(() => localStorage.getItem(STORAGE_KEY) === '1')
   if (!unlocked) return <PasswordGate onUnlock={() => setUnlocked(true)} />
   return <SantanderDemoContent />
 }
