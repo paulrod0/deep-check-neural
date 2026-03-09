@@ -82,11 +82,12 @@ export async function POST(req: NextRequest) {
             expiresAt: ep.expiresAt,
             enrollmentHash,
         })
-    } catch (e: any) {
-        console.error('[/api/enrollment] Error:', e?.message ?? e)
+    } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : String(e)
+        console.error('[/api/enrollment] Error:', msg)
         void writeAuditLog({ eventType: 'error', endpoint: '/api/enrollment', method: 'POST', ip, statusCode: 500, durationMs: Date.now() - t0 })
         return NextResponse.json(
-            { success: false, error: e?.message ?? 'Error interno del servidor' },
+            { success: false, error: msg ?? 'Error interno del servidor' },
             { status: 500 }
         )
     }
