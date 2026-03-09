@@ -18,12 +18,12 @@ interface DocumentAnalysis {
     ela_score: number
     exif_score: number
     noise_score: number
-    dct_score:              number
-    chroma_score:           number
-    edge_score:             number
-    manipulation_prob:      number
-    confidence_level:       number
-    signals_above_thresh:   number
+    dct_score:              number | null
+    chroma_score:           number | null
+    edge_score:             number | null
+    manipulation_prob:      number | null
+    confidence_level:       number | null
+    signals_above_thresh:   number | null
     alerts: {
         code: string
         label: string
@@ -130,9 +130,10 @@ export default async function DocumentReportPage({ params }: { params: Promise<{
     const label = riskLevelLabel(doc.risk_level)
     const date  = new Date(doc.created_at).toLocaleString('es-ES', { dateStyle: 'full', timeStyle: 'short' })
 
-    const highAlerts   = doc.alerts.filter(a => a.severity === 'high')
-    const medAlerts    = doc.alerts.filter(a => a.severity === 'medium')
-    const lowAlerts    = doc.alerts.filter(a => a.severity === 'low')
+    const alerts       = doc.alerts ?? []
+    const highAlerts   = alerts.filter(a => a.severity === 'high')
+    const medAlerts    = alerts.filter(a => a.severity === 'medium')
+    const lowAlerts    = alerts.filter(a => a.severity === 'low')
 
     return (
         <div className={styles.page}>
@@ -190,9 +191,9 @@ export default async function DocumentReportPage({ params }: { params: Promise<{
             <div className={styles.section}>
                 <h2 className={styles.sectionTitle}>Desglose de señales — Veritas Engine v3</h2>
                 <BayesianBanner
-                    prob={doc.manipulation_prob}
-                    confidence={doc.confidence_level}
-                    signals={doc.signals_above_thresh}
+                    prob={doc.manipulation_prob ?? 0}
+                    confidence={doc.confidence_level ?? 0}
+                    signals={doc.signals_above_thresh ?? 0}
                 />
                 <div className={styles.metersGrid}>
                     <ScoreMeter
@@ -228,26 +229,26 @@ export default async function DocumentReportPage({ params }: { params: Promise<{
                     <ScoreMeter
                         icon="📐"
                         label="DCT — Detección de doble JPEG"
-                        score={doc.dct_score}
+                        score={doc.dct_score ?? 0}
                         detail="Analiza periodicidad en coeficientes DCT — indica recompresión de regiones editadas"
                     />
                     <ScoreMeter
                         icon="✂️"
                         label="Edge — Estadísticas de contornos"
-                        score={doc.edge_score}
+                        score={doc.edge_score ?? 0}
                         detail="Divergencia KL de distribución de ángulos Sobel por región — detecta inconsistencias de bordes"
                     />
                     <ScoreMeter
                         icon="🎨"
                         label="Chroma — Análisis cromático"
-                        score={doc.chroma_score}
+                        score={doc.chroma_score ?? 0}
                         detail="Correlación RGB, kurtosis y entropía de saturación — detecta paletas sintéticas"
                     />
                 </div>
             </div>
 
             {/* Alerts */}
-            {doc.alerts.length > 0 && (
+            {alerts.length > 0 && (
                 <div className={styles.section}>
                     <h2 className={styles.sectionTitle}>
                         Hallazgos
@@ -292,12 +293,12 @@ export default async function DocumentReportPage({ params }: { params: Promise<{
             )}
 
             {/* No findings */}
-            {doc.alerts.length === 0 && (
+            {alerts.length === 0 && (
                 <div className={styles.cleanBanner}>
                     <span className={styles.cleanIcon}>✓</span>
                     <div>
                         <p className={styles.cleanTitle}>Imagen sin indicios de manipulación</p>
-                        <p className={styles.cleanDetail}>Las 6 señales del Veritas Engine v3 (ELA, EXIF, PRNU, DCT, Edge, Chroma) no detectaron anomalías. Probabilidad de manipulación Bayesiana: {Math.round(doc.manipulation_prob * 100)}%.</p>
+                        <p className={styles.cleanDetail}>Las 6 señales del Veritas Engine v3 (ELA, EXIF, PRNU, DCT, Edge, Chroma) no detectaron anomalías. Probabilidad de manipulación Bayesiana: {Math.round((doc.manipulation_prob ?? 0) * 100)}%.</p>
                     </div>
                 </div>
             )}
@@ -381,40 +382,34 @@ export default async function DocumentReportPage({ params }: { params: Promise<{
                     </div>
 
                     {/* DCT XAI */}
-                    {(
-                        <div style={{ padding: '12px 16px', background: doc.dct_score >= 60 ? 'rgba(255,68,68,0.07)' : 'rgba(255,255,255,0.03)', border: `1px solid ${doc.dct_score >= 60 ? 'rgba(255,68,68,0.3)' : 'rgba(255,255,255,0.08)'}`, borderRadius: 8 }}>
-                            <p style={{ margin: 0, fontSize: 12, color: doc.dct_score >= 60 ? '#ff4444' : '#888', fontWeight: 700, letterSpacing: 1 }}>ANÁLISIS DCT — DOBLE JPEG</p>
-                            <p style={{ margin: '4px 0 0', fontSize: 13, color: '#c0c0c0' }}>
-                                {doc.dct_score >= 60
-                                    ? `Puntuación alta (${doc.dct_score}/100): se detectó periodicidad anómala en los coeficientes DCT. Las regiones editadas en un editor externo y re-guardadas como JPEG generan una "firma fantasma" de la cuantización previa, visible en el espectro de frecuencias.`
-                                    : `Puntuación baja (${doc.dct_score}/100): el espectro DCT es consistente con una sola pasada de compresión JPEG.`}
-                            </p>
-                        </div>
-                    )}
+                    <div style={{ padding: '12px 16px', background: (doc.dct_score ?? 0) >= 60 ? 'rgba(255,68,68,0.07)' : 'rgba(255,255,255,0.03)', border: `1px solid ${(doc.dct_score ?? 0) >= 60 ? 'rgba(255,68,68,0.3)' : 'rgba(255,255,255,0.08)'}`, borderRadius: 8 }}>
+                        <p style={{ margin: 0, fontSize: 12, color: (doc.dct_score ?? 0) >= 60 ? '#ff4444' : '#888', fontWeight: 700, letterSpacing: 1 }}>ANÁLISIS DCT — DOBLE JPEG</p>
+                        <p style={{ margin: '4px 0 0', fontSize: 13, color: '#c0c0c0' }}>
+                            {(doc.dct_score ?? 0) >= 60
+                                ? `Puntuación alta (${doc.dct_score ?? 0}/100): se detectó periodicidad anómala en los coeficientes DCT. Las regiones editadas en un editor externo y re-guardadas como JPEG generan una "firma fantasma" de la cuantización previa, visible en el espectro de frecuencias.`
+                                : `Puntuación baja (${doc.dct_score ?? 0}/100): el espectro DCT es consistente con una sola pasada de compresión JPEG.`}
+                        </p>
+                    </div>
 
                     {/* Edge XAI */}
-                    {(
-                        <div style={{ padding: '12px 16px', background: doc.edge_score >= 60 ? 'rgba(255,68,68,0.07)' : 'rgba(255,255,255,0.03)', border: `1px solid ${doc.edge_score >= 60 ? 'rgba(255,68,68,0.3)' : 'rgba(255,255,255,0.08)'}`, borderRadius: 8 }}>
-                            <p style={{ margin: 0, fontSize: 12, color: doc.edge_score >= 60 ? '#ff4444' : '#888', fontWeight: 700, letterSpacing: 1 }}>ANÁLISIS DE CONTORNOS (EDGE)</p>
-                            <p style={{ margin: '4px 0 0', fontSize: 13, color: '#c0c0c0' }}>
-                                {doc.edge_score >= 60
-                                    ? `Puntuación alta (${doc.edge_score}/100): divergencia KL elevada entre la distribución de ángulos de contorno de distintas regiones. En imágenes auténticas los bordes siguen patrones estadísticos coherentes; las zonas pegadas presentan firmas angulares distintas.`
-                                    : `Puntuación baja (${doc.edge_score}/100): la distribución de ángulos de contorno es homogénea en toda la imagen.`}
-                            </p>
-                        </div>
-                    )}
+                    <div style={{ padding: '12px 16px', background: (doc.edge_score ?? 0) >= 60 ? 'rgba(255,68,68,0.07)' : 'rgba(255,255,255,0.03)', border: `1px solid ${(doc.edge_score ?? 0) >= 60 ? 'rgba(255,68,68,0.3)' : 'rgba(255,255,255,0.08)'}`, borderRadius: 8 }}>
+                        <p style={{ margin: 0, fontSize: 12, color: (doc.edge_score ?? 0) >= 60 ? '#ff4444' : '#888', fontWeight: 700, letterSpacing: 1 }}>ANÁLISIS DE CONTORNOS (EDGE)</p>
+                        <p style={{ margin: '4px 0 0', fontSize: 13, color: '#c0c0c0' }}>
+                            {(doc.edge_score ?? 0) >= 60
+                                ? `Puntuación alta (${doc.edge_score ?? 0}/100): divergencia KL elevada entre la distribución de ángulos de contorno de distintas regiones. En imágenes auténticas los bordes siguen patrones estadísticos coherentes; las zonas pegadas presentan firmas angulares distintas.`
+                                : `Puntuación baja (${doc.edge_score ?? 0}/100): la distribución de ángulos de contorno es homogénea en toda la imagen.`}
+                        </p>
+                    </div>
 
                     {/* Chroma XAI */}
-                    {(
-                        <div style={{ padding: '12px 16px', background: doc.chroma_score >= 60 ? 'rgba(255,68,68,0.07)' : 'rgba(255,255,255,0.03)', border: `1px solid ${doc.chroma_score >= 60 ? 'rgba(255,68,68,0.3)' : 'rgba(255,255,255,0.08)'}`, borderRadius: 8 }}>
-                            <p style={{ margin: 0, fontSize: 12, color: doc.chroma_score >= 60 ? '#ff4444' : '#888', fontWeight: 700, letterSpacing: 1 }}>ANÁLISIS CROMÁTICO (CHROMA)</p>
-                            <p style={{ margin: '4px 0 0', fontSize: 13, color: '#c0c0c0' }}>
-                                {doc.chroma_score >= 60
-                                    ? `Puntuación alta (${doc.chroma_score}/100): anomalías en la correlación entre canales RGB, kurtosis elevada o entropía de saturación inusual. Las imágenes generadas por IA o con regiones sintéticas muestran paletas de color estadísticamente distintas a las fotografías reales.`
-                                    : `Puntuación baja (${doc.chroma_score}/100): la distribución cromática es consistente con una imagen fotográfica auténtica.`}
-                            </p>
-                        </div>
-                    )}
+                    <div style={{ padding: '12px 16px', background: (doc.chroma_score ?? 0) >= 60 ? 'rgba(255,68,68,0.07)' : 'rgba(255,255,255,0.03)', border: `1px solid ${(doc.chroma_score ?? 0) >= 60 ? 'rgba(255,68,68,0.3)' : 'rgba(255,255,255,0.08)'}`, borderRadius: 8 }}>
+                        <p style={{ margin: 0, fontSize: 12, color: (doc.chroma_score ?? 0) >= 60 ? '#ff4444' : '#888', fontWeight: 700, letterSpacing: 1 }}>ANÁLISIS CROMÁTICO (CHROMA)</p>
+                        <p style={{ margin: '4px 0 0', fontSize: 13, color: '#c0c0c0' }}>
+                            {(doc.chroma_score ?? 0) >= 60
+                                ? `Puntuación alta (${doc.chroma_score ?? 0}/100): anomalías en la correlación entre canales RGB, kurtosis elevada o entropía de saturación inusual. Las imágenes generadas por IA o con regiones sintéticas muestran paletas de color estadísticamente distintas a las fotografías reales.`
+                                : `Puntuación baja (${doc.chroma_score ?? 0}/100): la distribución cromática es consistente con una imagen fotográfica auténtica.`}
+                        </p>
+                    </div>
                 </div>
             </div>
 
