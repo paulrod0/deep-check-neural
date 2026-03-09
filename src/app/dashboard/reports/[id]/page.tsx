@@ -131,12 +131,12 @@ export default function ReportDetailPage({ params }: { params: Promise<{ id: str
 
                     {/* Incident timeline */}
                     <section className={styles.tableSection} style={{ padding: '32px' }}>
-                        <h3 style={{ marginBottom: '24px' }}>Incident Timeline ({assessment.alerts?.length ?? 0} events)</h3>
-                        {!assessment.alerts?.length ? (
+                        <h3 style={{ marginBottom: '24px' }}>Incident Timeline ({(assessment.alerts as unknown[])?.length ?? 0} events)</h3>
+                        {!(assessment.alerts as unknown[])?.length ? (
                             <p style={{ opacity: 0.5, fontSize: '0.9rem' }}>No suspicious incidents recorded.</p>
                         ) : (
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', maxHeight: '320px', overflowY: 'auto' }}>
-                                {assessment.alerts.map((alert: Record<string, unknown>, i: number) => {
+                                {(assessment.alerts as unknown[]).map((alert: Record<string, unknown>, i: number) => {
                                     const msg = typeof alert === 'string' ? alert : alert.message || JSON.stringify(alert)
                                     const sev = typeof alert === 'object' ? alert.severity : 'medium'
                                     const sevColor = sev === 'high' ? '#ff4d4d' : sev === 'medium' ? '#ffd700' : '#888'
@@ -246,8 +246,8 @@ export default function ReportDetailPage({ params }: { params: Promise<{ id: str
                             </div>
                             <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                                 <span>Incidents</span>
-                                <span style={{ color: assessment.alerts?.length > 0 ? '#ff4d4d' : 'var(--color-primary)' }}>
-                                    {assessment.alerts?.length ?? 0}
+                                <span style={{ color: (assessment.alerts as unknown[])?.length > 0 ? '#ff4d4d' : 'var(--color-primary)' }}>
+                                    {(assessment.alerts as unknown[])?.length ?? 0}
                                 </span>
                             </div>
                             <div style={{ display: 'flex', justifyContent: 'space-between' }}>
