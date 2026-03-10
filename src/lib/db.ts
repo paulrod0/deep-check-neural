@@ -91,27 +91,27 @@ export interface ApiKey {
 
 function rowToAssessment(row: Record<string, unknown>): Assessment {
     return {
-        id:                   row.id,
-        candidateName:        row.candidate_name,
-        role:                 row.role,
-        date:                 typeof row.date === 'string' ? row.date : new Date(row.date).toISOString().split('T')[0],
-        score:                row.score,
-        status:               row.status,
-        alerts:               Array.isArray(row.alerts) ? row.alerts : (row.alerts ?? []),
-        evidence:             Array.isArray(row.evidence) ? row.evidence : (row.evidence ?? []),
-        lastEvent:            row.last_event,
-        livenessScore:        row.liveness_score ?? undefined,
-        aiRisk:               row.ai_risk ?? undefined,
-        keystrokeCount:       row.keystroke_count ?? undefined,
-        tabSwitchCount:       row.tab_switch_count ?? undefined,
-        gazeEventCount:       row.gaze_event_count ?? undefined,
-        autoFlagged:          row.auto_flagged ?? undefined,
-        enrollmentProfileId:  row.enrollment_profile_id ?? undefined,
-        identityMatchScore:   row.identity_match_score ?? undefined,
-        sessionHash:          row.session_hash ?? undefined,
-        certificateIssued:    row.certificate_issued ?? undefined,
-        externalRef:          row.external_ref ?? undefined,
-        webhookDelivered:     row.webhook_delivered ?? undefined,
+        id:                   row.id as string,
+        candidateName:        row.candidate_name as string,
+        role:                 row.role as string,
+        date:                 typeof row.date === 'string' ? row.date : new Date(row.date as string | number).toISOString().split('T')[0],
+        score:                row.score as number,
+        status:               row.status as Assessment['status'],
+        alerts:               Array.isArray(row.alerts) ? row.alerts as string[] : [],
+        evidence:             Array.isArray(row.evidence) ? row.evidence as Assessment['evidence'] : [],
+        lastEvent:            (row.last_event as string | undefined) ?? '',
+        livenessScore:        row.liveness_score != null ? row.liveness_score as number : undefined,
+        aiRisk:               row.ai_risk != null ? row.ai_risk as number : undefined,
+        keystrokeCount:       row.keystroke_count != null ? row.keystroke_count as number : undefined,
+        tabSwitchCount:       row.tab_switch_count != null ? row.tab_switch_count as number : undefined,
+        gazeEventCount:       row.gaze_event_count != null ? row.gaze_event_count as number : undefined,
+        autoFlagged:          row.auto_flagged != null ? row.auto_flagged as boolean : undefined,
+        enrollmentProfileId:  row.enrollment_profile_id != null ? row.enrollment_profile_id as string : undefined,
+        identityMatchScore:   row.identity_match_score != null ? row.identity_match_score as number : undefined,
+        sessionHash:          row.session_hash != null ? row.session_hash as string : undefined,
+        certificateIssued:    row.certificate_issued != null ? row.certificate_issued as boolean : undefined,
+        externalRef:          row.external_ref != null ? row.external_ref as string : undefined,
+        webhookDelivered:     row.webhook_delivered != null ? row.webhook_delivered as boolean : undefined,
     }
 }
 
@@ -143,14 +143,14 @@ function assessmentToRow(a: Assessment) {
 
 function rowToProfile(row: Record<string, unknown>): EnrollmentProfile {
     return {
-        id:               row.id,
-        candidateName:    row.candidate_name,
-        candidateEmail:   row.candidate_email,
+        id:               row.id as string,
+        candidateName:    row.candidate_name as string,
+        candidateEmail:   row.candidate_email as string,
         context:          row.context as EnrollmentContext,
-        createdAt:        row.created_at,
-        expiresAt:        row.expires_at,
+        createdAt:        row.created_at as string,
+        expiresAt:        row.expires_at as string,
         profile:          row.profile as KeystrokeProfile,
-        enrollmentHash:   row.enrollment_hash,
+        enrollmentHash:   row.enrollment_hash as string,
     }
 }
 
@@ -169,13 +169,13 @@ function profileToRow(ep: EnrollmentProfile) {
 
 function rowToApiKey(row: Record<string, unknown>): ApiKey {
     return {
-        key:         row.key,
-        name:        row.name,
-        createdAt:   row.created_at,
-        lastUsed:    row.last_used ?? undefined,
-        active:      row.active,
-        permissions: row.permissions ?? [],
-        webhookUrl:  row.webhook_url ?? undefined,
+        key:         row.key as string,
+        name:        row.name as string,
+        createdAt:   row.created_at as string,
+        lastUsed:    row.last_used != null ? row.last_used as string : undefined,
+        active:      row.active as boolean,
+        permissions: (row.permissions as ApiKey['permissions'] | undefined) ?? [],
+        webhookUrl:  row.webhook_url != null ? row.webhook_url as string : undefined,
     }
 }
 

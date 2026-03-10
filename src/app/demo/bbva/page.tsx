@@ -451,7 +451,7 @@ function BBVADemoContent() {
 }
 
 export default function BBVADemoPage() {
-  const [unlocked, setUnlocked] = useState(() => localStorage.getItem(STORAGE_KEY) === '1')
+  const [unlocked, setUnlocked] = useState(() => typeof window !== 'undefined' && localStorage.getItem(STORAGE_KEY) === '1')
   if (!unlocked) return <PasswordGate onUnlock={() => setUnlocked(true)} />
   return <BBVADemoContent />
 }

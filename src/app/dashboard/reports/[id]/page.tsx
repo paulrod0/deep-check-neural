@@ -136,9 +136,10 @@ export default function ReportDetailPage({ params }: { params: Promise<{ id: str
                             <p style={{ opacity: 0.5, fontSize: '0.9rem' }}>No suspicious incidents recorded.</p>
                         ) : (
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', maxHeight: '320px', overflowY: 'auto' }}>
-                                {(assessment.alerts as unknown[]).map((alert: Record<string, unknown>, i: number) => {
-                                    const msg = typeof alert === 'string' ? alert : alert.message || JSON.stringify(alert)
-                                    const sev = typeof alert === 'object' ? alert.severity : 'medium'
+                                {(assessment.alerts as unknown[]).map((alert: unknown, i: number) => {
+                                    const alertObj = typeof alert === 'object' && alert !== null ? alert as Record<string, unknown> : {}
+                                    const msg = String(typeof alert === 'string' ? alert : (alertObj.message ?? JSON.stringify(alert)))
+                                    const sev = String(typeof alert === 'object' ? (alertObj.severity ?? 'medium') : 'medium')
                                     const sevColor = sev === 'high' ? '#ff4d4d' : sev === 'medium' ? '#ffd700' : '#888'
                                     return (
                                         <div key={i} style={{ padding: '14px 16px', background: 'rgba(255,77,77,0.04)', borderLeft: `4px solid ${sevColor}`, borderRadius: '4px', fontSize: '0.875rem' }}>
@@ -151,21 +152,22 @@ export default function ReportDetailPage({ params }: { params: Promise<{ id: str
                     </section>
 
                     {/* Forensic evidence gallery */}
-                    {assessment.evidence?.length > 0 && (
+                    {(assessment.evidence as unknown[])?.length > 0 && (
                         <section className={styles.tableSection} style={{ padding: '32px' }}>
-                            <h3 style={{ marginBottom: '24px' }}>Forensic Evidence ({assessment.evidence.length} captures)</h3>
+                            <h3 style={{ marginBottom: '24px' }}>Forensic Evidence ({(assessment.evidence as unknown[]).length} captures)</h3>
                             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: '16px' }}>
-                                {assessment.evidence.map((item: Record<string, unknown>, i: number) => (
+                                {(assessment.evidence as unknown[]).map((item: unknown, i: number) => {
+                                    const ev = item as Record<string, unknown>; return (
                                     <div key={i} style={{ background: 'rgba(255,255,255,0.02)', padding: '10px', borderRadius: '10px', border: '1px solid var(--color-border)' }}>
                                         <div style={{ position: 'relative', width: '100%', aspectRatio: '4/3', overflow: 'hidden', borderRadius: '8px', marginBottom: '10px' }}>
-                                            <img src={item.image} alt={item.reason} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                            <img src={ev.image as string} alt={ev.reason as string} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                                             <div style={{ position: 'absolute', top: '6px', right: '6px', background: 'rgba(0,0,0,0.7)', padding: '2px 6px', borderRadius: '4px', fontSize: '0.65rem' }}>
-                                                {item.timestamp}
+                                                {ev.timestamp as string}
                                             </div>
                                         </div>
-                                        <div style={{ fontSize: '0.75rem', fontWeight: 600, color: '#ff4d4d' }}>{item.reason}</div>
+                                        <div style={{ fontSize: '0.75rem', fontWeight: 600, color: '#ff4d4d' }}>{ev.reason as string}</div>
                                     </div>
-                                ))}
+                                )})}
                             </div>
                         </section>
                     )}
@@ -251,12 +253,12 @@ export default function ReportDetailPage({ params }: { params: Promise<{ id: str
                                 </span>
                             </div>
                             <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                                <span>Evidence</span><span style={{ color: 'white' }}>{assessment.evidence?.length ?? 0} captures</span>
+                                <span>Evidence</span><span style={{ color: 'white' }}>{(assessment.evidence as unknown[])?.length ?? 0} captures</span>
                             </div>
                             <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                                 <span>Last Event</span>
                             </div>
-                            <div style={{ fontSize: '0.75rem', color: '#aaa', fontStyle: 'italic' }}>{assessment.lastEvent || '—'}</div>
+                            <div style={{ fontSize: '0.75rem', color: '#aaa', fontStyle: 'italic' }}>{(assessment.lastEvent as string) || '—'}</div>
                         </div>
                     </div>
                 </aside>
