@@ -45,9 +45,45 @@ interface EvidenceEntry {
     reason: string
 }
 
+interface Assessment {
+    id: string
+    candidateName: string
+    role: string
+    date: string
+    score: number
+    status: 'passed' | 'review' | 'flagged'
+    alerts: AlertEntry[]
+    evidence: EvidenceEntry[]
+    lastEvent: string
+    livenessScore: number
+    aiRisk: number
+    keystrokeCount: number
+    tabSwitchCount: number
+    gazeEventCount: number
+    autoFlagged: boolean
+    sessionHash: string
+    certificateIssued: boolean
+    identityMatchScore?: number
+    blinkRate: number
+    blinkCount: number
+    avgBlinkDuration: number
+    headSymmetryScore: number
+    microMovementScore: number
+    gazeStabilityScore: number
+    faceBrightnessDelta: number
+    lightingChallengesPassed: number
+    lightingChallengesFailed: number
+    saccadeScore: number
+    blinkEdgeScore: number
+    ocoloManualScore: number
+    antiCheatFailures: number
+    enrollmentProfileId?: string
+    mlFlags?: unknown
+}
+
 // ─── Session Report ───────────────────────────────────────────────────────────
 
-function SessionReport({ assessment, onRestart }: { assessment: Record<string, unknown>; onRestart: () => void }) {
+function SessionReport({ assessment, onRestart }: { assessment: Assessment; onRestart: () => void }) {
     const scoreColor = assessment.score > 85 ? 'var(--color-primary)' : assessment.score > 60 ? '#ffd700' : '#ff4d4d'
     const statusLabel = assessment.status === 'passed' ? 'PASSED' : assessment.status === 'review' ? 'UNDER REVIEW' : 'FLAGGED'
     const [exportingPDF, setExportingPDF] = React.useState(false)
@@ -282,7 +318,7 @@ export default function InterviewPage() {
     const [alerts, setAlerts]                     = useState<AlertEntry[]>([])
     const [isSaving, setIsSaving]                 = useState(false)
     const [sessionEnded, setSessionEnded]         = useState(false)
-    const [lastAssessment, setLastAssessment]     = useState<Record<string, unknown> | null>(null)
+    const [lastAssessment, setLastAssessment]     = useState<Assessment | null>(null)
     const [evidence, setEvidence]                 = useState<EvidenceEntry[]>([])
     // GDPR consent gate — session cannot start until candidate consents
     const [biometricConsent, setBiometricConsent] = useState(false)
@@ -742,7 +778,7 @@ export default function InterviewPage() {
         const finalScore = Math.max(trustScoreRef.current, Math.max(0, 100 - _wp))
 
         const autoFlagged   = tabSwitches >= 2
-        const status        = autoFlagged ? 'flagged' : finalScore > 85 ? 'passed' : finalScore > 60 ? 'review' : 'flagged'
+        const status: 'passed' | 'review' | 'flagged' = autoFlagged ? 'flagged' : finalScore > 85 ? 'passed' : finalScore > 60 ? 'review' : 'flagged'
 
         const sessionId = Math.random().toString(36).substr(2, 9)
         const sessionDate = new Date().toISOString().split('T')[0]

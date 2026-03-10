@@ -10,7 +10,8 @@ export default function InvestmentDeck() {
     useEffect(() => {
         const handleScroll = (e: Event) => {
             const slideHeight = window.innerHeight
-            const index = Math.round(e.target.scrollTop / slideHeight)
+            const target = e.target as HTMLElement | null
+            const index = Math.round((target?.scrollTop ?? 0) / slideHeight)
             setActiveSlide(index)
         }
 
