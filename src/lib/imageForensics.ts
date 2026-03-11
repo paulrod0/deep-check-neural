@@ -104,6 +104,7 @@ export interface ForensicsReport {
   manipulationProb?:   number   // 0–1 Bayesian posterior
   confidenceLevel?:    number   // 0–1 (how many signals agreed)
   signalsAboveThresh?: number   // count of signals flagging manipulation
+  docPixelScore?:      number   // S7 — document pixel analysis (0–100, high = synthetic/vector)
 }
 
 // ── Internal types ────────────────────────────────────────────────────────────
@@ -163,6 +164,13 @@ interface ChromaAnalysis {
   satEntropy:     number   // Shannon entropy of saturation histogram
   channelKurt:    number   // mean excess kurtosis across R,G,B
   score:          number   // 0–100 (high → AI / synthetic)
+}
+
+interface DocPixelAnalysis {
+  noiseFloorScore:   number   // Canva export σ≈0 vs scan σ≈5-15 → high score = vector/synthetic
+  edgeSharpScore:    number   // 1px-sharp edges (vector) vs 3-5px natural edges
+  bimodalScore:      number   // tight bimodal (vector) vs broad (scan)
+  score:             number   // 0–100 combined (high = document looks synthetic/vector-generated)
 }
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -845,21 +853,150 @@ function runChromaAnalysis(wi: WorkingImage): ChromaAnalysis {
   return { rgCorrelation, rbCorrelation, gbCorrelation, avgCorrelation, satEntropy, channelKurt, score }
 }
 
+// ── Stage 2·S7: Document Pixel Analysis (for high-luminance PNGs) ────────────
+
+/**
+ * Detects vector-rendered or design-tool documents (Canva, Illustrator exports)
+ * vs. authentic scanned documents.
+ *
+ * Three sub-signals:
+ *   1. Noise floor — background pixel σ: authentic scan σ≈2–8, Canva export σ≈0–0.5
+ *   2. Edge sharpness — sub-pixel-sharp edges (1px) → vector; natural edges 3–5px wide
+ *   3. Bimodal tightness — histogram peak width (FWHM): tight → vector, broad → scan
+ *
+ * Only meaningful for document-like PNGs (high mean luminance, text present).
+ */
+function runDocumentPixelAnalysis(wi: WorkingImage): DocPixelAnalysis {
+  const { lum, rgba, w, h } = wi
+  const n = w * h
+
+  // ── 1. Noise floor in background regions (lum > 0.85) ──────────────────────
+  const BG_THRESHOLD = 0.85
+  const PATCH_SIZE   = 16
+  const patchSigmas: number[] = []
+
+  for (let py = 0; py + PATCH_SIZE <= h; py += PATCH_SIZE) {
+    for (let px = 0; px + PATCH_SIZE <= w; px += PATCH_SIZE) {
+      // Check if patch is background (mean lum > BG_THRESHOLD)
+      let patchMean = 0
+      for (let y = py; y < py + PATCH_SIZE; y++) {
+        for (let x = px; x < px + PATCH_SIZE; x++) {
+          patchMean += lum[y * w + x]
+        }
+      }
+      patchMean /= (PATCH_SIZE * PATCH_SIZE)
+      if (patchMean < BG_THRESHOLD) continue
+
+      // Compute σ of 8-bit values in background patch
+      let sum = 0, sumSq = 0, cnt = 0
+      for (let y = py; y < py + PATCH_SIZE; y++) {
+        for (let x = px; x < px + PATCH_SIZE; x++) {
+          const idx = y * w + x
+          const v = Math.round(lum[idx] * 255)  // 8-bit
+          sum += v; sumSq += v * v; cnt++
+        }
+      }
+      if (cnt < 4) continue
+      const mean = sum / cnt
+      const sigma = Math.sqrt(Math.max(0, sumSq / cnt - mean * mean))
+      patchSigmas.push(sigma)
+    }
+  }
+
+  // Normalise: authentic scan σ ≈ 5–15, Canva σ ≈ 0–0.5
+  // Score: high when σ is very low (vector/synthetic)
+  let noiseFloorScore = 0
+  if (patchSigmas.length > 0) {
+    const medianSigma = patchSigmas.slice().sort((a, b) => a - b)[Math.floor(patchSigmas.length / 2)]
+    // 0 = authentic (σ≥5), 100 = synthetic (σ≈0)
+    noiseFloorScore = clamp(Math.round((1 - Math.min(1, medianSigma / 5)) * 100), 0, 100)
+  }
+
+  // ── 2. Edge sharpness: measure transition width at strong Sobel edges ────────
+  // We measure the width (in pixels) of luminance transitions at detected edges.
+  // Vector/Canva: 1px-wide transitions (mathematically sharp)
+  // Authentic scan: 3–5px wide due to optics + paper texture
+  const SOBEL_THRESH = 0.15
+  const transitionWidths: number[] = []
+
+  for (let y = 2; y < h - 2; y++) {
+    for (let x = 2; x < w - 2; x++) {
+      const idx = y * w + x
+      const gx = lum[idx + 1] - lum[idx - 1]
+      const gy = lum[(y + 1) * w + x] - lum[(y - 1) * w + x]
+      const mag = Math.sqrt(gx * gx + gy * gy)
+      if (mag < SOBEL_THRESH) continue
+
+      // Measure transition width horizontally
+      let width = 1
+      const lo = lum[idx - 1], hi = lum[idx + 1]
+      if (Math.abs(hi - lo) > 0.1) {
+        // Count how many pixels span the transition (max scan window ±3)
+        for (let dx = 2; dx <= 3; dx++) {
+          const prev = x - dx >= 0 ? lum[y * w + x - dx] : lo
+          const next = x + dx < w  ? lum[y * w + x + dx] : hi
+          if (Math.abs(next - prev) > Math.abs(hi - lo) * 0.9) width = dx * 2
+        }
+      }
+      transitionWidths.push(width)
+    }
+  }
+
+  // 1px-sharp edges → vector; 3–5px → natural
+  let edgeSharpScore = 0
+  if (transitionWidths.length > 20) {
+    const sharpCount = transitionWidths.filter(tw => tw <= 1).length
+    const sharpRatio = sharpCount / transitionWidths.length
+    edgeSharpScore = clamp(Math.round(sharpRatio * 100), 0, 100)
+  }
+
+  // ── 3. Bimodal tightness — pixel histogram peak analysis ──────────────────
+  // Build a 256-bin luminance histogram (8-bit values)
+  const hist = new Float32Array(256)
+  for (let i = 0; i < n; i++) {
+    hist[Math.round(lum[i] * 255)]++
+  }
+  // Find two main peaks (background ≈ 220-255, text ≈ 0-50)
+  // Background peak: max in 200-255 range
+  let bgPeakIdx = 200, bgPeakVal = 0
+  for (let i = 200; i < 256; i++) {
+    if (hist[i] > bgPeakVal) { bgPeakVal = hist[i]; bgPeakIdx = i }
+  }
+
+  // Measure FWHM of background peak (Canva: std ≈ 0-3, Scan: std ≈ 8-20)
+  const halfBg = bgPeakVal / 2
+  let bgLo = bgPeakIdx, bgHi = bgPeakIdx
+  while (bgLo > 150 && hist[bgLo] > halfBg) bgLo--
+  while (bgHi < 256 && hist[bgHi] > halfBg) bgHi++
+  const bgFWHM = Math.max(1, bgHi - bgLo)
+
+  // Tight peak (FWHM ≤ 5) → Canva/vector; broad peak (≥ 20) → authentic scan
+  const bimodalScore = clamp(Math.round((1 - Math.min(1, bgFWHM / 20)) * 100), 0, 100)
+
+  // ── Combined score ──────────────────────────────────────────────────────────
+  const score = clamp(Math.round(
+    noiseFloorScore * 0.45 +
+    edgeSharpScore  * 0.25 +
+    bimodalScore    * 0.30
+  ), 0, 100)
+
+  return { noiseFloorScore, edgeSharpScore, bimodalScore, score }
+}
+
 // ── Stage 3: False-Positive Prevention ───────────────────────────────────────
 
 interface ContextFlags {
-  isScreenshot:     boolean   // PNG, or software hints at screenshot
-  isLowQualityJpeg: boolean   // estimated quality < 70
-  isUniformColor:   boolean   // near-solid-color image (charts, icons)
-  dominantLuma:     number    // mean luminance (useful for white-document detection)
+  isScreenshot:       boolean   // true only for ACTUAL screenshots (not document PNGs)
+  isDocumentPng:      boolean   // white-background PNG with text (invoice, ID, etc.)
+  isActualScreenshot: boolean   // UI screenshot (not a document PNG)
+  isLowQualityJpeg:   boolean   // estimated quality < 70
+  isUniformColor:     boolean   // near-solid-color image (charts, icons)
+  dominantLuma:       number    // mean luminance (useful for white-document detection)
 }
 
 function detectContext(wi: WorkingImage, exif: EXIFResult): ContextFlags {
   const { lum, rgba, w, h } = wi
   const n = w * h
-
-  // Screenshot detection
-  const isScreenshot = wi.isPng || (exif.isSuspectedScreenshot ?? false)
 
   // Low-quality JPEG detection (cannot reliably detect from pixels alone;
   // use EXIF estimate if available, else default to unknown=false)
@@ -871,8 +1008,22 @@ function detectContext(wi: WorkingImage, exif: EXIFResult): ContextFlags {
   const lumStat       = computeStats(lum)
   const isUniformColor = lumStat.std < 0.06
 
+  // lumStat is already computed for isUniformColor
+  const isDocumentPng = wi.isPng
+    && lumStat.mean > 0.72        // mostly white background
+    && lumStat.std  > 0.08        // has text (bimodal, not uniform)
+
+  // Actual screenshot: UI screenshot cue in EXIF OR isPng that is NOT a document
+  const isActualScreenshot = (wi.isPng || (exif.isSuspectedScreenshot ?? false))
+    && !isDocumentPng
+
+  // Legacy compat field
+  const isScreenshot = isActualScreenshot
+
   return {
     isScreenshot,
+    isDocumentPng,
+    isActualScreenshot,
     isLowQualityJpeg,
     isUniformColor,
     dominantLuma: lumStat.mean,
@@ -906,12 +1057,14 @@ function applyContextAdjustments(
   let exifScore   = exif.score
   let chromaScore = chroma.score
 
-  // Screenshots and PNGs: exempt from ELA (never compressed → expected near-zero ELA)
-  // and from noise analysis (expected uniform noise for screen renders)
-  if (ctx.isScreenshot) {
-    elaScore    = Math.min(elaScore, 20)
-    noiseScore  = Math.min(noiseScore, 25)
-    exifScore   = Math.min(exifScore, 15)
+  // Only suppress for ACTUAL UI screenshots (not document PNGs)
+  if (ctx.isActualScreenshot) {
+    elaScore   = Math.min(elaScore, 20)
+    noiseScore = Math.min(noiseScore, 25)
+    // NEVER cap EXIF when edit software (Canva, Photoshop) is explicitly detected
+    if (!exif.editSoftwareDetected) {
+      exifScore = Math.min(exifScore, 15)
+    }
   }
 
   // Low-quality JPEG: ELA thresholds should be relaxed (multiple re-saves expected)
@@ -948,12 +1101,13 @@ function applyContextAdjustments(
  * Conservative choices (wide std) prevent single-signal false positives.
  */
 const SIGNAL_MODELS = {
-  ela:    { μa: 18,  σa: 12,  μm: 55,  σm: 22 },
-  dct:    { μa: 12,  σa: 10,  μm: 45,  σm: 22 },
-  noise:  { μa: 18,  σa: 13,  μm: 55,  σm: 22 },
-  edge:   { μa: 22,  σa: 14,  μm: 52,  σm: 22 },
-  exif:   { μa: 10,  σa:  8,  μm: 42,  σm: 25 },
-  chroma: { μa: 14,  σa: 12,  μm: 52,  σm: 22 },
+  ela:      { μa: 18,  σa: 12,  μm: 55,  σm: 22 },
+  dct:      { μa: 12,  σa: 10,  μm: 45,  σm: 22 },
+  noise:    { μa: 18,  σa: 13,  μm: 55,  σm: 22 },
+  edge:     { μa: 22,  σa: 14,  μm: 52,  σm: 22 },
+  exif:     { μa: 10,  σa:  8,  μm: 42,  σm: 25 },
+  chroma:   { μa: 14,  σa: 12,  μm: 52,  σm: 22 },
+  docPixel: { μa:  8,  σa:  7,  μm: 60,  σm: 25 },
 }
 
 interface BayesianVerdict {
@@ -967,14 +1121,15 @@ interface BayesianVerdict {
 }
 
 function runBayesianCombiner(scores: {
-  elaScore:    number
-  dctScore:    number
-  noiseScore:  number
-  edgeScore:   number
-  exifScore:   number
-  chromaScore: number
+  elaScore:       number
+  dctScore:       number
+  noiseScore:     number
+  edgeScore:      number
+  exifScore:      number
+  chromaScore:    number
+  docPixelScore?: number
 }): BayesianVerdict {
-  const { elaScore, dctScore, noiseScore, edgeScore, exifScore, chromaScore } = scores
+  const { elaScore, dctScore, noiseScore, edgeScore, exifScore, chromaScore, docPixelScore } = scores
 
   // Compute per-signal log-likelihood ratios
   const llrEla    = gaussianLLR(elaScore,    SIGNAL_MODELS.ela.μa,    SIGNAL_MODELS.ela.σa,    SIGNAL_MODELS.ela.μm,    SIGNAL_MODELS.ela.σm)
@@ -984,8 +1139,15 @@ function runBayesianCombiner(scores: {
   const llrExif   = gaussianLLR(exifScore,   SIGNAL_MODELS.exif.μa,   SIGNAL_MODELS.exif.σa,   SIGNAL_MODELS.exif.μm,   SIGNAL_MODELS.exif.σm)
   const llrChroma = gaussianLLR(chromaScore, SIGNAL_MODELS.chroma.μa, SIGNAL_MODELS.chroma.σa, SIGNAL_MODELS.chroma.μm, SIGNAL_MODELS.chroma.σm)
 
-  const signalLLRs = { ela: llrEla, dct: llrDct, noise: llrNoise, edge: llrEdge, exif: llrExif, chroma: llrChroma }
-  const totalLLR   = llrEla + llrDct + llrNoise + llrEdge + llrExif + llrChroma
+  // Add docPixel if present
+  const llrDocPixel = docPixelScore !== undefined
+    ? gaussianLLR(docPixelScore, SIGNAL_MODELS.docPixel.μa, SIGNAL_MODELS.docPixel.σa, SIGNAL_MODELS.docPixel.μm, SIGNAL_MODELS.docPixel.σm)
+    : 0
+
+  const signalLLRs = { ela: llrEla, dct: llrDct, noise: llrNoise, edge: llrEdge, exif: llrExif, chroma: llrChroma,
+    ...(docPixelScore !== undefined ? { docPixel: llrDocPixel } : {})
+  }
+  const totalLLR   = llrEla + llrDct + llrNoise + llrEdge + llrExif + llrChroma + llrDocPixel
 
   // Count signals that individually point toward manipulation (LLR > 0)
   const signalsAboveThresh = Object.values(signalLLRs).filter(v => v > 0.3).length
@@ -994,12 +1156,13 @@ function runBayesianCombiner(scores: {
   const manipulationProb = bayesianPosterior(totalLLR)
   const verdictIsManip   = manipulationProb > 0.5
 
+  const totalSignals = docPixelScore !== undefined ? 7 : 6
   let agreingCount = 0
   for (const [, llr] of Object.entries(signalLLRs)) {
     const signalSaysManip = llr > 0
     if (signalSaysManip === verdictIsManip) agreingCount++
   }
-  const confidenceLevel = clamp01(agreingCount / 6)
+  const confidenceLevel = clamp01(agreingCount / totalSignals)
 
   // ── False-positive gate ──────────────────────────────────────────────────
   // Even if Bayesian posterior is high, we require at least 2 signals
@@ -1044,11 +1207,11 @@ function buildAlerts(
   const alerts: ForensicAlert[] = []
 
   // ── ELA alerts ──
-  if (ela.aiSignature && !ctx.isScreenshot) {
+  if (ela.aiSignature) {
     alerts.push({
-      code: 'ela_ai_signature', label: 'Sin historial de compresión JPEG (imagen sintética)',
-      detail: 'La curva ELA multi-calidad es plana y próxima a cero en todos los niveles de compresión. Las imágenes generadas por IA (Stable Diffusion, Midjourney, DALL-E) muestran este patrón al no haber sido nunca comprimidas.',
-      severity: 'high', module: 'ela',
+      code: 'ela_ai_signature', label: 'Sin historial de compresión JPEG (imagen sintética o render vectorial)',
+      detail: 'La curva ELA multi-calidad es plana y próxima a cero en todos los niveles de compresión. Imágenes generadas por IA (Stable Diffusion, Midjourney, DALL-E) o exportadas desde herramientas vectoriales (Canva, Illustrator) muestran este patrón al no haber sido nunca comprimidas como JPEG.',
+      severity: ctx.isDocumentPng ? 'medium' : 'high', module: 'ela',
     })
   } else if (adj.elaScore >= 60) {
     alerts.push({
@@ -1065,7 +1228,7 @@ function buildAlerts(
   }
 
   // Monotonicity violation (separate from overall score)
-  if (ela.monotonicViolations >= 2 && !ela.aiSignature && !ctx.isScreenshot) {
+  if (ela.monotonicViolations >= 2 && !ela.aiSignature && !ctx.isActualScreenshot) {
     alerts.push({
       code: 'ela_nonmonotonic', label: 'Curva ELA no monótona',
       detail: `La variación del error de compresión entre calidades JPEG no sigue el patrón esperado en una imagen auténtica. ${ela.monotonicViolations} inversiones detectadas en la curva ELA.`,
@@ -1159,7 +1322,7 @@ function buildAlerts(
   if (bayes.riskScore >= 65 && bayes.signalsAboveThresh >= 3) {
     alerts.push({
       code: 'meta_convergence', label: 'Múltiples señales forenses convergentes',
-      detail: `${bayes.signalsAboveThresh} de 6 señales independientes apuntan a manipulación (probabilidad bayesiana: ${(bayes.manipulationProb * 100).toFixed(1)}%). La convergencia de señales independientes aumenta significativamente la fiabilidad del veredicto.`,
+      detail: `${bayes.signalsAboveThresh} señales independientes apuntan a manipulación (probabilidad bayesiana: ${(bayes.manipulationProb * 100).toFixed(1)}%). La convergencia de señales independientes aumenta significativamente la fiabilidad del veredicto.`,
       severity: 'high', module: 'meta',
     })
   }
@@ -1209,8 +1372,14 @@ export async function analyzeImage(file: File): Promise<ForensicsReport> {
     elaResult, dctResult, noiseResult, edgeResult, exifResult, chromaResult, ctx
   )
 
+  // S7: Document pixel analysis (after context, before combiner)
+  const docPixelResult = ctx.isDocumentPng ? runDocumentPixelAnalysis(wi) : null
+
   // Stage 4: Bayesian combination (Veritas)
-  const bayes = runBayesianCombiner(adjusted)
+  const bayes = runBayesianCombiner({
+    ...adjusted,
+    docPixelScore: docPixelResult?.score,
+  })
 
   // Stage 5: Alerts
   const alerts = buildAlerts(
@@ -1258,6 +1427,7 @@ export async function analyzeImage(file: File): Promise<ForensicsReport> {
     manipulationProb:   bayes.manipulationProb,
     confidenceLevel:    bayes.confidenceLevel,
     signalsAboveThresh: bayes.signalsAboveThresh,
+    docPixelScore:      docPixelResult?.score,
   }
 }
 
