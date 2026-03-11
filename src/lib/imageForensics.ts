@@ -1147,7 +1147,8 @@ function runBayesianCombiner(scores: {
   const signalLLRs = { ela: llrEla, dct: llrDct, noise: llrNoise, edge: llrEdge, exif: llrExif, chroma: llrChroma,
     ...(docPixelScore !== undefined ? { docPixel: llrDocPixel } : {})
   }
-  const totalLLR   = llrEla + llrDct + llrNoise + llrEdge + llrExif + llrChroma + llrDocPixel
+  const totalLLR   = llrEla + llrDct + llrNoise + llrEdge + llrExif + llrChroma
+    + (docPixelScore !== undefined ? llrDocPixel : 0)
 
   // Count signals that individually point toward manipulation (LLR > 0)
   const signalsAboveThresh = Object.values(signalLLRs).filter(v => v > 0.3).length
@@ -1246,21 +1247,21 @@ function buildAlerts(
   }
 
   // ── Noise / PRNU alerts ──
-  if (noise.residualCorrelation < 0.03 && !ctx.isScreenshot && !ctx.isUniformColor) {
+  if (noise.residualCorrelation < 0.03 && !ctx.isActualScreenshot && !ctx.isUniformColor) {
     alerts.push({
       code: 'noise_ai_residual', label: 'Residuo de ruido con firma sintética',
       detail: `La correlación inter-regional del residuo de denoising es ${noise.residualCorrelation.toFixed(3)} (esperado > 0.10 en fotografías reales). Las imágenes de IA generativa no presentan huella PRNU de sensor.`,
       severity: 'high', module: 'noise',
     })
   }
-  if (noise.correlationVariance > 0.05 && !ctx.isScreenshot) {
+  if (noise.correlationVariance > 0.05 && !ctx.isActualScreenshot) {
     alerts.push({
       code: 'noise_splice_residual', label: 'Inconsistencia en ruido entre regiones',
       detail: 'La varianza de la correlación del residuo de ruido entre regiones es elevada, lo que puede indicar que distintas partes de la imagen provienen de fuentes diferentes (imagen compuesta/montaje).',
       severity: 'medium', module: 'noise',
     })
   }
-  if (noise.waveletConsistency < 0.30 && !ctx.isScreenshot && !ctx.isUniformColor) {
+  if (noise.waveletConsistency < 0.30 && !ctx.isActualScreenshot && !ctx.isUniformColor) {
     alerts.push({
       code: 'noise_wavelet', label: 'Subbanda wavelet HH anómalamente uniforme',
       detail: `La energía en la subbanda de detalle diagonal (Haar HH) es inusualmente uniforme entre regiones (consistencia: ${noise.waveletConsistency.toFixed(2)}). En imágenes reales la textura de alta frecuencia varía según el contenido.`,
@@ -1299,7 +1300,7 @@ function buildAlerts(
       severity: 'high', module: 'exif',
     })
   }
-  if (exif.flags.includes('no_exif_data') && !ctx.isScreenshot) {
+  if (exif.flags.includes('no_exif_data') && !ctx.isActualScreenshot) {
     alerts.push({
       code: 'exif_missing', label: 'Sin metadatos EXIF',
       detail: 'La imagen JPEG no contiene metadatos de cámara. Los dispositivos móviles y cámaras siempre generan EXIF. Posible imagen sintética, editada o screenshot renombrado.',
