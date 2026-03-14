@@ -1,0 +1,19 @@
+{
+  "model_name": "DeepfakeCNN",
+  "version": "1.0",
+  "created": "2026-03-14",
+  "input_shape": [1, 90, 59],
+  "output_shape": [1, 3],
+  "classes": ["real_human", "deepfake_video", "photo_replay"],
+  "features": 59,
+  "seq_len": 90,
+  "params": 159555,
+  "val_accuracy": 1.0,
+  "training": {
+    "epochs_run": 16,
+    "best_epoch": 4,
+    "train_size": 20000,
+    "val_size": 4000
+  },
+  "description": "Temporal CNN (Conv1D + BiGRU + Attention) for deepfake detection using MediaPipe FaceLandmarker blendshapes, iris positions, and depth features"
+}

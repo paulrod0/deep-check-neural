@@ -542,8 +542,24 @@ export default function InterviewPage() {
                 // Gaze-cursor correlation confirmed — small recovery for false oculo desync
                 recoverTrust(4)
                 break
+            case 'blendshape_anomaly':
+                acFailedTotalRef.current++
+                addAlert(
+                    `Bilateral blendshape anomaly — unnatural facial symmetry detected. ${event.detail ?? ''}`,
+                    'medium', 10
+                )
+                break
+            case 'deepfake_cnn_alert':
+                acFailedTotalRef.current++
+                // CNN model flagged: significant penalty, high severity
+                addAlert(
+                    `Deepfake CNN alert — ${event.detail ?? 'model flagged video feed'}`,
+                    'high', 25
+                )
+                setLiveMetrics(prev => ({ ...prev, aiRisk: Math.min(100, prev.aiRisk + 25) }))
+                break
         }
-    }, [addAlert, recoverTrust])
+    }, [addAlert, recoverTrust, setLiveMetrics])
 
     // ── Lighting Challenge scheduler ──────────────────────────────────────────
     // Fires a random bright flash every 45–90 seconds after session start.
