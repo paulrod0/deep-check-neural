@@ -551,12 +551,41 @@ export default function InterviewPage() {
                 break
             case 'deepfake_cnn_alert':
                 acFailedTotalRef.current++
-                // CNN model flagged: significant penalty, high severity
                 addAlert(
                     `Deepfake CNN alert — ${event.detail ?? 'model flagged video feed'}`,
                     'high', 25
                 )
                 setLiveMetrics(prev => ({ ...prev, aiRisk: Math.min(100, prev.aiRisk + 25) }))
+                break
+
+            case 'facs_violation':
+                acFailedTotalRef.current++
+                addAlert(
+                    `Biomechanical anomaly — ${event.detail ?? 'FACS constraint violated'}`,
+                    'medium', 15
+                )
+                setLiveMetrics(prev => ({ ...prev, aiRisk: Math.min(100, prev.aiRisk + 15) }))
+                break
+
+            case 'rppg_decoupling':
+                acFailedTotalRef.current++
+                addAlert(
+                    `Physiological signal absent — ${event.detail ?? 'rPPG-motion coupling not detected'}`,
+                    'high', 20
+                )
+                setLiveMetrics(prev => ({ ...prev, aiRisk: Math.min(100, prev.aiRisk + 20) }))
+                break
+
+            case 'veritas_alert':
+                acFailedTotalRef.current++
+                addAlert(
+                    event.detail ?? `Veritas Engine: synthetic identity detected (${Math.round((event.confidence ?? 0) * 100)}% probability)`,
+                    'high', 30
+                )
+                setLiveMetrics(prev => ({
+                    ...prev,
+                    aiRisk: Math.min(100, prev.aiRisk + 30),
+                }))
                 break
         }
     }, [addAlert, recoverTrust, setLiveMetrics])

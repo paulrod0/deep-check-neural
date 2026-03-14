@@ -87,6 +87,27 @@ services:
     volumes:
       - models_data:/app/models:ro   # ML models (read-only at runtime)
 
+  # ── ML Worker — server-side pixel forensics (L4 EfficientNet) ───────────────
+  ml-worker:
+    build:
+      context: ./docker/ml-worker
+      dockerfile: Dockerfile
+    container_name: deepcheck-ml-worker
+    restart: unless-stopped
+    environment:
+      MODEL_DIR: /app/models
+      PORT: 8001
+    volumes:
+      - models_data:/app/models:ro
+    ports:
+      - "127.0.0.1:8001:8001"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:8001/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+
   # ── Nginx reverse proxy ──────────────────────────────────────────────────────
   nginx:
     image: nginx:1.25-alpine

@@ -11,6 +11,10 @@ import {
     runDeepfakeDetection,
     warmupDeepfakeModel,
 } from '@/lib/deepfakeInference'
+import { RPPGCouplingDetector, RPPGResult } from '@/lib/rppgCoupling'
+import { FACSConstraintEngine, FACSResult, blendshapeCategoriesToScores } from '@/lib/facsConstraints'
+import { computeEnsemble, LayerScore, EnsembleResult } from '@/lib/veritasEnsemble'
+import { AuditChain } from '@/lib/auditChain'
 
 // ─── Types (unchanged — backward-compatible) ─────────────────────────────────
 
@@ -63,6 +67,9 @@ export interface AntiCheatEvent {
         | 'blendshape_anomaly'        // deepfake blendshape inconsistency
         | 'iris_landmark_anomaly'     // iris position inconsistent with gaze
         | 'deepfake_cnn_alert'        // CNN model flagged deepfake or photo replay
+        | 'facs_violation'            // FACS biomechanical rule broken (L2)
+        | 'rppg_decoupling'           // rPPG-motion coupling absent (L1)
+        | 'veritas_alert'             // Ensemble pFake > 0.70
     confidence: number
     detail?: string
     timestamp: number
@@ -90,6 +97,11 @@ export interface FaceMetrics {
     // Deepfake CNN fields
     deepfakeRiskScore?: number       // 0–100 (higher = more suspicious)
     deepfakePrediction?: 'real_human' | 'deepfake_video' | 'photo_replay' | null
+    // Veritas Engine v2 fields
+    facsScore?: number               // 0–100 FACS biomechanical fake score (L2)
+    rppgCouplingStrength?: number    // 0–1 rPPG-motion coupling (L1)
+    veritasPFake?: number            // 0–1 Bayesian ensemble P(fake)
+    veritasVerdict?: 'real' | 'suspicious' | 'fake'
 }
 
 // ─── MediaPipe Configuration ─────────────────────────────────────────────────
@@ -613,6 +625,18 @@ const VerificationCamera = forwardRef<VerificationCameraHandle, VerificationCame
         const lastDeepfakeCnnAlertRef = useRef<number>(0)
         const deepfakeCnnRunningRef   = useRef<boolean>(false)
 
+        // Veritas Engine v2 — L1 rPPG, L2 FACS, ensemble, audit chain
+        const rppgDetectorRef       = useRef<RPPGCouplingDetector>(new RPPGCouplingDetector())
+        const facsEngineRef         = useRef<FACSConstraintEngine>(new FACSConstraintEngine())
+        const auditChainRef         = useRef<AuditChain>(new AuditChain())
+        const prevLandmarksRef      = useRef<Array<{x: number; y: number; z: number}> | null>(null)
+        const lastFacsResultRef     = useRef<FACSResult | null>(null)
+        const lastRppgResultRef     = useRef<RPPGResult | null>(null)
+        const lastEnsembleRef       = useRef<EnsembleResult | null>(null)
+        const lastFacsAlertRef      = useRef<number>(0)
+        const lastRppgAlertRef      = useRef<number>(0)
+        const lastVeritasAlertRef   = useRef<number>(0)
+
         // Rich metrics
         const faceMetricsRef         = useRef<FaceMetrics | null>(null)
         const blinkRateRef           = useRef<number>(0)
@@ -636,6 +660,9 @@ const VerificationCamera = forwardRef<VerificationCameraHandle, VerificationCame
         const [gazeRatioDebug,     setGazeRatioDebug]    = useState<number>(0.5)
         const [blinkDisplay,       setBlinkDisplay]       = useState({ count: 0, rate: 0, ear: 0 })
         const [deepfakeCnnDisplay, setDeepfakeCnnDisplay] = useState<{ risk: number; label: string } | null>(null)
+        const [rppgDisplay,        setRppgDisplay]        = useState<{ bpm: number; coupling: number } | null>(null)
+        const [facsDisplay,        setFacsDisplay]        = useState<{ score: number; topViolation: string } | null>(null)
+        const [ensembleDisplay,    setEnsembleDisplay]    = useState<{ pFake: number; verdict: string } | null>(null)
 
         useImperativeHandle(ref, () => ({
             takeSnapshot:     () => webcamRef.current?.getScreenshot() ?? null,
@@ -971,6 +998,104 @@ const VerificationCamera = forwardRef<VerificationCameraHandle, VerificationCame
                         }
                     }
 
+                    // ── rPPG Coupling (L1) — extract skin + motion proxies ────
+                    {
+                        const foreheadIdxs = [10, 338, 297, 332, 284]
+                        const skinProxy = foreheadIdxs.reduce((s, idx) => s + (landmarks[idx]?.y ?? 0), 0) / foreheadIdxs.length
+                        const noseLm = landmarks[MP_IDX.NOSE_TIP]
+                        const chinLm = landmarks[MP_IDX.CHIN]
+                        const prevLm = prevLandmarksRef.current
+                        let motionProxy = 0
+                        if (prevLm) {
+                            const noseDz = (noseLm?.z ?? 0) - (prevLm[MP_IDX.NOSE_TIP]?.z ?? 0)
+                            const noseDy = (noseLm?.y ?? 0) - (prevLm[MP_IDX.NOSE_TIP]?.y ?? 0)
+                            const chinDy = (chinLm?.y ?? 0) - (prevLm[MP_IDX.CHIN]?.y ?? 0)
+                            motionProxy = Math.sqrt(noseDz * noseDz + noseDy * noseDy) + Math.abs(chinDy)
+                        }
+                        prevLandmarksRef.current = landmarks as Array<{x: number; y: number; z: number}>
+                        rppgDetectorRef.current.pushSample(skinProxy, motionProxy)
+
+                        if (frameIdx % 150 === 0 && rppgDetectorRef.current.isReady) {
+                            const rppgResult = rppgDetectorRef.current.evaluate()
+                            if (rppgResult) {
+                                lastRppgResultRef.current = rppgResult
+                                setRppgDisplay({ bpm: rppgResult.heartRateEstimate, coupling: Math.round(rppgResult.couplingStrength * 100) })
+                                if (rppgResult.isSuspicious && now - lastRppgAlertRef.current > 30000) {
+                                    lastRppgAlertRef.current = now
+                                    onAntiCheatEvent?.({
+                                        type: 'rppg_decoupling',
+                                        confidence: 1 - rppgResult.couplingStrength,
+                                        detail: `rPPG-motion coupling F=${rppgResult.grangerFStat.toFixed(2)} (${rppgResult.heartRateEstimate}bpm est.)`,
+                                        timestamp: now,
+                                    })
+                                }
+                            }
+                        }
+                    }
+
+                    // ── FACS Engine (L2) — biomechanical constraints ──────────
+                    facsEngineRef.current.pushFrame(blendshapeCategoriesToScores(blendshapes))
+                    if (frameIdx % 30 === 0) {
+                        const facsResult = facsEngineRef.current.evaluate()
+                        lastFacsResultRef.current = facsResult
+                        setFacsDisplay({
+                            score: facsResult.score,
+                            topViolation: facsResult.violations[0]?.rule ?? 'ok',
+                        })
+                        if (facsResult.score > 60 && now - lastFacsAlertRef.current > 15000) {
+                            lastFacsAlertRef.current = now
+                            const topV = facsResult.violations[0]
+                            onAntiCheatEvent?.({
+                                type: 'facs_violation',
+                                confidence: facsResult.score / 100,
+                                detail: topV ? `${topV.rule}: ${topV.description}` : 'Biomechanical violation',
+                                timestamp: now,
+                            })
+                        }
+                    }
+
+                    // ── Veritas Ensemble (every 90 frames) ───────────────────
+                    if (frameIdx % 90 === 0) {
+                        const facsR  = lastFacsResultRef.current
+                        const cnnR   = lastDeepfakeResultRef.current
+                        const rppgR  = lastRppgResultRef.current
+                        const layers: LayerScore[] = [
+                            {
+                                layer: 'facs',
+                                score: facsR?.score ?? 0,
+                                confidence: facsR && facsR.framesEvaluated >= 10 ? 0.8 : 0.3,
+                                available: !!facsR,
+                            },
+                            {
+                                layer: 'cnn_v1',
+                                score: cnnR?.riskScore ?? 0,
+                                confidence: cnnR ? 0.85 : 0,
+                                available: !!cnnR,
+                                meta: { prediction: cnnR?.prediction },
+                            },
+                            {
+                                layer: 'rppg',
+                                score: rppgR ? Math.round((1 - rppgR.couplingStrength) * 100) : 0,
+                                confidence: rppgR && rppgR.samplesUsed >= 90 ? 0.75 : 0,
+                                available: !!rppgR,
+                                meta: { grangerFStat: rppgR?.grangerFStat },
+                            },
+                        ]
+                        const ensemble = computeEnsemble(layers)
+                        lastEnsembleRef.current = ensemble
+                        setEnsembleDisplay({ pFake: Math.round(ensemble.pFake * 100), verdict: ensemble.verdict })
+                        if (ensemble.pFake > 0.70 && now - lastVeritasAlertRef.current > 30000) {
+                            lastVeritasAlertRef.current = now
+                            auditChainRef.current.addBlock('ensemble', ensemble.auditPayload).catch(() => {})
+                            onAntiCheatEvent?.({
+                                type: 'veritas_alert',
+                                confidence: ensemble.pFake,
+                                detail: ensemble.xaiExplanation,
+                                timestamp: now,
+                            })
+                        }
+                    }
+
                     // ── Gaze smoothing ───────────────────────────────────────
                     gazeHistoryRef.current.push(gaze.direction)
                     if (gazeHistoryRef.current.length > 4) gazeHistoryRef.current.shift()
@@ -1033,6 +1158,11 @@ const VerificationCamera = forwardRef<VerificationCameraHandle, VerificationCame
                         // Deepfake CNN
                         deepfakeRiskScore: lastDeepfakeResultRef.current?.riskScore ?? undefined,
                         deepfakePrediction: lastDeepfakeResultRef.current?.prediction ?? null,
+                        // Veritas Engine v2
+                        facsScore:             lastFacsResultRef.current?.score,
+                        rppgCouplingStrength:  lastRppgResultRef.current?.couplingStrength,
+                        veritasPFake:          lastEnsembleRef.current?.pFake,
+                        veritasVerdict:        lastEnsembleRef.current?.verdict,
                     }
                     faceMetricsRef.current = metrics
                     onFaceMetrics?.(metrics)
@@ -1160,6 +1290,24 @@ const VerificationCamera = forwardRef<VerificationCameraHandle, VerificationCame
                             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.7rem', color: 'var(--color-text-muted)', marginTop: '3px', padding: '0 2px' }}>
                                 <span>CNN <span style={{ color: deepfakeCnnDisplay.risk > 60 ? '#ff4d4d' : deepfakeCnnDisplay.risk > 30 ? '#ffd700' : '#00ff9d', fontWeight: 600 }}>{deepfakeCnnDisplay.label}</span></span>
                                 <span>Risk <span style={{ color: deepfakeCnnDisplay.risk > 60 ? '#ff4d4d' : deepfakeCnnDisplay.risk > 30 ? '#ffd700' : '#00ff9d' }}>{deepfakeCnnDisplay.risk}%</span></span>
+                            </div>
+                        )}
+                        {facsDisplay && (
+                            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.7rem', color: 'var(--color-text-muted)', marginTop: '3px', padding: '0 2px' }}>
+                                <span>FACS <span style={{ color: facsDisplay.score > 60 ? '#ff4d4d' : facsDisplay.score > 30 ? '#ffd700' : '#00ff9d', fontWeight: 600 }}>{facsDisplay.score > 0 ? `${facsDisplay.score}%` : 'OK'}</span></span>
+                                <span style={{ fontSize: '0.65rem', opacity: 0.8 }}>{facsDisplay.topViolation !== 'ok' ? facsDisplay.topViolation : '✓ biomechanics'}</span>
+                            </div>
+                        )}
+                        {rppgDisplay && (
+                            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.7rem', color: 'var(--color-text-muted)', marginTop: '3px', padding: '0 2px' }}>
+                                <span>rPPG <span style={{ color: rppgDisplay.coupling < 30 ? '#ff4d4d' : rppgDisplay.coupling < 60 ? '#ffd700' : '#00ff9d', fontWeight: 600 }}>{rppgDisplay.coupling}%</span></span>
+                                <span>{rppgDisplay.bpm > 0 ? `~${rppgDisplay.bpm} bpm` : 'measuring…'}</span>
+                            </div>
+                        )}
+                        {ensembleDisplay && (
+                            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.7rem', marginTop: '4px', padding: '2px 4px', borderRadius: '3px', background: ensembleDisplay.verdict === 'fake' ? 'rgba(255,77,77,0.15)' : ensembleDisplay.verdict === 'suspicious' ? 'rgba(255,215,0,0.10)' : 'rgba(0,255,157,0.08)', color: ensembleDisplay.verdict === 'fake' ? '#ff4d4d' : ensembleDisplay.verdict === 'suspicious' ? '#ffd700' : '#00ff9d', fontWeight: ensembleDisplay.verdict !== 'real' ? 700 : 400 }}>
+                                <span>Veritas</span>
+                                <span>{ensembleDisplay.verdict === 'real' ? '✓ real' : ensembleDisplay.verdict === 'suspicious' ? '⚠ suspicious' : '✗ fake'} · {ensembleDisplay.pFake}%</span>
                             </div>
                         )}
                         {lightingChallengeActive && (
