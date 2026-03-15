@@ -1,19 +1,31 @@
 /**
- * Deep-Check - Deepfake Detection CNN Inference (client-side)
- * ===========================================================
- * Loads deepfake_detector.onnx via onnxruntime-web and runs
- * inference to classify live video feeds as:
+ * Deep-Check - Deepfake Detection CNN v2 Inference (client-side)
+ * ==============================================================
+ * Loads deepfake_v2.onnx via onnxruntime-web and runs inference to
+ * classify live video feeds as:
  *   - real_human (0)
  *   - deepfake_video (1)
  *   - photo_replay (2)
  *
- * Input: Temporal buffer of MediaPipe FaceLandmarker outputs
- *        (52 blendshapes + 4 iris + 3 depth = 59 features x 90 frames)
+ * Architecture: 3-stream blendshape CNN
+ *   Stream 1 — Temporal: Conv1D → BiGRU → MultiheadAttention
+ *   Stream 2 — Covariance: 52×52 correlation matrix → MLP
+ *   Stream 3 — Frequency: DFT magnitude → Conv1D
+ *
+ * Input: Temporal buffer of MediaPipe blendshape sequences
+ *        (52 blendshapes × 90 frames = [1, 90, 52])
+ *
+ * Trained 2026-03-15 on synthetic temporal features:
+ *   - Real: stochastic blink (0.25Hz), speech jaw correlation, bilateral asymmetry
+ *   - Fake: periodic GAN artifacts (2.5–12.5Hz), quantized jaw, over-symmetric L/R
+ *   - Photo: near-zero variance (~0.002 std), static iris, no blink
+ *
+ * Supersedes deepfake_detector.onnx (CNN v1, validated at 29.5% accuracy).
  *
  * Uses lazy loading so the model is only fetched when needed.
- * Safe to call from client components - never runs server-side.
+ * Safe to call from client components — never runs server-side.
  *
- * Veritas Engine v5 - Deep-Check
+ * Veritas Engine v5 — Deep-Check
  */
 
 'use client'
@@ -49,15 +61,15 @@ export interface DeepfakeFrame {
 
 // --- Constants ---------------------------------------------------------------
 
-const SEQ_LEN = 90          // Must match training script
-const N_BLENDSHAPES = 52
-const N_IRIS = 4
-const N_DEPTH = 3
-const N_FEATURES = N_BLENDSHAPES + N_IRIS + N_DEPTH  // 59
+const SEQ_LEN = 90          // Must match training: N_FRAMES=90
+const N_BLENDSHAPES = 52    // MediaPipe 52-blendshape set
+// CNN v2 uses blendshapes only (no iris/depth) — matches training input [1, 90, 52]
+const N_FEATURES = N_BLENDSHAPES
 
 const CLASS_NAMES = ['real_human', 'deepfake_video', 'photo_replay'] as const
 
-const MODEL_URL = '/models/deepfake/deepfake_detector.onnx'
+// CNN v2 — 3-stream architecture, trained 2026-03-15
+const MODEL_URL = '/models/deepfake/deepfake_v2.onnx'
 
 // --- Module-level singletons (lazily initialised) ----------------------------
 
@@ -129,6 +141,7 @@ export class DeepfakeFrameBuffer {
 
     /**
      * Convert buffer to Float32Array [SEQ_LEN, N_FEATURES].
+     * CNN v2 uses blendshapes only (52 features). Input shape: [1, 90, 52].
      * If buffer has fewer than SEQ_LEN frames, pads with zeros at the start.
      */
     toTensor(): Float32Array {
@@ -139,17 +152,9 @@ export class DeepfakeFrameBuffer {
             const frame = this.buffer[this.buffer.length - Math.min(this.buffer.length, this.maxLen) + i]
             const offset = (startIdx + i) * N_FEATURES
 
-            // Blendshapes (52 values)
+            // Blendshapes only (52 values) — CNN v2 input format
             for (let j = 0; j < N_BLENDSHAPES; j++) {
                 tensor[offset + j] = frame.blendshapes[j] ?? 0
-            }
-            // Iris (4 values)
-            for (let j = 0; j < N_IRIS; j++) {
-                tensor[offset + N_BLENDSHAPES + j] = frame.iris[j] ?? 0.5
-            }
-            // Depth (3 values)
-            for (let j = 0; j < N_DEPTH; j++) {
-                tensor[offset + N_BLENDSHAPES + N_IRIS + j] = frame.depth[j] ?? 0
             }
         }
 

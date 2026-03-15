@@ -92,12 +92,12 @@ export interface EnsembleResult {
 // Call updateWeights({ cnn_v2: 0.22, cnn_v1: 0.05 }) after CNN v2 deployment.
 
 const BASE_WEIGHTS: Record<LayerName, number> = {
-    rppg:        0.32,   // Physiological coupling — hardest to fake
-    facs:        0.27,   // Biomechanical rules — model-agnostic
-    cnn_v1:      0.03,   // DEGRADED: validated at 29.5% acc, near-noise (seed overfit)
-    cnn_v2:      0.00,   // Activated after FaceForensics++ training
-    efficientnet: 0.23,  // Pixel-level forensics — catches GAN artifacts
-    keystroke:   0.15,   // Behavioral biometrics
+    rppg:        0.30,   // Physiological coupling — hardest to fake
+    facs:        0.26,   // Biomechanical rules — model-agnostic
+    cnn_v1:      0.00,   // DEPRECATED: validated at 29.5% accuracy, superseded by v2
+    cnn_v2:      0.10,   // ACTIVATED 2026-03-15: 3-stream blendshape CNN (synthetic training)
+    efficientnet: 0.22,  // Pixel-level forensics — catches GAN artifacts
+    keystroke:   0.12,   // Behavioral biometrics
 }
 
 /** Whether cnn_v1 has been superseded by real-data calibration. */

@@ -1067,9 +1067,10 @@ const VerificationCamera = forwardRef<VerificationCameraHandle, VerificationCame
                                 available: !!facsR,
                             },
                             {
-                                layer: 'cnn_v1',
+                                // CNN v2 — 3-stream blendshape model (activated 2026-03-15)
+                                layer: 'cnn_v2',
                                 score: cnnR?.riskScore ?? 0,
-                                confidence: cnnR ? 0.85 : 0,
+                                confidence: cnnR ? 0.75 : 0, // slight discount: synthetic training
                                 available: !!cnnR,
                                 meta: { prediction: cnnR?.prediction },
                             },
@@ -1263,11 +1264,15 @@ const VerificationCamera = forwardRef<VerificationCameraHandle, VerificationCame
                         <div className={styles.statusDot} />
                         <span className={styles.statusText}>
                             {modelLoadError || (
-                                verificationStatus === 'idle'     ? 'Initializing AI...' :
-                                verificationStatus === 'scanning' ? 'Scanning...' :
-                                verificationStatus === 'verified' ? `Verified · ${poseLabel}` :
-                                failureReason === 'Eye Gaze Detected' ? `Eyes: ${gazeLabel.replace('Looking ', '')} ← off screen`
-                                : (failureReason || 'Failed')
+                                verificationStatus === 'idle'     ? 'Initializing AI models...' :
+                                verificationStatus === 'scanning' ? 'Center your face in the oval' :
+                                verificationStatus === 'verified' ? `Identity Verified ✓` :
+                                failureReason === 'No face detected'      ? 'Move closer to the camera' :
+                                failureReason === 'Multiple faces detected' ? 'Only one face allowed' :
+                                failureReason === 'Head Tilted'           ? 'Look straight at the camera' :
+                                failureReason === 'Eye Gaze Detected'     ? 'Keep looking at the screen' :
+                                failureReason === 'Low confidence'        ? 'Improve lighting — face us' :
+                                (failureReason || 'Verification failed')
                             )}
                         </span>
                     </div>
@@ -1284,35 +1289,35 @@ const VerificationCamera = forwardRef<VerificationCameraHandle, VerificationCame
                         <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.72rem', color: 'var(--color-text-muted)', marginTop: '3px', padding: '0 2px' }}>
                             <span>Blinks <span style={{ color: blinkRateColor, fontWeight: 600 }}>{blinkDisplay.count}</span></span>
                             <span>Rate <span style={{ color: blinkRateColor }}>{blinkDisplay.rate}/min</span></span>
-                            <span>EAR <span style={{ color: blinkDisplay.ear < 0.2 ? '#ffd700' : 'var(--color-text-muted)' }}>{blinkDisplay.ear}</span></span>
+                            <span title="Eye Aspect Ratio — measures eye openness">Eye Openness <span style={{ color: blinkDisplay.ear < 0.2 ? '#ffd700' : 'var(--color-text-muted)' }}>{blinkDisplay.ear}</span></span>
                         </div>
                         {deepfakeCnnDisplay && (
                             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.7rem', color: 'var(--color-text-muted)', marginTop: '3px', padding: '0 2px' }}>
-                                <span>CNN <span style={{ color: deepfakeCnnDisplay.risk > 60 ? '#ff4d4d' : deepfakeCnnDisplay.risk > 30 ? '#ffd700' : '#00ff9d', fontWeight: 600 }}>{deepfakeCnnDisplay.label}</span></span>
+                                <span>AI Detection <span style={{ color: deepfakeCnnDisplay.risk > 60 ? '#ff4d4d' : deepfakeCnnDisplay.risk > 30 ? '#ffd700' : '#00ff9d', fontWeight: 600 }}>{deepfakeCnnDisplay.label}</span></span>
                                 <span>Risk <span style={{ color: deepfakeCnnDisplay.risk > 60 ? '#ff4d4d' : deepfakeCnnDisplay.risk > 30 ? '#ffd700' : '#00ff9d' }}>{deepfakeCnnDisplay.risk}%</span></span>
                             </div>
                         )}
                         {facsDisplay && (
                             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.7rem', color: 'var(--color-text-muted)', marginTop: '3px', padding: '0 2px' }}>
-                                <span>FACS <span style={{ color: facsDisplay.score > 60 ? '#ff4d4d' : facsDisplay.score > 30 ? '#ffd700' : '#00ff9d', fontWeight: 600 }}>{facsDisplay.score > 0 ? `${facsDisplay.score}%` : 'OK'}</span></span>
-                                <span style={{ fontSize: '0.65rem', opacity: 0.8 }}>{facsDisplay.topViolation !== 'ok' ? facsDisplay.topViolation : '✓ biomechanics'}</span>
+                                <span title="Facial Action Coding System — checks biomechanical muscle rules">Face Biomechanics <span style={{ color: facsDisplay.score > 60 ? '#ff4d4d' : facsDisplay.score > 30 ? '#ffd700' : '#00ff9d', fontWeight: 600 }}>{facsDisplay.score > 0 ? `${facsDisplay.score}%` : 'OK'}</span></span>
+                                <span style={{ fontSize: '0.65rem', opacity: 0.8 }}>{facsDisplay.topViolation !== 'ok' ? facsDisplay.topViolation : '✓ natural'}</span>
                             </div>
                         )}
                         {rppgDisplay && (
                             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.7rem', color: 'var(--color-text-muted)', marginTop: '3px', padding: '0 2px' }}>
-                                <span>rPPG <span style={{ color: rppgDisplay.coupling < 30 ? '#ff4d4d' : rppgDisplay.coupling < 60 ? '#ffd700' : '#00ff9d', fontWeight: 600 }}>{rppgDisplay.coupling}%</span></span>
+                                <span title="Remote Photoplethysmography — detects heartbeat from skin color changes">Heartbeat Signal <span style={{ color: rppgDisplay.coupling < 30 ? '#ff4d4d' : rppgDisplay.coupling < 60 ? '#ffd700' : '#00ff9d', fontWeight: 600 }}>{rppgDisplay.coupling}%</span></span>
                                 <span>{rppgDisplay.bpm > 0 ? `~${rppgDisplay.bpm} bpm` : 'measuring…'}</span>
                             </div>
                         )}
                         {ensembleDisplay && (
                             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.7rem', marginTop: '4px', padding: '2px 4px', borderRadius: '3px', background: ensembleDisplay.verdict === 'fake' ? 'rgba(255,77,77,0.15)' : ensembleDisplay.verdict === 'suspicious' ? 'rgba(255,215,0,0.10)' : 'rgba(0,255,157,0.08)', color: ensembleDisplay.verdict === 'fake' ? '#ff4d4d' : ensembleDisplay.verdict === 'suspicious' ? '#ffd700' : '#00ff9d', fontWeight: ensembleDisplay.verdict !== 'real' ? 700 : 400 }}>
-                                <span>Veritas</span>
-                                <span>{ensembleDisplay.verdict === 'real' ? '✓ real' : ensembleDisplay.verdict === 'suspicious' ? '⚠ suspicious' : '✗ fake'} · {ensembleDisplay.pFake}%</span>
+                                <span title="Bayesian ensemble of all 6 detection layers">Trust Score</span>
+                                <span>{ensembleDisplay.verdict === 'real' ? '✓ Verified Human' : ensembleDisplay.verdict === 'suspicious' ? '⚠ Suspicious' : '✗ Deepfake Detected'} · {ensembleDisplay.pFake}%</span>
                             </div>
                         )}
                         {lightingChallengeActive && (
                             <div style={{ marginTop: '4px', fontSize: '0.7rem', color: '#ffd700', textAlign: 'center', letterSpacing: '0.08em' }}>
-                                ⚡ LIGHTING CHALLENGE ACTIVE
+                                ⚡ LIVENESS CHALLENGE — Follow the light
                             </div>
                         )}
                     </>
