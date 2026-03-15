@@ -75,18 +75,40 @@ export interface EnsembleResult {
     }
 }
 
-// ─── Weights (v1 — calibrated on synthetic data) ──────────────────────────────
-// These are updated once real-data training (FaceForensics++ etc.) completes.
-// Values represent relative information contribution of each layer.
+// ─── Weights (v1.1 — post-validation calibration 2026-03-15) ─────────────────
+// cnn_v1 validated on held-out synthetic set (seed=1337):
+//   Accuracy=29.5%, Macro-F1=0.244, AUC=0.423, ECE=0.2376
+//   Model overfit to training seed (seed=42) — essentially random.
+//   Weight reduced to near-zero until CNN v2 trains on real FaceForensics++ data.
+//
+// Weight rebalanced:
+//   rppg        0.28 → 0.32  (hardest to spoof, Granger causality)
+//   facs        0.22 → 0.27  (model-agnostic biomechanics)
+//   cnn_v1      0.15 → 0.03  (degraded: synthetic overfit, near noise floor)
+//   cnn_v2      0.00 → 0.00  (will activate once trained on FaceForensics++)
+//   efficientnet 0.20 → 0.23  (pixel GAN artifact detection — still reliable)
+//   keystroke   0.15 → 0.15  (behavioral — unchanged)
+//
+// Call updateWeights({ cnn_v2: 0.22, cnn_v1: 0.05 }) after CNN v2 deployment.
 
 const BASE_WEIGHTS: Record<LayerName, number> = {
-    rppg:        0.28,   // Physiological coupling — hardest to fake
-    facs:        0.22,   // Biomechanical rules — model-agnostic
-    cnn_v1:      0.15,   // Existing blendshape CNN — synthetic-trained
-    cnn_v2:      0.00,   // Activated after real-data training
-    efficientnet: 0.20,  // Pixel-level forensics — catches GAN artifacts
+    rppg:        0.32,   // Physiological coupling — hardest to fake
+    facs:        0.27,   // Biomechanical rules — model-agnostic
+    cnn_v1:      0.03,   // DEGRADED: validated at 29.5% acc, near-noise (seed overfit)
+    cnn_v2:      0.00,   // Activated after FaceForensics++ training
+    efficientnet: 0.23,  // Pixel-level forensics — catches GAN artifacts
     keystroke:   0.15,   // Behavioral biometrics
 }
+
+/** Whether cnn_v1 has been superseded by real-data calibration. */
+export const CNN_V1_CALIBRATION_STATUS = {
+    accuracy:  0.295,
+    macroF1:   0.244,
+    macroAUC:  0.423,
+    ece:       0.2376,
+    note:      'Overfit to synthetic training seed=42. Use cnn_v2 once available.',
+    validated: '2026-03-15',
+} as const
 
 const ENSEMBLE_BIAS = -0.2   // Slight prior toward "real" (reduces false positives)
 

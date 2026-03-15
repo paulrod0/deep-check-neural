@@ -56,16 +56,23 @@ function getIP(req: NextRequest): string {
     )
 }
 
-// ─── Admin session check ──────────────────────────────────────────────────────
+// ─── Auth check ───────────────────────────────────────────────────────────────
 // ENS op.acc.5: Mecanismo de autenticación
-// Dashboard requires a valid admin session cookie
+// Dashboard requires EITHER a Supabase Auth session (sb-access-token from magic
+// link) OR a legacy admin session cookie (dc_admin_session).
+// Actual token validation happens in server-side route handlers — middleware
+// only checks presence/format to avoid DB calls at the edge.
 
 function isAdminAuthenticated(req: NextRequest): boolean {
-    const token = req.cookies.get('dc_admin_session')?.value
-    if (!token) return false
-    // Token format: "dc_admin_<random>" — actual validation happens in the auth API
-    // Middleware only checks for presence and basic format to avoid DB calls at edge
-    return token.startsWith('dc_admin_') && token.length > 20
+    // Path 1: Supabase Auth magic-link session (new SaaS users)
+    const sbToken = req.cookies.get('sb-access-token')?.value
+    if (sbToken && sbToken.length > 20) return true
+
+    // Path 2: Legacy admin session (password-based, backwards compat)
+    const adminToken = req.cookies.get('dc_admin_session')?.value
+    if (adminToken && adminToken.startsWith('dc_admin_') && adminToken.length > 20) return true
+
+    return false
 }
 
 // ─── Structured logging ───────────────────────────────────────────────────────
