@@ -223,12 +223,16 @@ class Stream2Covariance(nn.Module):
 
 class Stream3Frequency(nn.Module):
     """
-    Frequency stream via real DFT matrix multiplication (ONNX-safe).
+    Frequency stream via real DFT matrix multiplication (fully ONNX-safe).
 
-    torch.fft.rfft is not exportable to ONNX opset ≤17.
-    Instead, pre-compute the DFT cosine/sine basis matrices as static
-    registered buffers and apply DFT as two torch.matmul calls.
-    Output is spectral magnitude: (B, n_freq, F) → Conv2D → out_dim.
+    Three ONNX-incompatible operators are avoided:
+    1. torch.fft.rfft (aten::fft_rfft) → replaced by DFT matmul
+    2. AdaptiveAvgPool2d with non-unit output → replaced by global avg pool
+    3. torch.triu_indices → not present here
+
+    Architecture:
+      DFT matmul → magnitude (B, n_freq, n_feat) → Conv1D → GlobalAvgPool → Linear
+    Uses 1D convolution along the frequency axis for ONNX simplicity.
     """
 
     def __init__(self, n_features=N_BLENDSHAPES, n_frames=N_FRAMES, out_dim=64):
@@ -236,42 +240,38 @@ class Stream3Frequency(nn.Module):
         n_freq = n_frames // 2 + 1
         self.n_freq = n_freq
 
-        # Pre-compute DFT basis: W[k, n] = exp(-2πi·k·n/N)
-        # dft_cos[k, n] = cos(2π·k·n/N), dft_sin[k, n] = -sin(2π·k·n/N)
+        # Pre-compute DFT basis: W[k,n] = cos(2π·k·n/N) and -sin(2π·k·n/N)
         k = torch.arange(n_freq, dtype=torch.float32).unsqueeze(1)   # (n_freq, 1)
         n = torch.arange(n_frames, dtype=torch.float32).unsqueeze(0)  # (1, n_frames)
         angles = 2 * float(np.pi) * k * n / n_frames
         self.register_buffer('dft_cos', torch.cos(angles))   # (n_freq, n_frames)
         self.register_buffer('dft_sin', -torch.sin(angles))  # (n_freq, n_frames)
 
+        # Conv1D along frequency bins; treats features as "channels"
+        # Input: (B, n_features, n_freq)  → (B, 64, n_freq) → GlobalAvgPool → (B, 64)
         self.conv = nn.Sequential(
-            nn.Conv2d(1, 16, kernel_size=(3, 3), padding=1),
-            nn.BatchNorm2d(16),
+            nn.Conv1d(n_features, 64, kernel_size=5, padding=2),
+            nn.BatchNorm1d(64),
             nn.GELU(),
-            nn.Conv2d(16, 32, kernel_size=(3, 3), padding=1),
-            nn.BatchNorm2d(32),
+            nn.Conv1d(64, 64, kernel_size=3, padding=1),
+            nn.BatchNorm1d(64),
             nn.GELU(),
-            nn.AdaptiveAvgPool2d((4, 4)),
         )
-        self.fc = nn.Linear(32 * 4 * 4, out_dim)
+        # Global average pool over frequency dimension — always ONNX-safe
+        self.gap = nn.AdaptiveAvgPool1d(1)
+        self.fc  = nn.Linear(64, out_dim)
 
     def forward(self, x):
-        # x: (B, T, n_feat)
-        # Apply real DFT via matmul — ONNX-safe (no aten::fft_rfft)
-        # x.permute(0,2,1): (B, n_feat, T)
-        # dft_cos.t():      (n_frames, n_freq)
-        # result:            (B, n_feat, n_freq) → permute → (B, n_freq, n_feat)
-        xt = x.permute(0, 2, 1)                            # (B, F, T)
-        re  = torch.matmul(xt, self.dft_cos.t())           # (B, F, n_freq)
-        im  = torch.matmul(xt, self.dft_sin.t())           # (B, F, n_freq)
-        mag = torch.sqrt(re ** 2 + im ** 2 + 1e-8)        # (B, F, n_freq)
-        mag = mag.permute(0, 2, 1) / (x.shape[1] + 1e-6)  # (B, n_freq, F) normalized
+        # x: (B, T, n_feat) — apply real DFT via matmul, fully ONNX-safe
+        xt  = x.permute(0, 2, 1)                            # (B, n_feat, T)
+        re  = torch.matmul(xt, self.dft_cos.t())            # (B, n_feat, n_freq)
+        im  = torch.matmul(xt, self.dft_sin.t())            # (B, n_feat, n_freq)
+        mag = torch.sqrt(re ** 2 + im ** 2 + 1e-8)         # (B, n_feat, n_freq)
+        mag = mag / (x.shape[1] + 1e-6)                     # normalize by T
 
-        # Reshape to pseudo-image: (B, 1, n_freq, F)
-        mag = mag.unsqueeze(1)
-        out = self.conv(mag)
-        out = out.flatten(1)
-        return F.gelu(self.fc(out))
+        out = self.conv(mag)                                 # (B, 64, n_freq)
+        out = self.gap(out).squeeze(-1)                      # (B, 64)
+        return F.gelu(self.fc(out))                          # (B, out_dim)
 
 
 class DeepfakeV2(nn.Module):
