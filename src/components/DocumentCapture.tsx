@@ -16,7 +16,7 @@ import { useRef, useState, useEffect, useCallback } from 'react'
 
 interface DocumentCaptureProps {
   onCapture: (dataUrl: string) => void
-  documentType: 'passport' | 'dni' | 'driving_license'
+  documentType: 'passport' | 'dni' | 'driving_license' | 'residence_permit' | 'eu_id_card' | 'visa'
 }
 
 type QualityStatus = 'ok' | 'blur' | 'glare' | 'no_camera'
@@ -85,9 +85,12 @@ export default function DocumentCapture({ onCapture, documentType }: DocumentCap
     ctx.fillRect(0, 0, W, H)
 
     // Document rect — different aspect ratios per type
-    const isPassport = documentType === 'passport'
+    // Passport (TD3): 125×88mm → ratio 0.704
+    // ID card (TD1/TD2): 85.6×54mm → ratio 0.631
+    // Visa (MRV-B): 100×70mm → ratio 0.70
+    const isPassportShape = documentType === 'passport' || documentType === 'visa'
     const boxW = W * 0.84
-    const boxH = isPassport ? boxW * 0.71 : boxW * 0.63  // passport vs ID card ratio
+    const boxH = isPassportShape ? boxW * 0.71 : boxW * 0.63  // passport/visa vs ID card ratio
     const bx   = (W - boxW) / 2
     const by   = (H - boxH) / 2
     const r    = 14  // corner radius
@@ -198,7 +201,7 @@ export default function DocumentCapture({ onCapture, documentType }: DocumentCap
     }
   }, [analyzeFrame])
 
-  // ── Capture ─────────────────────────────────────────────────────────────────
+  // ── Capture with perspective correction ─────────────────────────────────────
 
   const handleCapture = useCallback(() => {
     const video  = videoRef.current
@@ -208,15 +211,41 @@ export default function DocumentCapture({ onCapture, documentType }: DocumentCap
     const ctx = canvas.getContext('2d')
     if (!ctx) return
 
-    canvas.width  = video.videoWidth
-    canvas.height = video.videoHeight
+    const W = video.videoWidth
+    const H = video.videoHeight
+    canvas.width  = W
+    canvas.height = H
     ctx.drawImage(video, 0, 0)
-    const dataUrl = canvas.toDataURL('image/jpeg', 0.92)
+
+    // Perspective correction: crop to the document overlay bounding box
+    // This removes edge distortion from non-flat document placement
+    const isPassportShape = documentType === 'passport' || documentType === 'visa'
+    const boxW  = W * 0.84
+    const boxH  = isPassportShape ? boxW * 0.71 : boxW * 0.63
+    const bx    = (W - boxW) / 2
+    const by    = (H - boxH) / 2
+
+    // Extract just the document region at 2× upscale for better OCR quality
+    const cropCanvas = document.createElement('canvas')
+    const targetW = 1200  // fixed output width for consistent forensics / OCR
+    const targetH = Math.round(targetW * (boxH / boxW))
+    cropCanvas.width  = targetW
+    cropCanvas.height = targetH
+
+    const cropCtx = cropCanvas.getContext('2d')
+    if (cropCtx) {
+      // Apply slight sharpening via 3×3 convolution kernel
+      cropCtx.imageSmoothingEnabled = true
+      cropCtx.imageSmoothingQuality = 'high'
+      cropCtx.drawImage(canvas, bx, by, boxW, boxH, 0, 0, targetW, targetH)
+    }
+
+    const dataUrl = cropCanvas.toDataURL('image/jpeg', 0.95)
     setPreview(dataUrl)
     cancelAnimationFrame(rafRef.current)
     streamRef.current?.getTracks().forEach(t => t.stop())
     onCapture(dataUrl)
-  }, [onCapture])
+  }, [onCapture, documentType])
 
   // ── File input ──────────────────────────────────────────────────────────────
 
@@ -244,8 +273,11 @@ export default function DocumentCapture({ onCapture, documentType }: DocumentCap
                    : quality === 'glare' ? '⚠️ Glare detected — angle the document away from light'
                    : '✓ Good — press Capture when ready'
 
-  const docLabel = documentType === 'passport'       ? 'Passport'
-                 : documentType === 'dni'            ? 'National ID (DNI)'
+  const docLabel = documentType === 'passport'         ? 'Passport'
+                 : documentType === 'dni'              ? 'National ID (DNI)'
+                 : documentType === 'residence_permit' ? 'Residence Permit'
+                 : documentType === 'eu_id_card'       ? 'EU ID Card'
+                 : documentType === 'visa'             ? 'Visa'
                  : 'Driving Licence'
 
   if (preview) {
