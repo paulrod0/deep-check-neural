@@ -22,7 +22,7 @@ import { analyzeImage, type ForensicsReport } from '@/lib/imageForensics'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
-type DocType = 'passport' | 'dni' | 'driving_license'
+type DocType = 'passport' | 'dni' | 'driving_license' | 'residence_permit' | 'eu_id_card' | 'visa'
 
 interface VerifyAPIResponse {
   ocr: {
@@ -47,10 +47,13 @@ interface VerifyAPIResponse {
 
 // ── Step 0: Document type selection ──────────────────────────────────────────
 
-const DOC_TYPES: { id: DocType; icon: string; label: string; desc: string }[] = [
-  { id: 'passport',        icon: '🛂', label: 'Passport',          desc: 'ICAO TD3 — 2-line MRZ' },
-  { id: 'dni',             icon: '🪪', label: 'National ID (DNI)',  desc: 'ICAO TD1 — 3-line MRZ' },
-  { id: 'driving_license', icon: '🚗', label: 'Driving Licence',    desc: 'ID card format' },
+const DOC_TYPES: { id: DocType; icon: string; label: string; desc: string; mrzFormat?: string }[] = [
+  { id: 'passport',         icon: '🛂', label: 'Passport',             desc: '195+ countries · TD3 (2×44)',   mrzFormat: 'TD3' },
+  { id: 'dni',              icon: '🪪', label: 'National ID (DNI/NIE)', desc: 'EU/Spain · TD1 (3×30)',         mrzFormat: 'TD1' },
+  { id: 'driving_license',  icon: '🚗', label: 'Driving Licence',       desc: 'EU format · TD1 (3×30)',        mrzFormat: 'TD1' },
+  { id: 'residence_permit', icon: '🏠', label: 'Residence Permit',       desc: 'EU TIE/NIE card · TD1 (3×30)', mrzFormat: 'TD1' },
+  { id: 'eu_id_card',       icon: '🇪🇺', label: 'EU ID Card (older)',    desc: 'Pre-2017 EU cards · TD2 (2×36)', mrzFormat: 'TD2' },
+  { id: 'visa',             icon: '✈️', label: 'Visa',                   desc: 'Schengen / MRV-B (2×36)',      mrzFormat: 'MRV-B' },
 ]
 
 // ── Verdict display config ────────────────────────────────────────────────────
