@@ -189,7 +189,7 @@ class Stream2Covariance(nn.Module):
 
     def __init__(self, n_features=N_BLENDSHAPES, out_dim=64):
         super().__init__()
-        # Upper triangle of 52x52 = 52*51/2 = 1326 values
+        # Upper triangle of n_features×n_features: n*(n-1)//2 = 1326 pairs for n=52
         self.n_pairs = n_features * (n_features - 1) // 2
         self.mlp = nn.Sequential(
             nn.Linear(self.n_pairs, 512),
@@ -200,20 +200,24 @@ class Stream2Covariance(nn.Module):
             nn.GELU(),
             nn.Linear(128, out_dim),
         )
+        # Pre-compute upper-triangle indices as a static buffer so ONNX export
+        # doesn't encounter aten::triu_indices (unsupported in ONNX opset ≤17).
+        idx = torch.triu_indices(n_features, n_features, offset=1)
+        self.register_buffer('triu_row', idx[0])  # (n_pairs,)
+        self.register_buffer('triu_col', idx[1])  # (n_pairs,)
 
     def forward(self, x):
-        # x: (B, T, F)
-        B, T, F = x.shape
+        # x: (B, T, n_feat) — n_feat name avoids shadowing F=torch.nn.functional
+        B, T, _ = x.shape
         # Zero-mean per feature
         xm = x - x.mean(dim=1, keepdim=True)
-        # Covariance: (B, F, F)
+        # Covariance: (B, n_feat, n_feat)
         cov = torch.bmm(xm.permute(0, 2, 1), xm) / (T - 1 + 1e-6)
-        # Normalize to correlation
-        std = torch.sqrt(torch.diagonal(cov, dim1=1, dim2=2) + 1e-6)  # (B, F)
+        # Normalize to correlation matrix
+        std = torch.sqrt(torch.diagonal(cov, dim1=1, dim2=2) + 1e-6)  # (B, n_feat)
         cov = cov / (std.unsqueeze(2) * std.unsqueeze(1) + 1e-6)
-        # Extract upper triangle (B, n_pairs)
-        idx = torch.triu_indices(F, F, offset=1)
-        flat = cov[:, idx[0], idx[1]]
+        # Extract upper triangle using pre-computed static indices (ONNX-safe)
+        flat = cov[:, self.triu_row, self.triu_col]  # (B, n_pairs)
         return F.gelu(self.mlp(flat))
 
 

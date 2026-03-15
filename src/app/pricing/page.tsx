@@ -6,8 +6,9 @@ export const metadata: Metadata = {
   description: 'Verificación continua de identidad y forensia documental. Comienza gratis, escala según necesites.',
 }
 
-const STARTER_CHECKOUT = process.env.NEXT_PUBLIC_PADDLE_STARTER_CHECKOUT_URL ?? '#'
-const PRO_CHECKOUT     = process.env.NEXT_PUBLIC_PADDLE_PRO_CHECKOUT_URL     ?? '#'
+// LemonSqueezy hosted checkout URLs (set in .env.local after LS dashboard setup)
+const STARTER_CHECKOUT = process.env.NEXT_PUBLIC_LS_STARTER_CHECKOUT_URL ?? '#'
+const PRO_CHECKOUT     = process.env.NEXT_PUBLIC_LS_PRO_CHECKOUT_URL     ?? '#'
 const ENTERPRISE_EMAIL = 'pablo@hiumsolutions.com'
 
 const features = {
