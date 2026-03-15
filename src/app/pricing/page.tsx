@@ -253,6 +253,23 @@ export default function PricingPage() {
           >
             Contactar →
           </a>
+          {/* On-premise deploy guide */}
+          <div style={{
+            marginTop: '1.25rem', padding: '0.9rem 1rem',
+            background: 'rgba(0,229,255,0.05)', borderRadius: 8,
+            border: '1px solid rgba(0,229,255,0.15)',
+          }}>
+            <p style={{ fontSize: '0.78rem', color: 'var(--color-text-muted)', marginBottom: '0.5rem' }}>
+              🐳 Deploy on your own server in 5 minutes:
+            </p>
+            <code style={{ fontSize: '0.72rem', color: 'var(--color-primary)', fontFamily: 'monospace', wordBreak: 'break-all' }}>
+              curl -fsSL https://deep-check.io/install.sh | bash
+            </code>
+            <br />
+            <Link href="/onpremise" style={{ fontSize: '0.78rem', color: 'var(--color-primary)', textDecoration: 'none', marginTop: '0.5rem', display: 'inline-block' }}>
+              → Full on-premise setup guide
+            </Link>
+          </div>
         </div>
       </section>
 
