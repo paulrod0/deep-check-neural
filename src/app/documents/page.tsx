@@ -529,6 +529,27 @@ export default function DocumentsPage() {
             </div>
 
             <div className={styles.content}>
+                {/* Identity KYC CTA */}
+                {!analysisStep && !report && (
+                    <div style={{
+                        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                        background: 'rgba(0,229,255,0.06)', border: '1px solid rgba(0,229,255,0.2)',
+                        borderRadius: 10, padding: '1rem 1.25rem', marginBottom: '1.5rem', flexWrap: 'wrap', gap: '0.75rem',
+                    }}>
+                        <div>
+                            <p style={{ fontWeight: 600, marginBottom: '0.2rem', fontSize: '0.95rem' }}>
+                                🪪 Verify an Identity Document
+                            </p>
+                            <p style={{ color: 'var(--color-text-muted)', fontSize: '0.82rem' }}>
+                                Passport · DNI · Driving Licence — face match + MRZ validation + forensics
+                            </p>
+                        </div>
+                        <Link href="/documents/verify" className="btn btn-primary" style={{ fontSize: '0.85rem', padding: '0.55rem 1.25rem', whiteSpace: 'nowrap' }}>
+                            Start KYC Verification →
+                        </Link>
+                    </div>
+                )}
+
                 {/* Analysis mode selector */}
                 {!analysisStep && !report && (
                     <div style={{ textAlign: 'center' }}>

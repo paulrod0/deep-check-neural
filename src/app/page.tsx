@@ -131,7 +131,11 @@ export default function Home() {
                 ].map(([cap, dc, onf], i) => (
                   <tr key={i} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)', background: i % 2 === 0 ? 'rgba(255,255,255,0.01)' : 'transparent' }}>
                     <td style={{ padding: '14px 20px', color: 'var(--color-text-muted)' }}>{cap}</td>
-                    <td style={{ padding: '14px 20px', textAlign: 'center', color: dc.startsWith('✅') ? 'var(--color-primary)' : '#ffd700', fontWeight: 600 }}>{dc}</td>
+                    <td style={{ padding: '14px 20px', textAlign: 'center', color: dc.startsWith('✅') ? 'var(--color-primary)' : '#ffd700', fontWeight: 600 }}>
+                      {cap === 'On-Premise Deployment'
+                        ? <Link href="/onpremise" style={{ color: 'var(--color-primary)', textDecoration: 'none', fontWeight: 600 }}>{dc} →</Link>
+                        : dc}
+                    </td>
                     <td style={{ padding: '14px 20px', textAlign: 'center', color: onf.startsWith('❌') ? '#ff4d4d' : onf.startsWith('⚠️') ? '#ffd700' : 'var(--color-primary)', opacity: 0.85 }}>{onf}</td>
                   </tr>
                 ))}
