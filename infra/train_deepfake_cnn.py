@@ -448,10 +448,16 @@ def train(args):
     print(f"  Val size   : {args.val_size}")
     print(f"{'='*70}\n")
 
-    print("  Generating training dataset...")
-    X_train, y_train = generate_dataset(args.train_size)
-    print("  Generating validation dataset...")
-    X_val, y_val = generate_dataset(args.val_size)
+    # Usar datos pre-cargados (reales) si están disponibles, sino generar sintéticos
+    if hasattr(args, '_X_train'):
+        X_train, y_train = args._X_train, args._y_train
+        X_val,   y_val   = args._X_val,   args._y_val
+        print(f"  Usando {len(X_train):,} secuencias reales para entrenamiento")
+    else:
+        print("  Generating training dataset...")
+        X_train, y_train = generate_dataset(args.train_size)
+        print("  Generating validation dataset...")
+        X_val, y_val = generate_dataset(args.val_size)
 
     for split_name, labels in [('Train', y_train), ('Val', y_val)]:
         counts = np.bincount(labels, minlength=N_CLASSES)
@@ -638,28 +644,124 @@ def export_onnx(model, output_dir, device):
         print("  Note: onnxruntime not installed, skipping verification")
 
 
+# ── Real data loader ──────────────────────────────────────────────────────────
+
+def load_real_dataset(data_dir: Path, val_split: float = 0.15):
+    """
+    Carga secuencias .npy extraídas por extract_blendshapes.py.
+
+    Estructura esperada:
+      data_dir/
+        real/         *.npy  shape (90, 59)  → label 0
+        deepfake/     *.npy  shape (90, 59)  → label 1
+        photo_replay/ *.npy  shape (90, 59)  → label 2
+
+    Devuelve (X_train, y_train, X_val, y_val) como numpy arrays.
+    """
+    label_map = {'real': 0, 'deepfake': 1, 'photo_replay': 2}
+    X_all, y_all = [], []
+
+    for label_name, label_int in label_map.items():
+        subdir = data_dir / label_name
+        if not subdir.exists():
+            print(f"  ⚠️  {subdir} no existe — saltando")
+            continue
+        files = list(subdir.rglob('*.npy'))
+        print(f"  {label_name}: {len(files):,} secuencias")
+        for f in files:
+            try:
+                arr = np.load(str(f))
+                if arr.shape != (SEQ_LEN, N_FEATURES):
+                    continue  # shape incorrecto
+                X_all.append(arr)
+                y_all.append(label_int)
+            except Exception:
+                pass
+
+    if not X_all:
+        raise ValueError(f"No se encontraron secuencias .npy en {data_dir}")
+
+    X = np.stack(X_all).astype(np.float32)
+    y = np.array(y_all, dtype=np.int64)
+
+    # Shuffle reproducible
+    rng  = np.random.default_rng(42)
+    perm = rng.permutation(len(X))
+    X, y = X[perm], y[perm]
+
+    # Split train/val
+    n_val  = max(1, int(len(X) * val_split))
+    X_val, y_val = X[:n_val], y[:n_val]
+    X_train, y_train = X[n_val:], y[n_val:]
+
+    print(f"\n  Train: {len(X_train):,}  |  Val: {len(X_val):,}")
+    for i, name in enumerate(CLASS_NAMES):
+        tr = int((y_train == i).sum())
+        va = int((y_val   == i).sum())
+        print(f"    {name}: {tr} train / {va} val")
+
+    return X_train, y_train, X_val, y_val
+
+
 def main():
     parser = argparse.ArgumentParser(description='Train Deepfake Detection CNN')
-    parser.add_argument('--epochs', type=int, default=60)
-    parser.add_argument('--batch-size', type=int, default=256)
-    parser.add_argument('--lr', type=float, default=3e-4)
-    parser.add_argument('--train-size', type=int, default=50000)
-    parser.add_argument('--val-size', type=int, default=10000)
-    parser.add_argument('--patience', type=int, default=12)
-    parser.add_argument('--device', type=str, default='cuda')
-    parser.add_argument('--output', type=str, default='./model_output')
+    parser.add_argument('--epochs',     type=int,   default=60)
+    parser.add_argument('--batch-size', type=int,   default=256)
+    parser.add_argument('--lr',         type=float, default=3e-4)
+    parser.add_argument('--train-size', type=int,   default=50000,
+                        help='Usado solo si no se pasa --data-dir (modo sintético)')
+    parser.add_argument('--val-size',   type=int,   default=10000)
+    parser.add_argument('--patience',   type=int,   default=12)
+    parser.add_argument('--device',     type=str,   default='cuda')
+    parser.add_argument('--output',     type=str,   default='./model_output')
     parser.add_argument('--export-only', action='store_true')
+    parser.add_argument('--data-dir',   type=str,   default=None,
+                        help='Directorio con secuencias .npy reales (extract_blendshapes.py). '
+                             'Si se omite, usa datos sintéticos.')
+    parser.add_argument('--synthetic-mix', type=float, default=0.0,
+                        help='Fracción de datos sintéticos a mezclar con los reales (0.0-1.0)')
     args = parser.parse_args()
 
     if args.export_only:
         output_dir = Path(args.output)
         device = torch.device(args.device if torch.cuda.is_available() else 'cpu')
-        model = DeepfakeCNN().to(device)
-        checkpoint = torch.load(output_dir / 'best_model.pt', map_location=device, weights_only=False)
-        model.load_state_dict(checkpoint['model_state_dict'])
+        model  = DeepfakeCNN().to(device)
+        ckpt   = torch.load(output_dir / 'best_model.pt', map_location=device, weights_only=False)
+        model.load_state_dict(ckpt['model_state_dict'])
         export_onnx(model, output_dir, device)
+        return
+
+    # ── Cargar datos reales o sintéticos
+    if args.data_dir:
+        print(f"\n  Cargando datos REALES desde {args.data_dir}...")
+        X_train, y_train, X_val, y_val = load_real_dataset(Path(args.data_dir))
+
+        # Mezclar sintéticos si se pide (útil para clases poco representadas)
+        if args.synthetic_mix > 0:
+            n_synth = int(len(X_train) * args.synthetic_mix)
+            print(f"  Mezclando {n_synth:,} secuencias sintéticas...")
+            X_synth, y_synth = generate_dataset(n_synth)
+            X_train = np.concatenate([X_train, X_synth])
+            y_train = np.concatenate([y_train, y_synth])
+            perm    = np.random.permutation(len(X_train))
+            X_train, y_train = X_train[perm], y_train[perm]
+
+        # Sobrescribir train/val-size para que el log sea correcto
+        args.train_size = len(X_train)
+        args.val_size   = len(X_val)
     else:
-        train(args)
+        print(f"\n  ⚠️  Usando datos SINTÉTICOS — accuracy esperada <35%")
+        print(f"  Para entrenar con datos reales: --data-dir /ruta/blendshapes")
+        X_train, y_train = generate_dataset(args.train_size)
+        X_val,   y_val   = generate_dataset(args.val_size)
+
+    # Inyectar en args para que train() los use
+    args._X_train = X_train
+    args._y_train = y_train
+    args._X_val   = X_val
+    args._y_val   = y_val
+
+    train(args)
 
 
 if __name__ == '__main__':
