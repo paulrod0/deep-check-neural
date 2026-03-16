@@ -431,16 +431,34 @@ function extractFields(
 
   // ── Identity documents from OCR text + key-value pairs
   if (docType === 'passport' || docType === 'dni' || docType === 'eu_id') {
-    const fullName   = kv_get(['nombre', 'name', 'apellido', 'surname', 'nom', '\u0627\u0644\u0627\u0633\u0645']) ??
-      firstMatch(txt, [
-        /(?:nombre|name|nom)\s*[:\-]?\s*([A-ZÁÉÍÓÚÜÑ][^\n,]{2,50})/i,
-        // Spanish DNI layout: name appears as standalone ALL-CAPS line after IDENTIDAD
-        /(?:IDENTIDAD|IDENTITY).*?\n.*?\n.*?([A-ZÁÉÍÓÚÜÑ]{3,}(?:\s+[A-ZÁÉÍÓÚÜÑ]{2,})*)/,
-        // Arabic name: sequence of Arabic chars after الاسم
-        /\u0627\u0644\u0627\u0633\u0645\s*[:\-]?\s*([\u0600-\u06FF\u0750-\u077F\s]{3,50})/,
-        // General: any Arabic word sequence of 3+ words (likely a name)
-        /([\u0600-\u06FF]{2,}(?:\s+[\u0600-\u06FF]{2,}){1,4})/,
-      ])
+    // Try to build full name from individual KV fields first (more reliable for Spanish DNIs)
+    const primerApellido  = kv_get(['primer apellido', '1er apellido', '1o apellido'])
+    const segundoApellido = kv_get(['segundo apellido', '2o apellido', '2do apellido'])
+    const nombre          = kv_get(['nombre', 'name', 'nom', '\u0627\u0644\u0627\u0633\u0645'])
+    const apellidos       = kv_get(['apellido', 'apellidos', 'surname', 'surnames'])
+
+    // Build full name from components if available
+    let fullName: string | undefined
+    if (primerApellido || segundoApellido || nombre) {
+      const parts = [primerApellido, segundoApellido, nombre].filter(Boolean)
+      fullName = parts.join(' ')
+    } else if (apellidos && nombre) {
+      fullName = `${apellidos} ${nombre}`
+    } else {
+      fullName = nombre ?? apellidos ?? kv_get(['name', 'full name']) ??
+        firstMatch(txt, [
+          /(?:nombre|name|nom)\s*[:\-]?\s*([A-ZÁÉÍÓÚÜÑ][^\n,]{2,50})/i,
+          // Spanish DNI layout: name appears as standalone ALL-CAPS line after IDENTIDAD
+          /(?:IDENTIDAD|IDENTITY).*?\n.*?\n.*?([A-ZÁÉÍÓÚÜÑ]{3,}(?:\s+[A-ZÁÉÍÓÚÜÑ]{2,})*)/,
+          // Match "APELLIDOS ... NOMBRE" format: capture all uppercase words before MRZ lines
+          /(?:APELLIDOS?\s*[:\-]?\s*)([A-ZÁÉÍÓÚÜÑ]{2,}(?:\s+[A-ZÁÉÍÓÚÜÑ]{2,})*)/i,
+          /(?:NOMBRE\s*[:\-]?\s*)([A-ZÁÉÍÓÚÜÑ]{2,}(?:\s+[A-ZÁÉÍÓÚÜÑ]{2,})*)/i,
+          // Arabic name: sequence of Arabic chars after الاسم
+          /\u0627\u0644\u0627\u0633\u0645\s*[:\-]?\s*([\u0600-\u06FF\u0750-\u077F\s]{3,50})/,
+          // General: any Arabic word sequence of 3+ words (likely a name)
+          /([\u0600-\u06FF]{2,}(?:\s+[\u0600-\u06FF]{2,}){1,4})/,
+        ])
+    }
     const docNumber  = kv_get(['número', 'number', 'num', 'document', '\u0631\u0642\u0645']) ??
       firstMatch(txt, [
         /(?:num(?:ero)?\.?\s*(?:soporte|documento|doc)?)\s*[:\-]?\s*([A-Z0-9]{6,12})/i,
@@ -941,9 +959,24 @@ export async function POST(req: NextRequest): Promise<NextResponse<AdmissionsVer
     mergedKvPairs,
   )
 
-  // ── Cross-validation: MRZ ↔ OCR ─────────────────────────────────────────
+  // ── Cross-validation: MRZ ↔ OCR (VISUAL text, not MRZ-derived) ──────────
+  // CRITICAL: We must compare MRZ fields against the VISUAL text extracted from
+  // the front side of the document, NOT against extractedData (which comes from MRZ
+  // when MRZ is detected). Otherwise we'd be comparing MRZ against itself.
   let crossValidationResult: CrossValidationResult | null = null
   if (mrzAnalysis?.detected && mrzAnalysis.fields && docType.isIdentity) {
+    // Extract OCR fields from FRONT image text only (visual text, no MRZ shortcut)
+    // This is the text the user can see/edit — the visual zone of the document
+    const frontOnlyText = frontText  // frontText = ocrResult from front image
+    const frontKvPairs  = ocrResult?.keyValuePairs ?? {}
+    const visualFields  = extractFields(
+      frontOnlyText,
+      docType.type,
+      null,  // pass null for MRZ to force OCR-based extraction (visual text)
+      frontKvPairs,
+    )
+    console.log(`[admissions-verify] Cross-val inputs — MRZ name: "${mrzAnalysis.fields.surname}, ${mrzAnalysis.fields.givenNames}" | Visual name: "${visualFields.fullName}"`)
+
     crossValidationResult = crossValidateMRZvsOCR(
       {
         surname:        mrzAnalysis.fields.surname,
@@ -956,16 +989,19 @@ export async function POST(req: NextRequest): Promise<NextResponse<AdmissionsVer
         issuingCountry: mrzAnalysis.fields.issuingCountry,
       },
       {
-        fullName:       extractedData.fullName,
-        docNumber:      extractedData.docNumber,
-        dateOfBirth:    extractedData.dateOfBirth,
-        expiryDate:     extractedData.expiryDate,
-        nationality:    extractedData.nationality,
-        sex:            extractedData.sex,
-        issuingCountry: extractedData.issuingCountry,
+        fullName:       visualFields.fullName,
+        docNumber:      visualFields.docNumber,
+        dateOfBirth:    visualFields.dateOfBirth,
+        expiryDate:     visualFields.expiryDate,
+        nationality:    visualFields.nationality,
+        sex:            visualFields.sex,
+        issuingCountry: visualFields.issuingCountry,
       },
     )
     console.log(`[admissions-verify] Cross-validation: ${crossValidationResult.fieldsMatched}/${crossValidationResult.fieldsCompared} matched, score=${crossValidationResult.crossScore}`)
+    if (crossValidationResult.alerts.length > 0) {
+      console.log(`[admissions-verify] Cross-validation ALERTS:`, crossValidationResult.alerts.map(a => `${a.field}: MRZ="${a.mrzValue}" vs OCR="${a.ocrValue}"`))
+    }
   }
 
   // ── Forensics signals (all 7 modules) ──────────────────────────────────
