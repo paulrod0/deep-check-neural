@@ -629,6 +629,7 @@ const VerificationCamera = forwardRef<VerificationCameraHandle, VerificationCame
         const pixelDeepfakeRunningRef = useRef<boolean>(false)
         const lastPixelAlertRef       = useRef<number>(0)
         const pixelModelAvailableRef  = useRef<boolean | null>(null)  // null=unknown, true/false
+        const lastPixelResultRef      = useRef<{ score: number; calibratedProb: number } | null>(null)
 
         // Veritas Engine v2 — L1 rPPG, L2 FACS, ensemble, audit chain
         const rppgDetectorRef       = useRef<RPPGCouplingDetector>(new RPPGCouplingDetector())
@@ -1035,6 +1036,12 @@ const VerificationCamera = forwardRef<VerificationCameraHandle, VerificationCame
 
                                         if (!pixelResult.modelAvailable) return
 
+                                        // Persist result for Veritas Ensemble (efficientnet layer)
+                                        lastPixelResultRef.current = {
+                                            score:         pixelResult.score,
+                                            calibratedProb: pixelResult.calibratedProb,
+                                        }
+
                                         // Update CNN display if pixel model scores higher risk
                                         if (pixelResult.score > 60) {
                                             setDeepfakeCnnDisplay(prev => ({
@@ -1130,6 +1137,7 @@ const VerificationCamera = forwardRef<VerificationCameraHandle, VerificationCame
                         const facsR  = lastFacsResultRef.current
                         const cnnR   = lastDeepfakeResultRef.current
                         const rppgR  = lastRppgResultRef.current
+                        const pixelR = lastPixelResultRef.current
                         const layers: LayerScore[] = [
                             {
                                 layer: 'facs',
@@ -1151,6 +1159,14 @@ const VerificationCamera = forwardRef<VerificationCameraHandle, VerificationCame
                                 confidence: rppgR && rppgR.samplesUsed >= 90 ? 0.75 : 0,
                                 available: !!rppgR,
                                 meta: { grangerFStat: rppgR?.grangerFStat },
+                            },
+                            {
+                                // EfficientNet-B4 pixel forensics — GAN artifact detection
+                                // Populated async every 150 frames once deepfake_pixel_v1.onnx deployed
+                                layer: 'efficientnet',
+                                score: pixelR?.score ?? 0,
+                                confidence: pixelR ? 0.85 : 0,  // high confidence: real-data trained
+                                available: !!pixelR,
                             },
                         ]
                         const ensemble = computeEnsemble(layers)
