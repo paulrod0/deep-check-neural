@@ -3,11 +3,13 @@
 /**
  * /demo/admissions — IE University Admissions Document Verification Demo
  * ========================================================================
- * Interactive demo for the IE University admissions department.
- * Accepts: DNI, Passport, Degree Certificate, Academic Transcript, CV, etc.
+ * Interactive demo with document type selector and multi-image upload.
+ * - Identity docs (DNI/ID card): front + back required (back has MRZ)
+ * - Passport: single image (MRZ is on the same page)
+ * - Other docs: single image
  *
- * Pipeline (server-side, fully self-hosted):
- *   Tesseract.js OCR → face-api.js → Frequency analysis → MRZ parse → Semantic validation
+ * Pipeline (server-side):
+ *   OCR (Textract) → Face detection → ELA → FFT → EXIF → Text consistency → MRZ → Cross-validation
  */
 
 import { useState, useCallback, useRef }  from 'react'
@@ -15,7 +17,27 @@ import type { AdmissionsVerifyResponse }  from '@/app/api/admissions-verify/rout
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
-type AnalysisState = 'idle' | 'uploading' | 'analyzing' | 'done' | 'error'
+type FlowState = 'select-type' | 'upload' | 'analyzing' | 'done' | 'error'
+
+interface DocTypeOption {
+  id:          string
+  label:       string
+  icon:        string
+  desc:        string
+  needsBack:   boolean   // requires front + back image
+  apiType:     string    // sent to API as documentType
+  color:       string
+}
+
+const DOC_TYPES: DocTypeOption[] = [
+  { id: 'dni',       label: 'DNI / ID Card',      icon: '🪪', desc: 'National identity card (front + back)',  needsBack: true,  apiType: 'dni',                 color: '#7ab3ff' },
+  { id: 'passport',  label: 'Passport',            icon: '🛂', desc: 'International passport (single page)',   needsBack: false, apiType: 'passport',            color: '#7ab3ff' },
+  { id: 'eu_id',     label: 'EU / Foreign ID',     icon: '🌍', desc: 'Foreign national ID (front + back)',     needsBack: true,  apiType: 'eu_id',               color: '#7ab3ff' },
+  { id: 'degree',    label: 'Degree / Diploma',    icon: '🎓', desc: 'University degree or diploma certificate', needsBack: false, apiType: 'degree_certificate', color: '#00ff9d' },
+  { id: 'transcript',label: 'Academic Transcript',  icon: '📄', desc: 'Official academic record / grades',     needsBack: false, apiType: 'academic_transcript', color: '#00ff9d' },
+  { id: 'cv',        label: 'CV / Resume',          icon: '📋', desc: 'Curriculum vitae or resume',            needsBack: false, apiType: 'cv_resume',           color: '#ffd700' },
+  { id: 'other',     label: 'Other Document',       icon: '📎', desc: 'Any other document for verification',   needsBack: false, apiType: 'other',               color: '#888'    },
+]
 
 interface ProgressStep {
   id:     string
@@ -100,9 +122,16 @@ function formatField(val: string | boolean | undefined): string {
   return val
 }
 
-// ── Component ──────────────────────────────────────────────────────────────────
+function readFileAsDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload  = e => resolve(e.target?.result as string)
+    reader.onerror = () => reject(new Error('Failed to read file'))
+    reader.readAsDataURL(file)
+  })
+}
 
-// ── Completed document result type ─────────────────────────────────────────────
+// ── Completed doc history ────────────────────────────────────────────────────
 
 interface CompletedDoc {
   id:       string
@@ -112,25 +141,36 @@ interface CompletedDoc {
   result:   AdmissionsVerifyResponse
 }
 
+// ── Component ──────────────────────────────────────────────────────────────────
+
 export default function AdmissionsDemoPage() {
-  const [state,    setState]    = useState<AnalysisState>('idle')
-  const [preview,  setPreview]  = useState<string | null>(null)
-  const [isPdf,    setIsPdf]    = useState(false)
-  const [fileName, setFileName] = useState('')
-  const [steps,    setSteps]    = useState<ProgressStep[]>(STEPS_TEMPLATE.map(s => ({ ...s })))
-  const [result,   setResult]   = useState<AdmissionsVerifyResponse | null>(null)
-  const [errMsg,   setErrMsg]   = useState<string>('')
-  const [drag,     setDrag]     = useState(false)
-  // ── Multi-document history ────────────────────────────────────────────────
-  const [history,  setHistory]  = useState<CompletedDoc[]>([])
-  const [viewDoc,  setViewDoc]  = useState<CompletedDoc | null>(null)
-  const fileRef  = useRef<HTMLInputElement>(null)
+  // ── State ─────────────────────────────────────────────────────────────────
+  const [flowState,     setFlowState]     = useState<FlowState>('select-type')
+  const [selectedType,  setSelectedType]  = useState<DocTypeOption | null>(null)
+
+  // Upload state
+  const [frontImage,    setFrontImage]    = useState<string | null>(null)
+  const [backImage,     setBackImage]     = useState<string | null>(null)
+  const [frontFile,     setFrontFile]     = useState<string>('')  // filename
+  const [backFile,      setBackFile]      = useState<string>('')
+  const [dragFront,     setDragFront]     = useState(false)
+  const [dragBack,      setDragBack]      = useState(false)
+
+  // Analysis state
+  const [steps,         setSteps]         = useState<ProgressStep[]>(STEPS_TEMPLATE.map(s => ({ ...s })))
+  const [result,        setResult]        = useState<AdmissionsVerifyResponse | null>(null)
+  const [errMsg,        setErrMsg]        = useState('')
+
+  // History
+  const [history,       setHistory]       = useState<CompletedDoc[]>([])
+
+  const frontRef  = useRef<HTMLInputElement>(null)
+  const backRef   = useRef<HTMLInputElement>(null)
   const timersRef = useRef<ReturnType<typeof setTimeout>[]>([])
 
-  // ── Simulate step-by-step progress while API runs ──────────────────────────
+  // ── Step-by-step progress animation ─────────────────────────────────────
 
   const animateSteps = useCallback(() => {
-    // Clear any previous timers
     timersRef.current.forEach(clearTimeout)
     timersRef.current = []
     const STEP_DELAYS = [0, 800, 1500, 2200, 2900, 3600, 4300, 5000, 5700, 6400]
@@ -146,43 +186,53 @@ export default function AdmissionsDemoPage() {
     })
   }, [])
 
-  // ── Core analysis ──────────────────────────────────────────────────────────
+  // ── Handle file for front image ──────────────────────────────────────────
 
-  const analyzeImage = useCallback(async (file: File) => {
-    setErrMsg('')
-    setResult(null)
-    setSteps(STEPS_TEMPLATE.map(s => ({ ...s })))
-    setFileName(file.name)
-    const pdf = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')
-    setIsPdf(pdf)
-
-    // Read file as data URL — handles any size, works for images and PDF
-    let dataUrl: string
+  const handleFrontFile = useCallback(async (file: File) => {
     try {
-      dataUrl = await new Promise<string>((resolve, reject) => {
-        const reader = new FileReader()
-        reader.onload  = e => {
-          const result = e.target?.result as string
-          setPreview(result)  // set preview from same read
-          resolve(result)
-        }
-        reader.onerror = () => reject(new Error('Failed to read file'))
-        reader.readAsDataURL(file)
-      })
-    } catch (readErr) {
-      setErrMsg(`File read failed: ${readErr instanceof Error ? readErr.message : 'unknown'}`)
-      setState('error')
-      return
+      const dataUrl = await readFileAsDataUrl(file)
+      setFrontImage(dataUrl)
+      setFrontFile(file.name)
+    } catch {
+      setErrMsg('Failed to read front image')
     }
+  }, [])
 
-    setState('analyzing')
+  const handleBackFile = useCallback(async (file: File) => {
+    try {
+      const dataUrl = await readFileAsDataUrl(file)
+      setBackImage(dataUrl)
+      setBackFile(file.name)
+    } catch {
+      setErrMsg('Failed to read back image')
+    }
+  }, [])
+
+  // ── Submit for analysis ──────────────────────────────────────────────────
+
+  const submitAnalysis = useCallback(async () => {
+    if (!frontImage || !selectedType) return
+    if (selectedType.needsBack && !backImage) return
+
+    setFlowState('analyzing')
+    setSteps(STEPS_TEMPLATE.map(s => ({ ...s })))
+    setResult(null)
+    setErrMsg('')
     animateSteps()
 
     try {
+      const payload: Record<string, string> = {
+        image:        frontImage,
+        documentType: selectedType.apiType,
+      }
+      if (backImage && selectedType.needsBack) {
+        payload.imageBack = backImage
+      }
+
       const resp = await fetch('/api/admissions-verify', {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({ image: dataUrl }),
+        body:    JSON.stringify(payload),
       })
 
       // Complete all steps
@@ -196,53 +246,115 @@ export default function AdmissionsDemoPage() {
 
       const data = await resp.json() as AdmissionsVerifyResponse
       setResult(data)
-      setState('done')
+      setFlowState('done')
 
-      // Save to multi-document history
+      // Save to history
       setHistory(prev => [{
         id:       `doc-${Date.now()}`,
-        fileName: file.name,
-        isPdf:    pdf,
-        preview:  dataUrl.slice(0, 200), // just enough for type detection, not full data URL
+        fileName: frontFile + (backFile ? ` + ${backFile}` : ''),
+        isPdf:    false,
+        preview:  frontImage.slice(0, 200),
         result:   data,
       }, ...prev])
     } catch (err) {
       setErrMsg(err instanceof Error ? err.message : 'Unknown error')
-      setState('error')
+      setFlowState('error')
       setSteps(prev => prev.map(s => s.status === 'running' ? { ...s, status: 'pending' } : s))
     }
-  }, [animateSteps])
+  }, [frontImage, backImage, selectedType, frontFile, backFile, animateSteps])
 
-  // ── Drag & drop ────────────────────────────────────────────────────────────
+  // ── Quick upload (for non-ID docs, skip to upload → auto-submit) ────────
 
-  const onDrop = useCallback((e: React.DragEvent) => {
-    e.preventDefault()
-    setDrag(false)
-    const file = e.dataTransfer.files?.[0]
-    if (file && (file.type.startsWith('image/') || file.type === 'application/pdf')) {
-      analyzeImage(file)
+  const handleQuickUpload = useCallback(async (file: File) => {
+    if (!selectedType) return
+    try {
+      const dataUrl = await readFileAsDataUrl(file)
+      setFrontImage(dataUrl)
+      setFrontFile(file.name)
+      // Auto-submit for non-ID docs that don't need back
+      if (!selectedType.needsBack) {
+        setFlowState('analyzing')
+        setSteps(STEPS_TEMPLATE.map(s => ({ ...s })))
+        setResult(null)
+        setErrMsg('')
+        animateSteps()
+
+        const resp = await fetch('/api/admissions-verify', {
+          method:  'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body:    JSON.stringify({ image: dataUrl, documentType: selectedType.apiType }),
+        })
+
+        timersRef.current.forEach(clearTimeout)
+        setSteps(STEPS_TEMPLATE.map(s => ({ ...s, status: 'done' })))
+
+        if (!resp.ok) {
+          const e = await resp.json().catch(() => ({ error: 'Server error' }))
+          throw new Error((e as { error?: string }).error ?? `HTTP ${resp.status}`)
+        }
+
+        const data = await resp.json() as AdmissionsVerifyResponse
+        setResult(data)
+        setFlowState('done')
+
+        setHistory(prev => [{
+          id: `doc-${Date.now()}`, fileName: file.name, isPdf: false,
+          preview: dataUrl.slice(0, 200), result: data,
+        }, ...prev])
+      }
+    } catch (err) {
+      setErrMsg(err instanceof Error ? err.message : 'Unknown error')
+      setFlowState('error')
     }
-  }, [analyzeImage])
+  }, [selectedType, animateSteps])
 
-  const onFileChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (file) analyzeImage(file)
-    e.target.value = ''
-  }, [analyzeImage])
+  // ── Reset ────────────────────────────────────────────────────────────────
 
   const reset = () => {
     timersRef.current.forEach(clearTimeout)
-    setState('idle')
-    setPreview(null)
-    setIsPdf(false)
-    setFileName('')
+    setFlowState('select-type')
+    setSelectedType(null)
+    setFrontImage(null)
+    setBackImage(null)
+    setFrontFile('')
+    setBackFile('')
+    setDragFront(false)
+    setDragBack(false)
     setResult(null)
-    setViewDoc(null)
     setErrMsg('')
     setSteps(STEPS_TEMPLATE.map(s => ({ ...s })))
   }
 
-  // ── Render ─────────────────────────────────────────────────────────────────
+  const goToUpload = (docType: DocTypeOption) => {
+    setSelectedType(docType)
+    setFrontImage(null)
+    setBackImage(null)
+    setFrontFile('')
+    setBackFile('')
+    setFlowState('upload')
+  }
+
+  // ── File drop helpers ────────────────────────────────────────────────────
+
+  const dropHandler = (setter: (f: File) => void) => (e: React.DragEvent) => {
+    e.preventDefault()
+    const file = e.dataTransfer.files?.[0]
+    if (file && (file.type.startsWith('image/') || file.type === 'application/pdf')) {
+      setter(file)
+    }
+  }
+
+  const fileHandler = (setter: (f: File) => void) => (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (file) setter(file)
+    e.target.value = ''
+  }
+
+  // ── Can submit? ──────────────────────────────────────────────────────────
+
+  const canSubmit = !!frontImage && (!selectedType?.needsBack || !!backImage)
+
+  // ── Render ───────────────────────────────────────────────────────────────
 
   return (
     <div style={{
@@ -296,109 +408,318 @@ export default function AdmissionsDemoPage() {
             Admissions Document Authenticator
           </h1>
           <p style={{ fontSize: 15, color: '#666', margin: 0, maxWidth: 600, marginInline: 'auto' }}>
-            Upload any admissions document — DNI, passport, degree certificate, academic transcript or CV.
-            AI forensics runs in seconds.
+            Select your document type, then upload for AI-powered forensic verification.
           </p>
         </div>
 
-        {/* ── Supported document chips ───────────────────────────────────── */}
-        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'center', marginBottom: 32 }}>
-          {[
-            { label: '🛂 Passport', color: '#7ab3ff' },
-            { label: '🪪 DNI / NIE', color: '#7ab3ff' },
-            { label: '🎓 Degree', color: '#00ff9d' },
-            { label: '📄 Transcript', color: '#00ff9d' },
-            { label: '📋 CV / Résumé', color: '#ffd700' },
-            { label: '🌍 Any country', color: '#888' },
-            { label: '🇸🇦 Arabic IDs', color: '#888' },
-          ].map(({ label, color }) => (
-            <span key={label} style={{
-              fontSize: 12, padding: '5px 12px', borderRadius: 20,
-              border: `1px solid ${color}33`, color, background: `${color}0d`,
-              fontWeight: 600, letterSpacing: 0.3,
-            }}>{label}</span>
-          ))}
-        </div>
-
-        {/* ── Upload zone ────────────────────────────────────────────────── */}
-        {state === 'idle' && (
-          <div
-            onClick={() => fileRef.current?.click()}
-            onDragOver={e => { e.preventDefault(); setDrag(true) }}
-            onDragLeave={() => setDrag(false)}
-            onDrop={onDrop}
-            style={{
-              border: `2px dashed ${drag ? '#00ff9d' : '#2a2a40'}`,
-              borderRadius: 20,
-              padding: '72px 32px',
-              textAlign: 'center',
-              cursor: 'pointer',
-              background: drag ? 'rgba(0,255,157,0.04)' : '#0d0d1a',
-              transition: 'all 0.2s',
-            }}
-          >
-            <div style={{ fontSize: 56, marginBottom: 16 }}>📂</div>
-            <p style={{ fontSize: 20, fontWeight: 700, color: '#fff', margin: '0 0 8px' }}>
-              Drop document here
+        {/* ═══════════════════════════════════════════════════════════════ */}
+        {/* STEP 1: Document Type Selector                                  */}
+        {/* ═══════════════════════════════════════════════════════════════ */}
+        {flowState === 'select-type' && (
+          <div>
+            <p style={{ fontSize: 13, fontWeight: 700, color: '#555', letterSpacing: 1, textTransform: 'uppercase', marginBottom: 20, textAlign: 'center' }}>
+              1. Select Document Type
             </p>
-            <p style={{ fontSize: 14, color: '#555', margin: '0 0 20px' }}>
-              JPG, PNG, PDF — photo or scan — any country
-            </p>
-            <button style={{
-              background: 'linear-gradient(135deg, #00ff9d, #00c97e)',
-              color: '#000', border: 'none', borderRadius: 12,
-              padding: '12px 32px', fontSize: 15, fontWeight: 800,
-              cursor: 'pointer', letterSpacing: 0.3,
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))',
+              gap: 14,
             }}>
-              Select File
-            </button>
-            <input
-              ref={fileRef}
-              type="file"
-              accept="image/*,application/pdf"
-              onChange={onFileChange}
-              style={{ display: 'none' }}
-            />
+              {DOC_TYPES.map(dt => (
+                <button
+                  key={dt.id}
+                  onClick={() => goToUpload(dt)}
+                  style={{
+                    background: '#0d0d1a',
+                    border: `2px solid #1e1e30`,
+                    borderRadius: 16,
+                    padding: '24px 18px',
+                    cursor: 'pointer',
+                    textAlign: 'center',
+                    transition: 'all 0.2s',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    gap: 10,
+                  }}
+                  onMouseEnter={e => {
+                    e.currentTarget.style.borderColor = dt.color
+                    e.currentTarget.style.background = `${dt.color}08`
+                  }}
+                  onMouseLeave={e => {
+                    e.currentTarget.style.borderColor = '#1e1e30'
+                    e.currentTarget.style.background = '#0d0d1a'
+                  }}
+                >
+                  <span style={{ fontSize: 36 }}>{dt.icon}</span>
+                  <span style={{ fontSize: 15, fontWeight: 700, color: '#fff' }}>{dt.label}</span>
+                  <span style={{ fontSize: 11, color: '#555', lineHeight: 1.4 }}>{dt.desc}</span>
+                  {dt.needsBack && (
+                    <span style={{
+                      fontSize: 10, fontWeight: 700, letterSpacing: 0.5,
+                      background: 'rgba(122,179,255,0.10)', border: '1px solid rgba(122,179,255,0.25)',
+                      color: '#7ab3ff', padding: '2px 8px', borderRadius: 10,
+                    }}>FRONT + BACK</span>
+                  )}
+                </button>
+              ))}
+            </div>
           </div>
         )}
 
-        {/* ── Analyzing view ─────────────────────────────────────────────── */}
-        {(state === 'uploading' || state === 'analyzing') && (
+        {/* ═══════════════════════════════════════════════════════════════ */}
+        {/* STEP 2: Upload Images                                           */}
+        {/* ═══════════════════════════════════════════════════════════════ */}
+        {flowState === 'upload' && selectedType && (
+          <div>
+            {/* Breadcrumb / back */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 24 }}>
+              <button onClick={reset} style={{
+                background: 'none', border: '1px solid #2a2a40', color: '#888',
+                borderRadius: 8, padding: '6px 14px', fontSize: 12, cursor: 'pointer',
+                fontWeight: 600,
+              }}>
+                ← Back
+              </button>
+              <span style={{ fontSize: 28 }}>{selectedType.icon}</span>
+              <div>
+                <span style={{ fontSize: 18, fontWeight: 800, color: '#fff' }}>{selectedType.label}</span>
+                {selectedType.needsBack && (
+                  <span style={{
+                    fontSize: 10, fontWeight: 700, letterSpacing: 0.5, marginLeft: 10,
+                    background: 'rgba(122,179,255,0.10)', border: '1px solid rgba(122,179,255,0.25)',
+                    color: '#7ab3ff', padding: '2px 8px', borderRadius: 10,
+                  }}>FRONT + BACK REQUIRED</span>
+                )}
+              </div>
+            </div>
+
+            {selectedType.needsBack ? (
+              /* ── Two-image upload for ID docs ───────────────────────── */
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
+                {/* Front */}
+                <div
+                  onClick={() => frontRef.current?.click()}
+                  onDragOver={e => { e.preventDefault(); setDragFront(true) }}
+                  onDragLeave={() => setDragFront(false)}
+                  onDrop={e => { setDragFront(false); dropHandler(handleFrontFile)(e) }}
+                  style={{
+                    border: `2px dashed ${frontImage ? '#00ff9d44' : dragFront ? '#00ff9d' : '#2a2a40'}`,
+                    borderRadius: 16,
+                    padding: frontImage ? '0' : '48px 20px',
+                    textAlign: 'center',
+                    cursor: 'pointer',
+                    background: frontImage ? '#0d0d1a' : dragFront ? 'rgba(0,255,157,0.04)' : '#0d0d1a',
+                    transition: 'all 0.2s',
+                    overflow: 'hidden',
+                    position: 'relative',
+                    minHeight: 200,
+                  }}
+                >
+                  {frontImage ? (
+                    <>
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={frontImage} alt="Front" style={{ width: '100%', display: 'block', maxHeight: 300, objectFit: 'contain' }} />
+                      <div style={{
+                        position: 'absolute', top: 10, left: 10,
+                        fontSize: 10, fontWeight: 700, letterSpacing: 0.5,
+                        background: 'rgba(0,255,157,0.15)', border: '1px solid rgba(0,255,157,0.3)',
+                        color: '#00ff9d', padding: '3px 10px', borderRadius: 10,
+                      }}>✅ FRONT</div>
+                      <div style={{
+                        position: 'absolute', bottom: 10, right: 10,
+                        fontSize: 10, color: '#555', background: '#0d0d1acc', padding: '2px 8px', borderRadius: 6,
+                      }}>{frontFile}</div>
+                    </>
+                  ) : (
+                    <>
+                      <div style={{ fontSize: 42, marginBottom: 10 }}>📸</div>
+                      <p style={{ fontSize: 16, fontWeight: 700, color: '#fff', margin: '0 0 4px' }}>Front Side</p>
+                      <p style={{ fontSize: 12, color: '#555', margin: 0 }}>Photo with name, photo, and personal data</p>
+                    </>
+                  )}
+                  <input ref={frontRef} type="file" accept="image/*,application/pdf" onChange={fileHandler(handleFrontFile)} style={{ display: 'none' }} />
+                </div>
+
+                {/* Back */}
+                <div
+                  onClick={() => backRef.current?.click()}
+                  onDragOver={e => { e.preventDefault(); setDragBack(true) }}
+                  onDragLeave={() => setDragBack(false)}
+                  onDrop={e => { setDragBack(false); dropHandler(handleBackFile)(e) }}
+                  style={{
+                    border: `2px dashed ${backImage ? '#00ff9d44' : dragBack ? '#00ff9d' : '#2a2a40'}`,
+                    borderRadius: 16,
+                    padding: backImage ? '0' : '48px 20px',
+                    textAlign: 'center',
+                    cursor: 'pointer',
+                    background: backImage ? '#0d0d1a' : dragBack ? 'rgba(0,255,157,0.04)' : '#0d0d1a',
+                    transition: 'all 0.2s',
+                    overflow: 'hidden',
+                    position: 'relative',
+                    minHeight: 200,
+                  }}
+                >
+                  {backImage ? (
+                    <>
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={backImage} alt="Back" style={{ width: '100%', display: 'block', maxHeight: 300, objectFit: 'contain' }} />
+                      <div style={{
+                        position: 'absolute', top: 10, left: 10,
+                        fontSize: 10, fontWeight: 700, letterSpacing: 0.5,
+                        background: 'rgba(0,255,157,0.15)', border: '1px solid rgba(0,255,157,0.3)',
+                        color: '#00ff9d', padding: '3px 10px', borderRadius: 10,
+                      }}>✅ BACK</div>
+                      <div style={{
+                        position: 'absolute', bottom: 10, right: 10,
+                        fontSize: 10, color: '#555', background: '#0d0d1acc', padding: '2px 8px', borderRadius: 6,
+                      }}>{backFile}</div>
+                    </>
+                  ) : (
+                    <>
+                      <div style={{ fontSize: 42, marginBottom: 10 }}>🔄</div>
+                      <p style={{ fontSize: 16, fontWeight: 700, color: '#fff', margin: '0 0 4px' }}>Back Side</p>
+                      <p style={{ fontSize: 12, color: '#555', margin: 0 }}>Side with MRZ code (machine-readable zone)</p>
+                    </>
+                  )}
+                  <input ref={backRef} type="file" accept="image/*,application/pdf" onChange={fileHandler(handleBackFile)} style={{ display: 'none' }} />
+                </div>
+              </div>
+            ) : (
+              /* ── Single-image upload ────────────────────────────────── */
+              <div
+                onClick={() => frontRef.current?.click()}
+                onDragOver={e => { e.preventDefault(); setDragFront(true) }}
+                onDragLeave={() => setDragFront(false)}
+                onDrop={e => { setDragFront(false); dropHandler(f => handleQuickUpload(f))(e) }}
+                style={{
+                  border: `2px dashed ${frontImage ? '#00ff9d44' : dragFront ? '#00ff9d' : '#2a2a40'}`,
+                  borderRadius: 20,
+                  padding: frontImage ? '0' : '64px 32px',
+                  textAlign: 'center',
+                  cursor: 'pointer',
+                  background: frontImage ? '#0d0d1a' : dragFront ? 'rgba(0,255,157,0.04)' : '#0d0d1a',
+                  transition: 'all 0.2s',
+                  overflow: 'hidden',
+                  position: 'relative',
+                }}
+              >
+                {frontImage ? (
+                  <>
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={frontImage} alt="Document" style={{ width: '100%', display: 'block', maxHeight: 420, objectFit: 'contain' }} />
+                    <div style={{
+                      position: 'absolute', top: 10, left: 10,
+                      fontSize: 10, fontWeight: 700, letterSpacing: 0.5,
+                      background: 'rgba(0,255,157,0.15)', border: '1px solid rgba(0,255,157,0.3)',
+                      color: '#00ff9d', padding: '3px 10px', borderRadius: 10,
+                    }}>✅ UPLOADED</div>
+                  </>
+                ) : (
+                  <>
+                    <div style={{ fontSize: 56, marginBottom: 16 }}>📂</div>
+                    <p style={{ fontSize: 20, fontWeight: 700, color: '#fff', margin: '0 0 8px' }}>
+                      Drop {selectedType.label} here
+                    </p>
+                    <p style={{ fontSize: 14, color: '#555', margin: '0 0 20px' }}>
+                      JPG, PNG, PDF — photo or scan
+                    </p>
+                    <span style={{
+                      background: 'linear-gradient(135deg, #00ff9d, #00c97e)',
+                      color: '#000', borderRadius: 12,
+                      padding: '12px 32px', fontSize: 15, fontWeight: 800,
+                      letterSpacing: 0.3, display: 'inline-block',
+                    }}>
+                      Select File
+                    </span>
+                  </>
+                )}
+                <input ref={frontRef} type="file" accept="image/*,application/pdf" onChange={fileHandler(f => handleQuickUpload(f))} style={{ display: 'none' }} />
+              </div>
+            )}
+
+            {/* Submit button for dual-image uploads */}
+            {selectedType.needsBack && (
+              <div style={{ marginTop: 24, textAlign: 'center' }}>
+                <button
+                  onClick={submitAnalysis}
+                  disabled={!canSubmit}
+                  style={{
+                    background: canSubmit
+                      ? 'linear-gradient(135deg, #00ff9d, #00c97e)'
+                      : '#1a1a28',
+                    color: canSubmit ? '#000' : '#444',
+                    border: canSubmit ? 'none' : '1px solid #2a2a40',
+                    borderRadius: 14,
+                    padding: '14px 48px',
+                    fontSize: 16,
+                    fontWeight: 800,
+                    cursor: canSubmit ? 'pointer' : 'not-allowed',
+                    letterSpacing: 0.3,
+                    transition: 'all 0.2s',
+                  }}
+                >
+                  {canSubmit ? '🔍 Analyze Document' : `Upload ${!frontImage ? 'front' : 'back'} side to continue`}
+                </button>
+                {!canSubmit && (
+                  <p style={{ fontSize: 12, color: '#555', marginTop: 10 }}>
+                    {!frontImage && !backImage
+                      ? 'Upload both front and back images of your ID document'
+                      : !frontImage
+                      ? 'Upload the front side of your document'
+                      : 'Upload the back side (with MRZ zone) of your document'}
+                  </p>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ═══════════════════════════════════════════════════════════════ */}
+        {/* STEP 3: Analyzing                                               */}
+        {/* ═══════════════════════════════════════════════════════════════ */}
+        {flowState === 'analyzing' && (
           <div style={{
-            display: 'grid', gridTemplateColumns: preview ? '1fr 1fr' : '1fr',
+            display: 'grid', gridTemplateColumns: frontImage ? '1fr 1fr' : '1fr',
             gap: 24, alignItems: 'start',
           }}>
 
             {/* Preview */}
-            {preview && (
-              <div style={{ borderRadius: 16, overflow: 'hidden', border: '1px solid #1e1e30', position: 'relative', background: '#0d0d1a' }}>
-                {isPdf ? (
-                  /* PDF — show iframe embed with filename badge */
-                  <div style={{ height: 380, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 16, padding: 24 }}>
-                    <div style={{ fontSize: 64 }}>📄</div>
-                    <div style={{ textAlign: 'center' }}>
-                      <div style={{ fontSize: 14, fontWeight: 700, color: '#e0e0e0', marginBottom: 4 }}>{fileName}</div>
-                      <div style={{ fontSize: 12, color: '#555' }}>PDF — Tesseract.js OCR + pdfjs-dist text extraction</div>
-                    </div>
-                    <div style={{
-                      fontSize: 11, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase',
-                      background: 'rgba(0,255,157,0.1)', border: '1px solid rgba(0,255,157,0.25)',
-                      color: '#00ff9d', padding: '4px 12px', borderRadius: 20,
-                    }}>OCR in progress…</div>
-                  </div>
-                ) : (
-                  /* Image */
-                  <>
+            {frontImage && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                <div style={{ borderRadius: 16, overflow: 'hidden', border: '1px solid #1e1e30', position: 'relative', background: '#0d0d1a' }}>
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={frontImage} alt="Front" style={{ width: '100%', display: 'block', maxHeight: 280, objectFit: 'contain' }} />
+                  <div style={{
+                    position: 'absolute', inset: 0,
+                    animation: 'scanline 2s linear infinite',
+                    backgroundImage: 'repeating-linear-gradient(0deg, transparent, transparent 10px, rgba(0,255,157,0.04) 10px, rgba(0,255,157,0.04) 11px)',
+                    backgroundSize: '100% 200px',
+                    pointerEvents: 'none',
+                  }} />
+                  <div style={{
+                    position: 'absolute', top: 8, left: 8,
+                    fontSize: 10, fontWeight: 700, background: '#0d0d1acc', color: '#888',
+                    padding: '2px 8px', borderRadius: 6,
+                  }}>FRONT</div>
+                </div>
+                {backImage && (
+                  <div style={{ borderRadius: 16, overflow: 'hidden', border: '1px solid #1e1e30', position: 'relative', background: '#0d0d1a' }}>
                     {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={preview} alt="Document" style={{ width: '100%', display: 'block', maxHeight: 420, objectFit: 'contain' }} />
+                    <img src={backImage} alt="Back" style={{ width: '100%', display: 'block', maxHeight: 200, objectFit: 'contain' }} />
                     <div style={{
                       position: 'absolute', inset: 0,
                       animation: 'scanline 2s linear infinite',
-                      backgroundImage: 'repeating-linear-gradient(0deg, transparent, transparent 10px, rgba(0,255,157,0.04) 10px, rgba(0,255,157,0.04) 11px)',
+                      backgroundImage: 'repeating-linear-gradient(0deg, transparent, transparent 10px, rgba(112,0,255,0.04) 10px, rgba(112,0,255,0.04) 11px)',
                       backgroundSize: '100% 200px',
                       pointerEvents: 'none',
                     }} />
-                  </>
+                    <div style={{
+                      position: 'absolute', top: 8, left: 8,
+                      fontSize: 10, fontWeight: 700, background: '#0d0d1acc', color: '#888',
+                      padding: '2px 8px', borderRadius: 6,
+                    }}>BACK (MRZ)</div>
+                  </div>
                 )}
               </div>
             )}
@@ -441,8 +762,10 @@ export default function AdmissionsDemoPage() {
           </div>
         )}
 
-        {/* ── Error ──────────────────────────────────────────────────────── */}
-        {state === 'error' && (
+        {/* ═══════════════════════════════════════════════════════════════ */}
+        {/* Error                                                           */}
+        {/* ═══════════════════════════════════════════════════════════════ */}
+        {flowState === 'error' && (
           <div style={{ textAlign: 'center', padding: 48 }}>
             <div style={{ fontSize: 48, marginBottom: 16 }}>❌</div>
             <p style={{ fontSize: 18, fontWeight: 700, color: '#ff4d4d', margin: '0 0 8px' }}>Analysis Failed</p>
@@ -455,8 +778,10 @@ export default function AdmissionsDemoPage() {
           </div>
         )}
 
-        {/* ── Results ────────────────────────────────────────────────────── */}
-        {state === 'done' && result && (
+        {/* ═══════════════════════════════════════════════════════════════ */}
+        {/* STEP 4: Results                                                 */}
+        {/* ═══════════════════════════════════════════════════════════════ */}
+        {flowState === 'done' && result && (
           <div>
             {/* Top bar: score + verdict + doc type */}
             <div style={{
@@ -501,6 +826,13 @@ export default function AdmissionsDemoPage() {
                   }}>
                     {(result.documentType.confidence * 100).toFixed(0)}% confidence
                   </span>
+                  {result.backImageProcessed && (
+                    <span style={{
+                      fontSize: 10, fontWeight: 700, letterSpacing: 0.5,
+                      background: 'rgba(112,0,255,0.10)', border: '1px solid rgba(112,0,255,0.25)',
+                      color: '#b57bff', padding: '2px 8px', borderRadius: 10,
+                    }}>FRONT + BACK</span>
+                  )}
                 </div>
                 <div style={{ fontSize: 20, fontWeight: 800, color: '#fff', marginBottom: 6 }}>
                   {result.documentType.label}
@@ -557,7 +889,7 @@ export default function AdmissionsDemoPage() {
                           <div style={{ background: '#111120', borderRadius: 8, padding: 12 }}>
                             <p style={{ fontSize: 11, color: '#555', margin: '0 0 6px', letterSpacing: 0.5 }}>RAW OCR TEXT</p>
                             <pre style={{ fontSize: 11, color: '#777', margin: 0, whiteSpace: 'pre-wrap', maxHeight: 180, overflow: 'auto' }}>
-                              {d.ocrText.slice(0, 800)}{d.ocrText.length > 800 ? '…' : ''}
+                              {d.ocrText.slice(0, 800)}{d.ocrText.length > 800 ? '...' : ''}
                             </pre>
                           </div>
                         )}
@@ -713,7 +1045,7 @@ export default function AdmissionsDemoPage() {
               {history.map(doc => (
                 <div
                   key={doc.id}
-                  onClick={() => { setViewDoc(doc); setResult(doc.result); setState('done') }}
+                  onClick={() => { setResult(doc.result); setFlowState('done') }}
                   style={{
                     display: 'flex', alignItems: 'center', gap: 14,
                     background: '#0d0d1a', border: '1px solid #1e1e30', borderRadius: 14,

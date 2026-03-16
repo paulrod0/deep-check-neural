@@ -116,14 +116,15 @@ export interface AdmissionsAlert {
 }
 
 export interface AdmissionsVerifyResponse {
-  documentType:     AdmissionsDocTypeResult
-  extractedData:    AdmissionsExtractedFields
-  mrzAnalysis:      AdmissionsMRZAnalysis | null
-  forensics:        AdmissionsForensicsSignals
-  authenticityScore: number   // 0–100 (higher = more authentic)
-  verdict:          'authentic' | 'suspicious' | 'tampered'
-  alerts:           AdmissionsAlert[]
-  processingMs:     number
+  documentType:       AdmissionsDocTypeResult
+  extractedData:      AdmissionsExtractedFields
+  mrzAnalysis:        AdmissionsMRZAnalysis | null
+  forensics:          AdmissionsForensicsSignals
+  authenticityScore:  number   // 0–100 (higher = more authentic)
+  verdict:            'authentic' | 'suspicious' | 'tampered'
+  alerts:             AdmissionsAlert[]
+  processingMs:       number
+  backImageProcessed: boolean  // true if imageBack was provided and processed
 }
 
 // ── Document classification keywords ──────────────────────────────────────────
@@ -463,12 +464,46 @@ function extractFields(
         // Arabic nationality
         /\u0627\u0644\u062c\u0646\u0633\u064a\u0629\s*[:\-]?\s*([\u0600-\u06FF\s]{2,30})/,
       ])
-    // Parse expiry date
-    const expiryDate = firstMatch(txt, [
-      /VALIDEZ\s*[:\-]?\s*(\d{2}\s+\d{2}\s+\d{4})/i,
-      /(?:validez|expiry|caducidad)\S*\s*[:\-]?\s*(\d{2}[\s\/\-\.]\d{2}[\s\/\-\.]\d{4})/i,
-      /\u062a\u0627\u0631\u064a\u062e \u0627\u0644\u0627\u0646\u062a\u0647\u0627\u0621\s*[:\-]?\s*(\d{2}[\s\/\-\.]\d{2}[\s\/\-\.]\d{4})/,
-    ])
+    // Parse emission date (to differentiate from expiry)
+    const emisionDate = kv_get(['emisión', 'emision', 'emission', 'expedición', 'expedicion', 'issue', 'date of issue']) ??
+      firstMatch(txt, [
+        /(?:EMISI[ÓO]N|EXPEDICI[ÓO]N|issue)\s*[:\-]?\s*(\d{2}[\s\/\-\.]\d{2}[\s\/\-\.]\d{4})/i,
+      ])
+
+    // Parse expiry date — use KV pairs first (most reliable), then regex
+    // IMPORTANT: Spanish DNI has EMISIÓN and VALIDEZ side by side.
+    // Textract linearizes as "EMISIÓN VALIDEZ\n05 09 2022 05 09 2027"
+    // so we must find ALL dates near VALIDEZ and pick the one that ISN'T the emission date.
+    const expiryFromKV = kv_get(['validez', 'expiry', 'caducidad', 'date of expiry', 'válido hasta', 'valido hasta'])
+    let expiryDate: string | undefined = expiryFromKV
+
+    if (!expiryDate) {
+      // Strategy: find ALL dates in the text, filter out emission date, pick the latest
+      const allDates = [...txt.matchAll(/(\d{2}[\s\/\-\.]\d{2}[\s\/\-\.]\d{4})/g)].map(m => m[1])
+      if (allDates.length >= 2 && emisionDate) {
+        // Find the date that's NOT the emission date
+        const emisionNorm = emisionDate.replace(/[\s\/\-\.]/g, '')
+        const candidates = allDates.filter(d => d.replace(/[\s\/\-\.]/g, '') !== emisionNorm)
+        if (candidates.length > 0) {
+          // Pick the latest date (most likely the expiry)
+          expiryDate = candidates[candidates.length - 1]
+        }
+      }
+      // Fallback: look for date specifically after VALIDEZ keyword
+      if (!expiryDate) {
+        // Match text like "VALIDEZ\n05 09 2022 05 09 2027" → capture LAST date on that line
+        const validezBlock = txt.match(/VALIDEZ[\s\S]{0,50}?(\d{2}[\s\/\-\.]\d{2}[\s\/\-\.]\d{4})[\s\S]{0,20}?(\d{2}[\s\/\-\.]\d{2}[\s\/\-\.]\d{4})/i)
+        if (validezBlock && validezBlock[2]) {
+          expiryDate = validezBlock[2]  // second date is the one under VALIDEZ
+        } else {
+          expiryDate = firstMatch(txt, [
+            /VALIDEZ\s*[:\-]?\s*(\d{2}[\s\/\-\.]\d{2}[\s\/\-\.]\d{4})/i,
+            /(?:validez|expiry|caducidad)\S*\s*[:\-]?\s*(\d{2}[\s\/\-\.]\d{2}[\s\/\-\.]\d{4})/i,
+            /\u062a\u0627\u0631\u064a\u062e \u0627\u0644\u0627\u0646\u062a\u0647\u0627\u0621\s*[:\-]?\s*(\d{2}[\s\/\-\.]\d{2}[\s\/\-\.]\d{4})/,
+          ])
+        }
+      }
+    }
     // Parse issuing country
     const issuingCountryFromText = detectArabicCountry(txt, txt.toLowerCase())
     const issuingCountry = (txt.includes('ESPAÑA') || txt.includes('ESPANA') || txt.includes('ESPAGNE'))
@@ -763,9 +798,13 @@ export async function POST(req: NextRequest): Promise<NextResponse<AdmissionsVer
   const t0 = Date.now()
 
   let image: string
+  let imageBack: string | undefined
+  let userDocType: string | undefined
   try {
-    const body = await req.json() as { image?: string }
+    const body = await req.json() as { image?: string; imageBack?: string; documentType?: string }
     image = body.image ?? ''
+    imageBack = body.imageBack || undefined
+    userDocType = body.documentType || undefined
     if (!image) throw new Error('missing image')
   } catch {
     return NextResponse.json({ error: 'Request body must be JSON with { image: base64String }' }, { status: 400 })
@@ -842,15 +881,54 @@ export async function POST(req: NextRequest): Promise<NextResponse<AdmissionsVer
     console.error('[admissions-verify] Text consistency error:', textConsistencySettled.reason)
   }
 
-  const ocrText  = ocrResult?.rawText ?? ''
-  const ocrLower = ocrText.toLowerCase()
+  // ── Process back image OCR if provided (DNI reverse side for MRZ) ──────
+  let backOcrResult: OcrResult | null = null
+  if (imageBack) {
+    console.log('[admissions-verify] Processing back image for MRZ extraction...')
+    try {
+      backOcrResult = await runOCR(imageBack)
+      console.log(`[admissions-verify] Back OCR: ${backOcrResult?.rawText?.length ?? 0} chars extracted`)
+    } catch (err) {
+      console.error('[admissions-verify] Back OCR error:', err instanceof Error ? err.message : err)
+    }
+  }
+
+  // Merge front + back OCR text (back image typically contains MRZ zone for DNIs)
+  const frontText = ocrResult?.rawText ?? ''
+  const backText  = backOcrResult?.rawText ?? ''
+  const ocrText   = backText ? `${frontText}\n\n--- REVERSE SIDE ---\n${backText}` : frontText
+  const ocrLower  = ocrText.toLowerCase()
+
+  // Merge key-value pairs from both sides
+  const mergedKvPairs: Record<string, string> = {
+    ...(ocrResult?.keyValuePairs ?? {}),
+    ...(backOcrResult?.keyValuePairs ?? {}),
+  }
 
   // ── Classify document ────────────────────────────────────────────────────
-  const docType = classifyDocument(
+  let docType = classifyDocument(
     ocrLower,
     ocrText,
     (faceResult?.faceCount ?? 0) > 0,
   )
+
+  // Override classification if user explicitly selected document type
+  if (userDocType) {
+    const typeOverrides: Record<string, Partial<AdmissionsDocTypeResult>> = {
+      'passport':            { type: 'passport', label: 'International Passport', isIdentity: true, isAcademic: false, isRelevant: true },
+      'dni':                 { type: 'dni', label: 'National ID Card (DNI)', isIdentity: true, isAcademic: false, isRelevant: true },
+      'eu_id':               { type: 'eu_id', label: 'National Identity Card', isIdentity: true, isAcademic: false, isRelevant: true },
+      'degree_certificate':  { type: 'degree_certificate', label: 'Degree / Diploma Certificate', isIdentity: false, isAcademic: true, isRelevant: true },
+      'academic_transcript': { type: 'academic_transcript', label: 'Academic Transcript', isIdentity: false, isAcademic: true, isRelevant: true },
+      'cv_resume':           { type: 'cv_resume', label: 'CV / Résumé', isIdentity: false, isAcademic: false, isRelevant: true },
+      'other':               { type: 'other', label: 'Other Document', isIdentity: false, isAcademic: false, isRelevant: true },
+    }
+    const override = typeOverrides[userDocType]
+    if (override) {
+      docType = { ...docType, ...override, confidence: Math.max(docType.confidence, 0.90) } as AdmissionsDocTypeResult
+      console.log(`[admissions-verify] User override → ${userDocType}`)
+    }
+  }
 
   // ── Parse MRZ ────────────────────────────────────────────────────────────
   const mrzAnalysis = extractMRZ(ocrText)
@@ -860,7 +938,7 @@ export async function POST(req: NextRequest): Promise<NextResponse<AdmissionsVer
     ocrText,
     docType.type,
     mrzAnalysis,
-    ocrResult?.keyValuePairs ?? {},
+    mergedKvPairs,
   )
 
   // ── Cross-validation: MRZ ↔ OCR ─────────────────────────────────────────
@@ -898,7 +976,7 @@ export async function POST(req: NextRequest): Promise<NextResponse<AdmissionsVer
   const exifScore         = exifResult?.exifScore ?? 0
   const textConsistency   = textConsistencyResult?.consistencyScore ?? 0
   const crossValidation   = crossValidationResult?.crossScore ?? 0
-  const ocrConfidence     = ocrResult?.ocrConfidence ?? 0
+  const ocrConfidence     = Math.max(ocrResult?.ocrConfidence ?? 0, backOcrResult?.ocrConfidence ?? 0)
 
   // Weighted overall risk score — all signals contribute
   const overallRiskScore = Math.round(
@@ -931,7 +1009,10 @@ export async function POST(req: NextRequest): Promise<NextResponse<AdmissionsVer
     faceDetected:   (faceResult?.faceCount ?? 0) > 0,
     faceCount:      faceResult?.faceCount ?? 0,
     ocrConfidence,
-    semanticAlerts: (ocrResult?.semanticAlerts ?? []).map(a => ({
+    semanticAlerts: [
+      ...(ocrResult?.semanticAlerts ?? []),
+      ...(backOcrResult?.semanticAlerts ?? []),
+    ].map(a => ({
       type:   a.type,
       label:  a.label,
       detail: a.detail,
@@ -972,7 +1053,7 @@ export async function POST(req: NextRequest): Promise<NextResponse<AdmissionsVer
   alerts.unshift({
     level:   'info',
     code:    'PIPELINE_INFO',
-    message: `7-layer forensics: OCR (${ocrResult?.engine ?? 'N/A'}) + MRZ ICAO-9303 + Cross-validation + ELA + EXIF + FFT/Wavelet + Text consistency. ${isPDF ? 'PDF rendered to PNG.' : 'Direct image analysis.'}`,
+    message: `7-layer forensics: OCR (${ocrResult?.engine ?? 'N/A'}) + MRZ ICAO-9303 + Cross-validation + ELA + EXIF + FFT/Wavelet + Text consistency. ${imageBack ? 'Front + back images analyzed.' : isPDF ? 'PDF rendered to PNG.' : 'Direct image analysis.'}`,
   })
 
   return NextResponse.json({
@@ -983,6 +1064,7 @@ export async function POST(req: NextRequest): Promise<NextResponse<AdmissionsVer
     authenticityScore,
     verdict,
     alerts,
-    processingMs: Date.now() - t0,
+    processingMs:       Date.now() - t0,
+    backImageProcessed: !!backOcrResult,
   })
 }
