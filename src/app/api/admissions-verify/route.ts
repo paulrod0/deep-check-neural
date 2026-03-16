@@ -614,11 +614,52 @@ function computeAuthenticityScore(
   mrz:     AdmissionsMRZAnalysis | null,
   docType: AdmissionsDocTypeResult,
   ocrConfidence: number,
+  crossValidationAlerts: { field: string; severity: string; penalty: number }[],
 ): number {
 
-  // Risk scores 0–100 where 100 = highest risk
-  // Weighting includes all 7 forensic signals
-  // When no MRZ is available, redistribute cross-validation weight to other signals
+  // ═══════════════════════════════════════════════════════════════════════════
+  // TIER 0 — DEFINITIVE TAMPERING (cross-validation critical mismatches)
+  // ═══════════════════════════════════════════════════════════════════════════
+  // A name or document number mismatch between MRZ and visual text is IMPOSSIBLE
+  // on a genuine document. This is 100% proof of forgery — overrides EVERYTHING.
+  const criticalMismatches = crossValidationAlerts.filter(
+    a => a.severity === 'critical'
+  )
+  if (criticalMismatches.length > 0) {
+    // Name mismatch alone = max score 12 (TAMPERED)
+    // Name + doc number = max score 5 (TAMPERED)
+    // Any 1 critical = max 15, 2+ = max 8
+    const hasNameMismatch = criticalMismatches.some(a => a.field === 'Full Name')
+    const hasDocNumMismatch = criticalMismatches.some(a => a.field === 'Document Number')
+    const hasDobMismatch = criticalMismatches.some(a => a.field === 'Date of Birth')
+
+    if (hasNameMismatch && hasDocNumMismatch) {
+      return 3  // Both name AND document number differ — absolute forgery
+    }
+    if (hasNameMismatch) {
+      // Name differs between MRZ and visual: definitive tampering
+      // Additional penalty if other critical mismatches exist
+      const extra = criticalMismatches.length - 1
+      return Math.max(3, 12 - extra * 4)
+    }
+    if (hasDocNumMismatch) {
+      return Math.max(3, 10 - (criticalMismatches.length - 1) * 3)
+    }
+    if (hasDobMismatch) {
+      return Math.max(5, 18 - (criticalMismatches.length - 1) * 4)
+    }
+    // Other critical mismatches
+    return Math.max(5, 20 - criticalMismatches.length * 5)
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // TIER 1 — Cross-validation warnings (non-critical mismatches)
+  // ═══════════════════════════════════════════════════════════════════════════
+  const warningMismatches = crossValidationAlerts.filter(a => a.severity === 'warning')
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // TIER 2 — Standard weighted scoring (no definitive tampering signal)
+  // ═══════════════════════════════════════════════════════════════════════════
   const hasMRZ = !!(mrz?.detected)
   const forensicRisk = hasMRZ
     ? (
@@ -631,63 +672,59 @@ function computeAuthenticityScore(
         forensics.crossValidation  * 0.30
       )
     : (
-        // No MRZ → upweight pixel-level signals that can detect manipulation
         forensics.frequencyScore   * 0.15 +
         forensics.semanticScore    * 0.15 +
         forensics.faceQualityScore * 0.05 +
-        forensics.elaScore         * 0.25 +   // ELA becomes primary
+        forensics.elaScore         * 0.25 +
         forensics.exifScore        * 0.15 +
-        forensics.textConsistency  * 0.25     // Text consistency becomes primary
+        forensics.textConsistency  * 0.25
       )
 
   let score = 100 - forensicRisk
 
-  // ── MRZ bonus/penalty ─────────────────────────────────────────────────
-  if (docType.isIdentity && mrz) {
-    if (mrz.detected) {
-      score = mrz.valid
-        ? score * 0.60 + 100 * 0.40   // MRZ valid → strong boost
-        : score * 0.60 + 0   * 0.40   // MRZ invalid → strong penalty
-    }
+  // ── MRZ bonus/penalty (only when no cross-validation issues) ────────────
+  if (docType.isIdentity && mrz?.detected && warningMismatches.length === 0) {
+    score = mrz.valid
+      ? score * 0.60 + 100 * 0.40
+      : score * 0.60 + 0   * 0.40
+  } else if (docType.isIdentity && mrz?.detected && !mrz.valid) {
+    // MRZ invalid → penalty regardless
+    score = score * 0.60 + 0 * 0.40
   }
 
-  // ── CRITICAL: Identity document WITHOUT MRZ → cannot fully verify ─────
-  // A DNI/passport without MRZ visible is inherently unverifiable.
-  // Cap the score: we cannot grant "authentic" without MRZ cross-check.
+  // ── Identity doc WITHOUT MRZ → cap at suspicious ───────────────────────
   if (docType.isIdentity && !hasMRZ) {
-    score = Math.min(score, 78)  // max "suspicious" zone — never "authentic" without MRZ
+    score = Math.min(score, 78)
   }
 
-  // ── Cross-validation: severe penalty if MRZ and OCR disagree ──────────
-  if (forensics.crossValidation >= 40) {
-    score = Math.min(score, 100 - forensics.crossValidation)
+  // ── Warning-level cross-validation mismatches ──────────────────────────
+  if (warningMismatches.length > 0) {
+    const warningPenalty = warningMismatches.reduce((s, a) => s + a.penalty, 0)
+    score = Math.min(score, Math.max(30, 70 - warningPenalty))
   }
 
-  // ── Text consistency: penalty for inconsistent rendering ──────────────
-  // This catches manipulations even without MRZ (like changing "Pablo" to "Pedro")
+  // ── Text consistency ───────────────────────────────────────────────────
   if (forensics.textConsistency >= 50) {
-    // Strong signal: different noise/sharpness across regions = editing
     const textPenalty = Math.round(forensics.textConsistency * 0.4)
     score = Math.min(score, 100 - textPenalty)
   }
 
-  // ── ELA: JPEG manipulation detected ───────────────────────────────────
+  // ── ELA ────────────────────────────────────────────────────────────────
   if (forensics.elaScore >= 40) {
     score = Math.min(score, 80 - Math.round(forensics.elaScore * 0.2))
   }
 
-  // ── Editing software in EXIF ──────────────────────────────────────────
+  // ── EXIF editing software ──────────────────────────────────────────────
   if (forensics.exifScore >= 25) {
     score = Math.min(score, 75)
   }
 
-  // ── Semantic: NIF/CIF/IBAN validation failure ─────────────────────────
+  // ── Semantic failures ──────────────────────────────────────────────────
   if (forensics.semanticScore >= 35) {
     score = Math.min(score, 65)
   }
 
-  // ── Compound signals: multiple moderate signals = stronger penalty ────
-  // If 2+ signals are in "moderate" zone (≥30), that's more suspicious than any single signal
+  // ── Compound signals ──────────────────────────────────────────────────
   const moderateSignals = [
     forensics.elaScore,
     forensics.textConsistency,
@@ -700,16 +737,15 @@ function computeAuthenticityScore(
     score = Math.min(score, 75 - (moderateSignals - 2) * 5)
   }
   if (moderateSignals >= 3) {
-    score = Math.min(score, 65)  // 3+ moderate signals → suspicious at best
+    score = Math.min(score, 65)
   }
 
-  // ── OCR confidence bonus ──────────────────────────────────────────────
-  if (ocrConfidence >= 80 && docType.isIdentity && hasMRZ) {
-    // Only give OCR bonus if MRZ is present (otherwise we're less certain)
+  // ── OCR confidence bonus (only if everything else is clean) ────────────
+  if (ocrConfidence >= 80 && docType.isIdentity && hasMRZ && warningMismatches.length === 0) {
     score = Math.min(100, score + 2)
   }
 
-  // ── CV/resume: cannot verify cryptographically ────────────────────────
+  // ── CV/resume: inherently unverifiable ─────────────────────────────────
   if (docType.type === 'cv_resume') {
     score = Math.min(score, 62)
   }
@@ -1079,6 +1115,11 @@ export async function POST(req: NextRequest): Promise<NextResponse<AdmissionsVer
     mrzAnalysis,
     docType,
     ocrConfidence,
+    (crossValidationResult?.alerts ?? []).map(a => ({
+      field:    a.field,
+      severity: a.severity,
+      penalty:  a.penalty,
+    })),
   )
   const verdict = computeVerdict(authenticityScore, docType)
 
