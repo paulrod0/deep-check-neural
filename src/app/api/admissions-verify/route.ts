@@ -564,20 +564,32 @@ function computeAuthenticityScore(
 ): number {
 
   // Risk scores 0–100 where 100 = highest risk
-  // New weighting includes all 7 forensic signals
-  const forensicRisk = (
-    forensics.frequencyScore   * 0.12 +   // FFT/wavelet
-    forensics.semanticScore    * 0.13 +   // NIF/IBAN/date
-    forensics.faceQualityScore * 0.05 +   // Face quality
-    forensics.elaScore         * 0.20 +   // ELA (strong)
-    forensics.exifScore        * 0.10 +   // EXIF metadata
-    forensics.textConsistency  * 0.10 +   // Text/font consistency
-    forensics.crossValidation  * 0.30     // MRZ ↔ OCR (strongest)
-  )
+  // Weighting includes all 7 forensic signals
+  // When no MRZ is available, redistribute cross-validation weight to other signals
+  const hasMRZ = !!(mrz?.detected)
+  const forensicRisk = hasMRZ
+    ? (
+        forensics.frequencyScore   * 0.12 +
+        forensics.semanticScore    * 0.13 +
+        forensics.faceQualityScore * 0.05 +
+        forensics.elaScore         * 0.20 +
+        forensics.exifScore        * 0.10 +
+        forensics.textConsistency  * 0.10 +
+        forensics.crossValidation  * 0.30
+      )
+    : (
+        // No MRZ → upweight pixel-level signals that can detect manipulation
+        forensics.frequencyScore   * 0.15 +
+        forensics.semanticScore    * 0.15 +
+        forensics.faceQualityScore * 0.05 +
+        forensics.elaScore         * 0.25 +   // ELA becomes primary
+        forensics.exifScore        * 0.15 +
+        forensics.textConsistency  * 0.25     // Text consistency becomes primary
+      )
 
   let score = 100 - forensicRisk
 
-  // MRZ bonus/penalty for identity documents
+  // ── MRZ bonus/penalty ─────────────────────────────────────────────────
   if (docType.isIdentity && mrz) {
     if (mrz.detected) {
       score = mrz.valid
@@ -586,33 +598,65 @@ function computeAuthenticityScore(
     }
   }
 
-  // Cross-validation: severe penalty if MRZ and OCR disagree
+  // ── CRITICAL: Identity document WITHOUT MRZ → cannot fully verify ─────
+  // A DNI/passport without MRZ visible is inherently unverifiable.
+  // Cap the score: we cannot grant "authentic" without MRZ cross-check.
+  if (docType.isIdentity && !hasMRZ) {
+    score = Math.min(score, 78)  // max "suspicious" zone — never "authentic" without MRZ
+  }
+
+  // ── Cross-validation: severe penalty if MRZ and OCR disagree ──────────
   if (forensics.crossValidation >= 40) {
-    // Direct penalty: cross-validation failure is the most damning signal
     score = Math.min(score, 100 - forensics.crossValidation)
   }
 
-  // ELA: if JPEG manipulation detected, cap score
-  if (forensics.elaScore >= 50) {
-    score = Math.min(score, 70)  // Can't be "authentic" if ELA is high
+  // ── Text consistency: penalty for inconsistent rendering ──────────────
+  // This catches manipulations even without MRZ (like changing "Pablo" to "Pedro")
+  if (forensics.textConsistency >= 50) {
+    // Strong signal: different noise/sharpness across regions = editing
+    const textPenalty = Math.round(forensics.textConsistency * 0.4)
+    score = Math.min(score, 100 - textPenalty)
   }
 
-  // Editing software in EXIF: direct penalty
+  // ── ELA: JPEG manipulation detected ───────────────────────────────────
+  if (forensics.elaScore >= 40) {
+    score = Math.min(score, 80 - Math.round(forensics.elaScore * 0.2))
+  }
+
+  // ── Editing software in EXIF ──────────────────────────────────────────
   if (forensics.exifScore >= 25) {
     score = Math.min(score, 75)
   }
 
-  // Semantic: NIF/CIF/IBAN validation failure → hard penalty
+  // ── Semantic: NIF/CIF/IBAN validation failure ─────────────────────────
   if (forensics.semanticScore >= 35) {
-    score = Math.min(score, 65)  // can't be "authentic" with invalid NIF
+    score = Math.min(score, 65)
   }
 
-  // OCR confidence bonus: high OCR confidence → text readable → more trustworthy
-  if (ocrConfidence >= 80 && docType.isIdentity) {
+  // ── Compound signals: multiple moderate signals = stronger penalty ────
+  // If 2+ signals are in "moderate" zone (≥30), that's more suspicious than any single signal
+  const moderateSignals = [
+    forensics.elaScore,
+    forensics.textConsistency,
+    forensics.frequencyScore,
+    forensics.exifScore,
+    forensics.semanticScore,
+  ].filter(s => s >= 30).length
+
+  if (moderateSignals >= 2) {
+    score = Math.min(score, 75 - (moderateSignals - 2) * 5)
+  }
+  if (moderateSignals >= 3) {
+    score = Math.min(score, 65)  // 3+ moderate signals → suspicious at best
+  }
+
+  // ── OCR confidence bonus ──────────────────────────────────────────────
+  if (ocrConfidence >= 80 && docType.isIdentity && hasMRZ) {
+    // Only give OCR bonus if MRZ is present (otherwise we're less certain)
     score = Math.min(100, score + 2)
   }
 
-  // CV/resume: cannot verify cryptographically — cap at 62
+  // ── CV/resume: cannot verify cryptographically ────────────────────────
   if (docType.type === 'cv_resume') {
     score = Math.min(score, 62)
   }
