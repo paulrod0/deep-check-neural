@@ -25,7 +25,7 @@ interface ProgressStep {
 
 const STEPS_TEMPLATE: ProgressStep[] = [
   { id: 'ocr',         label: 'OCR text extraction (Tesseract.js)',     status: 'pending' },
-  { id: 'face',        label: 'Face detection & quality (face-api.js)', status: 'pending' },
+  { id: 'face',        label: 'Face detection & quality (YCbCr)',        status: 'pending' },
   { id: 'frequency',   label: 'Frequency / spectral forensics (FFT)',   status: 'pending' },
   { id: 'mrz',         label: 'MRZ check-digit validation (ICAO)',      status: 'pending' },
   { id: 'semantic',    label: 'Semantic validation (NIF/IBAN/dates)',    status: 'pending' },
@@ -306,6 +306,7 @@ export default function AdmissionsDemoPage() {
             { label: '📄 Transcript', color: '#00ff9d' },
             { label: '📋 CV / Résumé', color: '#ffd700' },
             { label: '🌍 Any country', color: '#888' },
+            { label: '🇸🇦 Arabic IDs', color: '#888' },
           ].map(({ label, color }) => (
             <span key={label} style={{
               fontSize: 12, padding: '5px 12px', borderRadius: 20,
@@ -579,7 +580,7 @@ export default function AdmissionsDemoPage() {
                 {[
                   { name: 'Frequency / Spectral',    score: result.forensics.frequencyScore,    desc: 'FFT + Haar wavelet — splice, copy-move, re-compression detection' },
                   { name: 'Semantic Validation',     score: result.forensics.semanticScore,     desc: 'NIF/CIF mod23 + IBAN mod97 + date consistency + MRZ checksums' },
-                  { name: 'Face Quality',            score: result.forensics.faceQualityScore,  desc: 'face-api.js — face detection, pose, quality, print/screen heuristics' },
+                  { name: 'Face Quality',            score: result.forensics.faceQualityScore,  desc: 'YCbCr skin-color analysis + connected component detection' },
                   { name: 'OCR Confidence',          score: 100 - (result.forensics.ocrConfidence ?? 0), desc: `Tesseract.js OCR confidence: ${result.forensics.ocrConfidence ?? 0}% — low confidence may indicate poor scan` },
                 ].map(({ name, score, desc }) => (
                   <div key={name} style={{ marginBottom: 16 }}>
