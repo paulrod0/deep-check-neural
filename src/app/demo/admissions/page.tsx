@@ -24,10 +24,14 @@ interface ProgressStep {
 }
 
 const STEPS_TEMPLATE: ProgressStep[] = [
-  { id: 'ocr',         label: 'OCR text extraction (Tesseract.js)',     status: 'pending' },
+  { id: 'ocr',         label: 'OCR text extraction (AWS Textract)',      status: 'pending' },
   { id: 'face',        label: 'Face detection & quality (YCbCr)',        status: 'pending' },
+  { id: 'ela',         label: 'Error Level Analysis (JPEG forensics)',   status: 'pending' },
   { id: 'frequency',   label: 'Frequency / spectral forensics (FFT)',   status: 'pending' },
+  { id: 'exif',        label: 'EXIF / metadata forensics',              status: 'pending' },
+  { id: 'text',        label: 'Text consistency analysis',              status: 'pending' },
   { id: 'mrz',         label: 'MRZ check-digit validation (ICAO)',      status: 'pending' },
+  { id: 'crossval',    label: 'MRZ ↔ OCR cross-validation',             status: 'pending' },
   { id: 'semantic',    label: 'Semantic validation (NIF/IBAN/dates)',    status: 'pending' },
   { id: 'score',       label: 'Authenticity score calculation',          status: 'pending' },
 ]
@@ -129,7 +133,7 @@ export default function AdmissionsDemoPage() {
     // Clear any previous timers
     timersRef.current.forEach(clearTimeout)
     timersRef.current = []
-    const STEP_DELAYS = [0, 1400, 2800, 4000, 5400, 7000]
+    const STEP_DELAYS = [0, 800, 1500, 2200, 2900, 3600, 4300, 5000, 5700, 6400]
     STEP_DELAYS.forEach((delay, i) => {
       const t = setTimeout(() => {
         setSteps(prev => prev.map((s, idx) => {
@@ -502,8 +506,8 @@ export default function AdmissionsDemoPage() {
                   {result.documentType.label}
                 </div>
                 <div style={{ fontSize: 13, color: '#555' }}>
-                  Processing time: <span style={{ color: '#888' }}>{result.processingMs}ms</span> ·
-                  Signals: OCR + Face + Frequency + Semantic{result.mrzAnalysis?.detected ? ' + MRZ' : ''} · Self-hosted
+                  Processing: <span style={{ color: '#888' }}>{result.processingMs}ms</span> ·
+                  7 forensic layers: ELA + Cross-val + FFT + Text + EXIF + Semantic + Face{result.mrzAnalysis?.detected ? ' + MRZ' : ''}
                 </div>
               </div>
 
@@ -572,41 +576,55 @@ export default function AdmissionsDemoPage() {
                 })()}
               </div>
 
-              {/* Forensics signals */}
+              {/* Forensics signals — 7-layer analysis */}
               <div style={{ background: '#0d0d1a', border: '1px solid #1e1e30', borderRadius: 16, padding: 20 }}>
-                <h3 style={{ fontSize: 12, fontWeight: 700, color: '#555', letterSpacing: 1, textTransform: 'uppercase', margin: '0 0 16px' }}>
-                  Forensics Signals
+                <h3 style={{ fontSize: 12, fontWeight: 700, color: '#555', letterSpacing: 1, textTransform: 'uppercase', margin: '0 0 4px' }}>
+                  7-Layer Forensics
                 </h3>
+                <p style={{ fontSize: 11, color: '#333', margin: '0 0 16px' }}>
+                  Overall manipulation score: <span style={{ fontWeight: 700, color: signalColor(result.forensics.manipulationScore) }}>{result.forensics.manipulationScore}/100</span>
+                </p>
                 {[
-                  { name: 'Frequency / Spectral',    score: result.forensics.frequencyScore,    desc: 'FFT + Haar wavelet — splice, copy-move, re-compression detection' },
-                  { name: 'Semantic Validation',     score: result.forensics.semanticScore,     desc: 'NIF/CIF mod23 + IBAN mod97 + date consistency + MRZ checksums' },
-                  { name: 'Face Quality',            score: result.forensics.faceQualityScore,  desc: 'YCbCr skin-color analysis + connected component detection' },
-                  { name: 'OCR Confidence',          score: 100 - (result.forensics.ocrConfidence ?? 0), desc: `Tesseract.js OCR confidence: ${result.forensics.ocrConfidence ?? 0}% — low confidence may indicate poor scan` },
+                  { name: '🔍 MRZ ↔ OCR Cross-validation', score: result.forensics.crossValidation ?? 0, desc: 'Compares name, doc number, dates between MRZ zone and visual text — strongest forgery signal' },
+                  { name: '🖼️ Error Level Analysis (ELA)',   score: result.forensics.elaScore ?? 0,       desc: 'Re-compresses JPEG and compares — edited regions show different error levels' },
+                  { name: '📊 Frequency / Spectral',         score: result.forensics.frequencyScore,       desc: 'FFT + Haar wavelet — splice, copy-move, re-compression artifacts' },
+                  { name: '🔤 Text Consistency',             score: result.forensics.textConsistency ?? 0, desc: 'Noise, edge sharpness, and contrast uniformity across text regions' },
+                  { name: '📋 EXIF / Metadata',              score: result.forensics.exifScore ?? 0,       desc: 'Editing software detection, date gaps, resolution anomalies' },
+                  { name: '✅ Semantic Validation',           score: result.forensics.semanticScore,        desc: 'NIF/CIF mod23 + IBAN mod97 + date consistency + MRZ checksums' },
+                  { name: '👤 Face Quality',                  score: result.forensics.faceQualityScore,     desc: 'YCbCr skin-color analysis + connected component detection' },
                 ].map(({ name, score, desc }) => (
-                  <div key={name} style={{ marginBottom: 16 }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 4 }}>
-                      <span style={{ fontSize: 13, fontWeight: 600, color: '#ccc' }}>{name}</span>
-                      <span style={{ fontSize: 12, fontWeight: 700, color: signalColor(score) }}>
+                  <div key={name} style={{ marginBottom: 14 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 3 }}>
+                      <span style={{ fontSize: 12, fontWeight: 600, color: '#ccc' }}>{name}</span>
+                      <span style={{ fontSize: 11, fontWeight: 700, color: signalColor(score) }}>
                         {signalLabel(score)} ({score.toFixed(0)})
                       </span>
                     </div>
-                    <div style={{ height: 6, background: '#1a1a28', borderRadius: 4, overflow: 'hidden', marginBottom: 3 }}>
+                    <div style={{ height: 5, background: '#1a1a28', borderRadius: 4, overflow: 'hidden', marginBottom: 2 }}>
                       <div style={{
-                        height: '100%', width: `${score}%`,
+                        height: '100%', width: `${Math.max(score, 2)}%`,
                         background: `linear-gradient(90deg, #00ff9d, ${signalColor(score)})`,
                         borderRadius: 4, transition: 'width 0.8s ease',
                       }} />
                     </div>
-                    <span style={{ fontSize: 11, color: '#3a3a55' }}>{desc}</span>
+                    <span style={{ fontSize: 10, color: '#3a3a55' }}>{desc}</span>
                   </div>
                 ))}
 
-                {/* Face detection status */}
-                <div style={{ marginTop: 8, padding: '10px 14px', background: '#111120', borderRadius: 10, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span style={{ fontSize: 12, color: '#555' }}>Face detected</span>
-                  <span style={{ fontSize: 13, fontWeight: 700, color: result.forensics.faceDetected ? '#00ff9d' : '#555' }}>
-                    {result.forensics.faceDetected ? `Yes (${result.forensics.faceCount})` : 'No'}
-                  </span>
+                {/* Face + OCR summary bar */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginTop: 10 }}>
+                  <div style={{ padding: '8px 12px', background: '#111120', borderRadius: 10, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span style={{ fontSize: 11, color: '#555' }}>Face</span>
+                    <span style={{ fontSize: 12, fontWeight: 700, color: result.forensics.faceDetected ? '#00ff9d' : '#555' }}>
+                      {result.forensics.faceDetected ? `✅ ${result.forensics.faceCount}` : '—'}
+                    </span>
+                  </div>
+                  <div style={{ padding: '8px 12px', background: '#111120', borderRadius: 10, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span style={{ fontSize: 11, color: '#555' }}>OCR</span>
+                    <span style={{ fontSize: 12, fontWeight: 700, color: (result.forensics.ocrConfidence ?? 0) >= 80 ? '#00ff9d' : '#ffd700' }}>
+                      {result.forensics.ocrConfidence ?? 0}%
+                    </span>
+                  </div>
                 </div>
               </div>
             </div>
@@ -752,7 +770,7 @@ export default function AdmissionsDemoPage() {
         <footer style={{ marginTop: 60, textAlign: 'center', borderTop: '1px solid #1a1a28', paddingTop: 24 }}>
           <p style={{ fontSize: 12, color: '#2a2a3a', margin: 0 }}>
             Deep-Check · Admissions Verification Demo · IE University Partnership ·
-            100% self-hosted AI · Zero cloud dependency · Zero biometric data stored
+            7-layer forensics · AWS Textract + ELA + FFT + Cross-validation · Zero biometric data stored
           </p>
         </footer>
       </div>
