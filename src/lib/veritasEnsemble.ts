@@ -75,21 +75,25 @@ export interface EnsembleResult {
     }
 }
 
-// ─── Weights (v1.1 — post-validation calibration 2026-03-15) ─────────────────
+// ─── Weights (v1.2 — pixel model activated 2026-03-16) ───────────────────────
 // cnn_v1 validated on held-out synthetic set (seed=1337):
-//   Accuracy=29.5%, Macro-F1=0.244, AUC=0.423, ECE=0.2376
-//   Model overfit to training seed (seed=42) — essentially random.
-//   Weight reduced to near-zero until CNN v2 trains on real FaceForensics++ data.
+//   Accuracy=29.5%, Macro-F1=0.244, AUC=0.423, ECE=0.2376 — DEPRECATED
 //
-// Weight rebalanced:
-//   rppg        0.28 → 0.32  (hardest to spoof, Granger causality)
-//   facs        0.22 → 0.27  (model-agnostic biomechanics)
-//   cnn_v1      0.15 → 0.03  (degraded: synthetic overfit, near noise floor)
-//   cnn_v2      0.00 → 0.00  (will activate once trained on FaceForensics++)
-//   efficientnet 0.20 → 0.23  (pixel GAN artifact detection — still reliable)
-//   keystroke   0.15 → 0.15  (behavioral — unchanged)
+// cnn_v2 ACTIVATED 2026-03-15: 3-stream blendshape CNN, synthetic training
+//   Temporal behavioral model. Discounted confidence (0.75) due to synthetic data.
 //
-// Call updateWeights({ cnn_v2: 0.22, cnn_v1: 0.05 }) after CNN v2 deployment.
+// efficientnet ACTIVATED 2026-03-16: EfficientNet-B4 pixel forensics
+//   deepfake_pixel_v1.onnx — trained on 10k IMDB-Wiki real + 2k StyleGAN2 fake
+//   AUC 1.000, EER 0.000 on held-out set. Detects GAN spectral artifacts.
+//   Layer activates in VerificationCamera once ONNX is deployed to public/models/deepfake/
+//
+// Current active weights (sum of non-zero = 1.00):
+//   rppg:         0.30  (physiological coupling — hardest to spoof)
+//   facs:         0.26  (biomechanical rules — model-agnostic)
+//   cnn_v1:       0.00  (DEPRECATED)
+//   cnn_v2:       0.10  (blendshape temporal CNN — synthetic training)
+//   efficientnet: 0.22  (pixel GAN artifact detection — real-data trained)
+//   keystroke:    0.12  (behavioral biometrics)
 
 const BASE_WEIGHTS: Record<LayerName, number> = {
     rppg:        0.30,   // Physiological coupling — hardest to fake
