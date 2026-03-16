@@ -26,9 +26,17 @@ import { runOCR }                       from '@/lib/ocrEngine'
 import { detectFaces }                  from '@/lib/faceDetection'
 import { parseMRZ }                     from '@/lib/mrzParser'
 import { isPdfInput }                   from '@/lib/pdfToImage'
+import { runELA }                       from '@/lib/elaAnalysis'
+import { runExifAnalysis }              from '@/lib/exifAnalysis'
+import { runTextConsistencyAnalysis }   from '@/lib/textConsistency'
+import { crossValidateMRZvsOCR }        from '@/lib/crossValidation'
 import type { MRZFields }              from '@/lib/mrzParser'
 import type { OcrResult }              from '@/lib/ocrEngine'
 import type { FaceDetectionResult }    from '@/lib/faceDetection'
+import type { ELAResult }              from '@/lib/elaAnalysis'
+import type { ExifForensicResult }     from '@/lib/exifAnalysis'
+import type { TextConsistencyResult }  from '@/lib/textConsistency'
+import type { CrossValidationResult }  from '@/lib/crossValidation'
 
 // ── Response types ─────────────────────────────────────────────────────────────
 
@@ -84,15 +92,21 @@ export interface AdmissionsMRZAnalysis {
 }
 
 export interface AdmissionsForensicsSignals {
-  manipulationScore: number   // 0–100 (frequency-based)
+  manipulationScore: number   // 0–100 (overall manipulation indicator)
   frequencyScore:    number   // 0–100 (FFT/wavelet)
   semanticScore:     number   // 0–100 (OCR semantic anomaly)
   faceQualityScore:  number   // 0–100 (face quality anomaly)
+  elaScore:          number   // 0–100 (Error Level Analysis)
+  exifScore:         number   // 0–100 (EXIF metadata forensics)
+  textConsistency:   number   // 0–100 (text/font consistency)
+  crossValidation:   number   // 0–100 (MRZ ↔ OCR field mismatch)
   overallRiskScore:  number   // 0–100 weighted combination
   faceDetected:      boolean
   faceCount:         number
   ocrConfidence:     number   // 0–100 Tesseract confidence
   semanticAlerts:    { type: string; label: string; detail: string }[]
+  crossValidationAlerts: { field: string; mrzValue: string; ocrValue: string; detail: string }[]
+  exifAlerts:        { type: string; detail: string }[]
 }
 
 export interface AdmissionsAlert {
@@ -539,6 +553,10 @@ function computeAuthenticityScore(
     frequencyScore:    number
     semanticScore:     number
     faceQualityScore:  number
+    elaScore:          number
+    exifScore:         number
+    textConsistency:   number
+    crossValidation:   number
   },
   mrz:     AdmissionsMRZAnalysis | null,
   docType: AdmissionsDocTypeResult,
@@ -546,10 +564,15 @@ function computeAuthenticityScore(
 ): number {
 
   // Risk scores 0–100 where 100 = highest risk
+  // New weighting includes all 7 forensic signals
   const forensicRisk = (
-    forensics.frequencyScore   * 0.40 +
-    forensics.semanticScore    * 0.35 +
-    forensics.faceQualityScore * 0.25
+    forensics.frequencyScore   * 0.12 +   // FFT/wavelet
+    forensics.semanticScore    * 0.13 +   // NIF/IBAN/date
+    forensics.faceQualityScore * 0.05 +   // Face quality
+    forensics.elaScore         * 0.20 +   // ELA (strong)
+    forensics.exifScore        * 0.10 +   // EXIF metadata
+    forensics.textConsistency  * 0.10 +   // Text/font consistency
+    forensics.crossValidation  * 0.30     // MRZ ↔ OCR (strongest)
   )
 
   let score = 100 - forensicRisk
@@ -558,14 +581,35 @@ function computeAuthenticityScore(
   if (docType.isIdentity && mrz) {
     if (mrz.detected) {
       score = mrz.valid
-        ? score * 0.55 + 100 * 0.45   // MRZ valid → strong boost
-        : score * 0.55 + 0   * 0.45   // MRZ invalid → strong penalty
+        ? score * 0.60 + 100 * 0.40   // MRZ valid → strong boost
+        : score * 0.60 + 0   * 0.40   // MRZ invalid → strong penalty
     }
+  }
+
+  // Cross-validation: severe penalty if MRZ and OCR disagree
+  if (forensics.crossValidation >= 40) {
+    // Direct penalty: cross-validation failure is the most damning signal
+    score = Math.min(score, 100 - forensics.crossValidation)
+  }
+
+  // ELA: if JPEG manipulation detected, cap score
+  if (forensics.elaScore >= 50) {
+    score = Math.min(score, 70)  // Can't be "authentic" if ELA is high
+  }
+
+  // Editing software in EXIF: direct penalty
+  if (forensics.exifScore >= 25) {
+    score = Math.min(score, 75)
+  }
+
+  // Semantic: NIF/CIF/IBAN validation failure → hard penalty
+  if (forensics.semanticScore >= 35) {
+    score = Math.min(score, 65)  // can't be "authentic" with invalid NIF
   }
 
   // OCR confidence bonus: high OCR confidence → text readable → more trustworthy
   if (ocrConfidence >= 80 && docType.isIdentity) {
-    score = Math.min(100, score + 3)
+    score = Math.min(100, score + 2)
   }
 
   // CV/resume: cannot verify cryptographically — cap at 62
@@ -590,7 +634,7 @@ function computeVerdict(score: number, docType: AdmissionsDocTypeResult): 'authe
 function buildAlerts(
   docType:   AdmissionsDocTypeResult,
   mrz:       AdmissionsMRZAnalysis | null,
-  forensics: { frequencyScore: number; semanticScore: number; semanticAlerts: { type: string; label: string; detail: string }[] },
+  forensics: AdmissionsForensicsSignals,
   extracted: AdmissionsExtractedFields,
 ): AdmissionsAlert[] {
 
@@ -604,6 +648,7 @@ function buildAlerts(
     alerts.push({ level: 'info', code: 'CV_UNVERIFIABLE', message: 'CVs cannot be cryptographically verified. Cross-reference with identity document and LinkedIn/professional profiles.' })
   }
 
+  // ── MRZ alerts ─────────────────────────────────────────────────────────
   if (mrz?.detected && !mrz.valid) {
     alerts.push({ level: 'error', code: 'MRZ_CHECKSUM_FAIL', message: `MRZ check-digits failed (${mrz.checksumsFailed} of ${mrz.checksumsPassed + mrz.checksumsFailed}). Document may be altered.` })
     for (const a of mrz.alerts) {
@@ -619,10 +664,48 @@ function buildAlerts(
     alerts.push({ level: 'error', code: 'DOCUMENT_EXPIRED', message: `Document expired on ${extracted.expiryDate ?? 'unknown date'}.` })
   }
 
+  // ── Cross-validation alerts (MRZ ↔ OCR) ────────────────────────────────
+  for (const cva of forensics.crossValidationAlerts) {
+    alerts.push({
+      level:   'error',
+      code:    'CROSS_VALIDATION_MISMATCH',
+      message: `⚠️ ${cva.field}: MRZ says "${cva.mrzValue}" but visual text says "${cva.ocrValue}". ${cva.detail}`,
+    })
+  }
+
+  // ── ELA alerts ─────────────────────────────────────────────────────────
+  if (forensics.elaScore >= 40) {
+    alerts.push({
+      level:   forensics.elaScore >= 60 ? 'error' : 'warning',
+      code:    'ELA_MANIPULATION',
+      message: `Error Level Analysis detected inconsistent JPEG compression (score: ${forensics.elaScore}/100). Regions of the image may have been edited and re-saved.`,
+    })
+  }
+
+  // ── EXIF alerts ────────────────────────────────────────────────────────
+  for (const ea of forensics.exifAlerts) {
+    alerts.push({
+      level:   ea.type === 'EDITING_SOFTWARE' ? 'error' : 'warning',
+      code:    ea.type,
+      message: ea.detail,
+    })
+  }
+
+  // ── Text consistency alerts ────────────────────────────────────────────
+  if (forensics.textConsistency >= 40) {
+    alerts.push({
+      level:   forensics.textConsistency >= 60 ? 'error' : 'warning',
+      code:    'TEXT_INCONSISTENCY',
+      message: `Text rendering analysis detected inconsistencies (score: ${forensics.textConsistency}/100). Different regions show different noise/sharpness profiles, suggesting parts of the text may have been edited.`,
+    })
+  }
+
+  // ── Frequency analysis alerts ──────────────────────────────────────────
   if (forensics.frequencyScore >= 55) {
     alerts.push({ level: 'warning', code: 'FREQUENCY_ANOMALY', message: 'Spectral frequency anomalies detected. May indicate copy-paste or re-compression artifacts.' })
   }
 
+  // ── Semantic alerts ────────────────────────────────────────────────────
   for (const sa of forensics.semanticAlerts) {
     alerts.push({ level: 'warning', code: sa.type.toUpperCase(), message: `${sa.label}: ${sa.detail}` })
   }
@@ -670,15 +753,15 @@ export async function POST(req: NextRequest): Promise<NextResponse<AdmissionsVer
     }
   }
 
-  // Run all analyses in parallel
-  const [ocrSettled, faceSettled, frequencySettled] = await Promise.allSettled([
+  // Run ALL analyses in parallel (6 modules)
+  const canDoPixelAnalysis = imageForPixel !== image || !isPDF
+  const [ocrSettled, faceSettled, frequencySettled, elaSettled, exifSettled, textConsistencySettled] = await Promise.allSettled([
     runOCR(image),
-    imageForPixel !== image || !isPDF
-      ? detectFaces(imageForPixel)
-      : Promise.resolve(null),
-    imageForPixel !== image || !isPDF
-      ? import('@/lib/frequencyAnalysis').then(m => m.runFrequencyAnalysis(imageForPixel))
-      : Promise.resolve(null),
+    canDoPixelAnalysis ? detectFaces(imageForPixel) : Promise.resolve(null),
+    canDoPixelAnalysis ? import('@/lib/frequencyAnalysis').then(m => m.runFrequencyAnalysis(imageForPixel)) : Promise.resolve(null),
+    canDoPixelAnalysis ? runELA(imageForPixel) : Promise.resolve(null),
+    canDoPixelAnalysis ? runExifAnalysis(imageForPixel) : Promise.resolve(null),
+    canDoPixelAnalysis ? runTextConsistencyAnalysis(imageForPixel) : Promise.resolve(null),
   ])
 
   // ── Extract results safely ────────────────────────────────────────────────
@@ -688,8 +771,14 @@ export async function POST(req: NextRequest): Promise<NextResponse<AdmissionsVer
     faceSettled.status === 'fulfilled' ? faceSettled.value : null
   const frequencyResult =
     frequencySettled.status === 'fulfilled' ? frequencySettled.value : null
+  const elaResult: ELAResult | null =
+    elaSettled.status === 'fulfilled' ? elaSettled.value : null
+  const exifResult: ExifForensicResult | null =
+    exifSettled.status === 'fulfilled' ? exifSettled.value : null
+  const textConsistencyResult: TextConsistencyResult | null =
+    textConsistencySettled.status === 'fulfilled' ? textConsistencySettled.value : null
 
-  // Log errors
+  // Log errors (non-critical — each module is independent)
   if (ocrSettled.status === 'rejected') {
     console.error('[admissions-verify] OCR error:', ocrSettled.reason)
   }
@@ -698,6 +787,15 @@ export async function POST(req: NextRequest): Promise<NextResponse<AdmissionsVer
   }
   if (frequencySettled.status === 'rejected') {
     console.error('[admissions-verify] Frequency error:', frequencySettled.reason)
+  }
+  if (elaSettled.status === 'rejected') {
+    console.error('[admissions-verify] ELA error:', elaSettled.reason)
+  }
+  if (exifSettled.status === 'rejected') {
+    console.error('[admissions-verify] EXIF error:', exifSettled.reason)
+  }
+  if (textConsistencySettled.status === 'rejected') {
+    console.error('[admissions-verify] Text consistency error:', textConsistencySettled.reason)
   }
 
   const ocrText  = ocrResult?.rawText ?? ''
@@ -721,22 +819,71 @@ export async function POST(req: NextRequest): Promise<NextResponse<AdmissionsVer
     ocrResult?.keyValuePairs ?? {},
   )
 
-  // ── Forensics signals ────────────────────────────────────────────────────
+  // ── Cross-validation: MRZ ↔ OCR ─────────────────────────────────────────
+  let crossValidationResult: CrossValidationResult | null = null
+  if (mrzAnalysis?.detected && mrzAnalysis.fields && docType.isIdentity) {
+    crossValidationResult = crossValidateMRZvsOCR(
+      {
+        surname:        mrzAnalysis.fields.surname,
+        givenNames:     mrzAnalysis.fields.givenNames,
+        docNumber:      mrzAnalysis.fields.docNumber,
+        dob:            mrzAnalysis.fields.dob,
+        expiry:         mrzAnalysis.fields.expiry,
+        nationality:    mrzAnalysis.fields.nationality,
+        sex:            mrzAnalysis.fields.sex,
+        issuingCountry: mrzAnalysis.fields.issuingCountry,
+      },
+      {
+        fullName:       extractedData.fullName,
+        docNumber:      extractedData.docNumber,
+        dateOfBirth:    extractedData.dateOfBirth,
+        expiryDate:     extractedData.expiryDate,
+        nationality:    extractedData.nationality,
+        sex:            extractedData.sex,
+        issuingCountry: extractedData.issuingCountry,
+      },
+    )
+    console.log(`[admissions-verify] Cross-validation: ${crossValidationResult.fieldsMatched}/${crossValidationResult.fieldsCompared} matched, score=${crossValidationResult.crossScore}`)
+  }
+
+  // ── Forensics signals (all 7 modules) ──────────────────────────────────
   const frequencyScore    = frequencyResult?.score ?? 0
   const semanticScore     = ocrResult?.semanticScore ?? 0
   const faceQualityScore  = faceResult?.score ?? 0
+  const elaScore          = elaResult?.elaScore ?? 0
+  const exifScore         = exifResult?.exifScore ?? 0
+  const textConsistency   = textConsistencyResult?.consistencyScore ?? 0
+  const crossValidation   = crossValidationResult?.crossScore ?? 0
   const ocrConfidence     = ocrResult?.ocrConfidence ?? 0
 
+  // Weighted overall risk score — all signals contribute
+  const overallRiskScore = Math.round(
+    frequencyScore   * 0.15 +   // FFT/wavelet
+    semanticScore    * 0.15 +   // NIF/IBAN/date validation
+    faceQualityScore * 0.05 +   // Face quality
+    elaScore         * 0.20 +   // Error Level Analysis (strong)
+    exifScore        * 0.10 +   // EXIF metadata
+    textConsistency  * 0.10 +   // Text/font consistency
+    crossValidation  * 0.25     // MRZ ↔ OCR cross-validation (strongest)
+  )
+
+  // Manipulation score: best single proxy = max of the strongest signals
+  const manipulationScore = Math.max(
+    crossValidation,           // MRZ ↔ OCR mismatch (strongest signal)
+    elaScore,                  // JPEG re-compression artifacts
+    Math.round(frequencyScore * 0.7 + textConsistency * 0.3),  // frequency + text
+  )
+
   const forensics: AdmissionsForensicsSignals = {
-    manipulationScore: frequencyScore,  // best proxy without CNN
+    manipulationScore,
     frequencyScore,
     semanticScore,
     faceQualityScore,
-    overallRiskScore:  Math.round(
-      frequencyScore   * 0.40 +
-      semanticScore    * 0.35 +
-      faceQualityScore * 0.25,
-    ),
+    elaScore,
+    exifScore,
+    textConsistency,
+    crossValidation,
+    overallRiskScore,
     faceDetected:   (faceResult?.faceCount ?? 0) > 0,
     faceCount:      faceResult?.faceCount ?? 0,
     ocrConfidence,
@@ -745,11 +892,29 @@ export async function POST(req: NextRequest): Promise<NextResponse<AdmissionsVer
       label:  a.label,
       detail: a.detail,
     })),
+    crossValidationAlerts: (crossValidationResult?.alerts ?? []).map(a => ({
+      field:    a.field,
+      mrzValue: a.mrzValue,
+      ocrValue: a.ocrValue,
+      detail:   a.detail,
+    })),
+    exifAlerts: (exifResult?.alerts ?? []).map(a => ({
+      type:   a.type,
+      detail: a.detail,
+    })),
   }
 
   // ── Compute final score & verdict ─────────────────────────────────────────
   const authenticityScore = computeAuthenticityScore(
-    { frequencyScore, semanticScore, faceQualityScore },
+    {
+      frequencyScore,
+      semanticScore,
+      faceQualityScore,
+      elaScore,
+      exifScore,
+      textConsistency,
+      crossValidation,
+    },
     mrzAnalysis,
     docType,
     ocrConfidence,
@@ -757,19 +922,13 @@ export async function POST(req: NextRequest): Promise<NextResponse<AdmissionsVer
   const verdict = computeVerdict(authenticityScore, docType)
 
   // ── Build alerts ──────────────────────────────────────────────────────────
-  const alerts = buildAlerts(docType, mrzAnalysis, {
-    frequencyScore,
-    semanticScore,
-    semanticAlerts: forensics.semanticAlerts,
-  }, extractedData)
+  const alerts = buildAlerts(docType, mrzAnalysis, forensics, extractedData)
 
   // Metadata alert
   alerts.unshift({
     level:   'info',
-    code:    'SELF_HOSTED',
-    message: isPDF
-      ? 'PDF document: text extracted via pdfjs-dist + Tesseract.js OCR. Face detection + frequency forensics on rendered PNG. Zero cloud dependency.'
-      : 'Image analyzed: Tesseract.js OCR (spa+eng) + face-api.js detection + FFT/wavelet frequency forensics. Zero cloud dependency.',
+    code:    'PIPELINE_INFO',
+    message: `7-layer forensics: OCR (${ocrResult?.engine ?? 'N/A'}) + MRZ ICAO-9303 + Cross-validation + ELA + EXIF + FFT/Wavelet + Text consistency. ${isPDF ? 'PDF rendered to PNG.' : 'Direct image analysis.'}`,
   })
 
   return NextResponse.json({
