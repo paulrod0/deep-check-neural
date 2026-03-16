@@ -6,8 +6,8 @@
  * Interactive demo for the IE University admissions department.
  * Accepts: DNI, Passport, Degree Certificate, Academic Transcript, CV, etc.
  *
- * Pipeline (server-side):
- *   DocForensics CNN → AWS Textract OCR → AWS Rekognition → Frequency analysis → MRZ parse
+ * Pipeline (server-side, fully self-hosted):
+ *   Tesseract.js OCR → face-api.js → Frequency analysis → MRZ parse → Semantic validation
  */
 
 import { useState, useCallback, useRef }  from 'react'
@@ -24,12 +24,12 @@ interface ProgressStep {
 }
 
 const STEPS_TEMPLATE: ProgressStep[] = [
-  { id: 'classify',    label: 'Document type classification (CNN)',    status: 'pending' },
-  { id: 'ocr',         label: 'OCR text extraction (AWS Textract)',    status: 'pending' },
-  { id: 'rekognition', label: 'Face & quality analysis (Rekognition)', status: 'pending' },
-  { id: 'frequency',   label: 'Frequency / spectral forensics',        status: 'pending' },
-  { id: 'mrz',         label: 'MRZ check-digit validation (ICAO)',     status: 'pending' },
-  { id: 'score',       label: 'Authenticity score calculation',         status: 'pending' },
+  { id: 'ocr',         label: 'OCR text extraction (Tesseract.js)',     status: 'pending' },
+  { id: 'face',        label: 'Face detection & quality (face-api.js)', status: 'pending' },
+  { id: 'frequency',   label: 'Frequency / spectral forensics (FFT)',   status: 'pending' },
+  { id: 'mrz',         label: 'MRZ check-digit validation (ICAO)',      status: 'pending' },
+  { id: 'semantic',    label: 'Semantic validation (NIF/IBAN/dates)',    status: 'pending' },
+  { id: 'score',       label: 'Authenticity score calculation',          status: 'pending' },
 ]
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
@@ -280,7 +280,7 @@ export default function AdmissionsDemoPage() {
             fontSize: 11, fontWeight: 700, letterSpacing: 1,
             background: 'rgba(0,255,157,0.1)', border: '1px solid rgba(0,255,157,0.25)',
             color: '#00ff9d', padding: '3px 10px', borderRadius: 20,
-          }}>AWS LIVE</span>
+          }}>SELF-HOSTED AI</span>
         </div>
       </header>
 
@@ -373,7 +373,7 @@ export default function AdmissionsDemoPage() {
                     <div style={{ fontSize: 64 }}>📄</div>
                     <div style={{ textAlign: 'center' }}>
                       <div style={{ fontSize: 14, fontWeight: 700, color: '#e0e0e0', marginBottom: 4 }}>{fileName}</div>
-                      <div style={{ fontSize: 12, color: '#555' }}>PDF — sending to AWS Textract for full text extraction</div>
+                      <div style={{ fontSize: 12, color: '#555' }}>PDF — Tesseract.js OCR + pdfjs-dist text extraction</div>
                     </div>
                     <div style={{
                       fontSize: 11, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase',
@@ -502,7 +502,7 @@ export default function AdmissionsDemoPage() {
                 </div>
                 <div style={{ fontSize: 13, color: '#555' }}>
                   Processing time: <span style={{ color: '#888' }}>{result.processingMs}ms</span> ·
-                  Signals: CNN + Textract + Rekognition + Frequency{result.mrzAnalysis?.detected ? ' + MRZ' : ''}
+                  Signals: OCR + Face + Frequency + Semantic{result.mrzAnalysis?.detected ? ' + MRZ' : ''} · Self-hosted
                 </div>
               </div>
 
@@ -577,10 +577,10 @@ export default function AdmissionsDemoPage() {
                   Forensics Signals
                 </h3>
                 {[
-                  { name: 'Manipulation (CNN)',           score: result.forensics.manipulationScore, desc: 'DocForensics CNN — pixel-level manipulation detection' },
-                  { name: 'Frequency / Spectral',         score: result.forensics.frequencyScore,    desc: 'FFT + Haar wavelet — splice and copy-move detection' },
-                  { name: 'Semantic Validation',          score: result.forensics.semanticScore,     desc: 'AWS Textract — field consistency and anomaly flags' },
-                  { name: 'Face / Quality (Rekognition)', score: result.forensics.rekognitionScore,  desc: 'AWS Rekognition — face quality and print/screen detection' },
+                  { name: 'Frequency / Spectral',    score: result.forensics.frequencyScore,    desc: 'FFT + Haar wavelet — splice, copy-move, re-compression detection' },
+                  { name: 'Semantic Validation',     score: result.forensics.semanticScore,     desc: 'NIF/CIF mod23 + IBAN mod97 + date consistency + MRZ checksums' },
+                  { name: 'Face Quality',            score: result.forensics.faceQualityScore,  desc: 'face-api.js — face detection, pose, quality, print/screen heuristics' },
+                  { name: 'OCR Confidence',          score: 100 - (result.forensics.ocrConfidence ?? 0), desc: `Tesseract.js OCR confidence: ${result.forensics.ocrConfidence ?? 0}% — low confidence may indicate poor scan` },
                 ].map(({ name, score, desc }) => (
                   <div key={name} style={{ marginBottom: 16 }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 4 }}>
@@ -751,7 +751,7 @@ export default function AdmissionsDemoPage() {
         <footer style={{ marginTop: 60, textAlign: 'center', borderTop: '1px solid #1a1a28', paddingTop: 24 }}>
           <p style={{ fontSize: 12, color: '#2a2a3a', margin: 0 }}>
             Deep-Check · Admissions Verification Demo · IE University Partnership ·
-            All analysis server-side via AWS · Zero biometric data stored
+            100% self-hosted AI · Zero cloud dependency · Zero biometric data stored
           </p>
         </footer>
       </div>

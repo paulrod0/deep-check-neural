@@ -44,3 +44,6 @@ next-env.d.ts
 # ML models — large binary files, deploy via infra/deploy_pixel_model.sh from S3
 # deepfake_pixel_v1.onnx (72MB) — download: bash infra/deploy_pixel_model.sh
 public/models/deepfake/deepfake_pixel_v1.onnx
+
+# Tesseract OCR trained data (downloaded at runtime from CDN)
+*.traineddata
