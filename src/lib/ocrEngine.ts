@@ -1,25 +1,28 @@
 /**
- * ocrEngine.ts — Self-Hosted OCR via Tesseract.js
- * =================================================
- * Replaces AWS Textract with local Tesseract.js OCR.
- * Zero cloud dependency — works on Vercel, Docker, and air-gapped.
+ * ocrEngine.ts — Hybrid OCR Engine (AWS Textract + Tesseract.js)
+ * ================================================================
+ * Intelligent dual-mode OCR:
  *
- * Pipeline:
- *   1. Accept base64 image (PNG/JPEG) or PDF data URL
- *   2. If PDF: extract text via pdfjs-dist first; if no text → render + OCR
- *   3. Run Tesseract.js — auto-detects script for language selection
- *   4. Semantic validation: NIF/CIF, IBAN, MRZ, dates, math
- *   5. Return TextractResult-compatible output
+ * **Cloud mode** (default on Vercel/SaaS):
+ *   AWS Textract → fast (~2s), multi-language (Arabic, Latin, CJK),
+ *   structured key-value extraction, table detection, high accuracy.
  *
- * Language support:
- *   - Latin scripts: eng (covers English, Spanish, French, German, Italian, Portuguese)
- *   - Arabic script: ara+eng (Arabic + mixed Latin text)
- *   - Auto-detection: tries eng first, falls back to ara if low confidence
+ * **Self-hosted mode** (Docker on-premise / air-gapped):
+ *   Tesseract.js → zero cloud dependency, auto-language detection
+ *   (eng first, Arabic fallback if low confidence).
+ *
+ * Selection logic:
+ *   1. If AWS credentials available → use Textract (fast, accurate)
+ *   2. If PDF with text layer → extract via pdfjs-dist (instant)
+ *   3. Else → Tesseract.js OCR with language auto-detection
+ *
+ * Semantic validation runs on all paths:
+ *   NIF/CIF mod23, IBAN mod97, MRZ checksums, date consistency
  */
 
 import { createWorker, Worker as TesseractWorker } from 'tesseract.js'
 
-// ── Types (compatible with textractAnalysis.ts) ──────────────────────────────
+// ── Types ────────────────────────────────────────────────────────────────────
 
 export type SemanticAlertType =
   | 'math_error'
@@ -44,9 +47,118 @@ export interface OcrResult {
   semanticScore:  number
   analysisMs:     number
   ocrConfidence:  number    // 0–100 average OCR confidence
+  engine:         'textract' | 'tesseract' | 'pdfjs'  // which engine produced the text
 }
 
-// ── Tesseract worker pool (per-language lazy singletons) ────────────────────
+// ── AWS Textract integration ────────────────────────────────────────────────
+
+/** Check if AWS credentials are available for Textract */
+function hasAWSCredentials(): boolean {
+  return !!(
+    process.env.AWS_ACCESS_KEY_ID &&
+    process.env.AWS_SECRET_ACCESS_KEY
+  )
+}
+
+/**
+ * Run AWS Textract OCR on an image.
+ * Returns raw text + key-value pairs + confidence.
+ * Supports all languages (Arabic, Latin, CJK, Cyrillic, etc.)
+ */
+async function runTextractOCR(
+  imageBase64: string,
+): Promise<{ text: string; confidence: number; kvPairs: Record<string, string> } | null> {
+  try {
+    const { TextractClient, AnalyzeDocumentCommand } = await import('@aws-sdk/client-textract')
+
+    const client = new TextractClient({
+      region: process.env.AWS_REGION ?? 'eu-west-1',
+      credentials: {
+        accessKeyId:     process.env.AWS_ACCESS_KEY_ID!,
+        secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY!,
+      },
+    })
+
+    // Strip data URL prefix to get raw base64
+    const b64 = imageBase64.includes(',') ? imageBase64.split(',')[1] : imageBase64
+    const buffer = Buffer.from(b64, 'base64')
+
+    // Use AnalyzeDocument (not DetectDocumentText) for key-value pairs
+    const command = new AnalyzeDocumentCommand({
+      Document: { Bytes: buffer },
+      FeatureTypes: ['FORMS'],  // Extract key-value pairs
+    })
+
+    const response = await client.send(command)
+    const blocks = response.Blocks ?? []
+
+    // Extract raw text lines
+    const lines: string[] = []
+    let totalConfidence = 0
+    let lineCount = 0
+
+    for (const block of blocks) {
+      if (block.BlockType === 'LINE' && block.Text) {
+        lines.push(block.Text)
+        totalConfidence += block.Confidence ?? 0
+        lineCount++
+      }
+    }
+
+    // Extract key-value pairs
+    const kvPairs: Record<string, string> = {}
+    const keyMap: Record<string, string> = {}
+    const valueMap: Record<string, string> = {}
+
+    for (const block of blocks) {
+      if (block.BlockType === 'KEY_VALUE_SET') {
+        const entityTypes = block.EntityTypes ?? []
+        const childIds = block.Relationships
+          ?.find(r => r.Type === 'CHILD')?.Ids ?? []
+        const valueIds = block.Relationships
+          ?.find(r => r.Type === 'VALUE')?.Ids ?? []
+
+        const childText = childIds
+          .map(id => blocks.find(b => b.Id === id)?.Text ?? '')
+          .filter(Boolean)
+          .join(' ')
+
+        if (entityTypes.includes('KEY') && block.Id) {
+          keyMap[block.Id] = childText
+          // Find linked value
+          for (const vid of valueIds) {
+            const valueBlock = blocks.find(b => b.Id === vid)
+            if (valueBlock) {
+              const valueChildIds = valueBlock.Relationships
+                ?.find(r => r.Type === 'CHILD')?.Ids ?? []
+              const valueText = valueChildIds
+                .map(id => blocks.find(b => b.Id === id)?.Text ?? '')
+                .filter(Boolean)
+                .join(' ')
+              if (childText && valueText) {
+                kvPairs[childText] = valueText
+              }
+            }
+          }
+        }
+        if (entityTypes.includes('VALUE') && block.Id) {
+          valueMap[block.Id] = childText
+        }
+      }
+    }
+
+    return {
+      text:       lines.join('\n'),
+      confidence: lineCount > 0 ? totalConfidence / lineCount : 0,
+      kvPairs,
+    }
+  } catch (err) {
+    console.warn('[ocrEngine] AWS Textract failed:', err instanceof Error ? err.message : err)
+    return null
+  }
+}
+
+// ── Tesseract.js worker pool (per-language lazy singletons) ────────────────
 
 const _workers: Map<string, TesseractWorker> = new Map()
 const _workerInitPromises: Map<string, Promise<TesseractWorker>> = new Map()
@@ -75,10 +187,8 @@ async function getWorker(lang: string = 'eng'): Promise<TesseractWorker> {
   return initPromise
 }
 
-/** Detect if an image buffer likely contains Arabic script (heuristic) */
+/** Detect if text contains Arabic script */
 function hasArabicScript(text: string): boolean {
-  // Arabic Unicode range: \u0600-\u06FF (Arabic), \u0750-\u077F (Arabic Supplement)
-  // \u08A0-\u08FF (Arabic Extended-A), \uFB50-\uFDFF (Arabic Pres Forms-A)
   const arabicChars = text.match(/[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF]/g)
   return (arabicChars?.length ?? 0) > 5
 }
@@ -110,7 +220,6 @@ async function extractTextFromPdf(pdfInput: string): Promise<string | null> {
     const pdf = await loadingTask.promise
     const textParts: string[] = []
 
-    // Extract text from all pages (up to 5 for performance)
     const maxPages = Math.min(pdf.numPages, 5)
     for (let i = 1; i <= maxPages; i++) {
       const page = await pdf.getPage(i)
@@ -125,7 +234,6 @@ async function extractTextFromPdf(pdfInput: string): Promise<string | null> {
     await pdf.destroy()
 
     const text = textParts.join('\n')
-    // If text is substantial (>50 chars), the PDF has a text layer
     return text.length > 50 ? text : null
   } catch (err) {
     console.warn('[ocrEngine] PDF text extraction failed:', err instanceof Error ? err.message : err)
@@ -133,7 +241,7 @@ async function extractTextFromPdf(pdfInput: string): Promise<string | null> {
   }
 }
 
-// ── Base64 to buffer helper ─────────────────────────────────────────────────
+// ── Base64 helpers ──────────────────────────────────────────────────────────
 
 function base64ToBuffer(input: string): Buffer {
   const b64 = input.includes(',') ? input.split(',')[1] : input
@@ -147,8 +255,10 @@ export async function runOCR(imageBase64: string): Promise<OcrResult> {
 
   let rawText    = ''
   let confidence = 0
+  let kvPairs:   Record<string, string> = {}
+  let engine:    OcrResult['engine'] = 'tesseract'
 
-  // ── Check if input is PDF ──────────────────────────────────────────────────
+  // ── Check if input is PDF ────────────────────────────────────────────────
   const isPDF = imageBase64.startsWith('data:application/pdf') ||
                 imageBase64.startsWith('data:application/x-pdf') ||
                 (() => {
@@ -156,32 +266,67 @@ export async function runOCR(imageBase64: string): Promise<OcrResult> {
                   return raw.startsWith('JVBE')
                 })()
 
+  // ── Strategy 1: PDF with text layer (instant, no OCR needed) ─────────────
   if (isPDF) {
-    // Try pdfjs-dist text extraction first (fast, works for digital PDFs)
     const pdfText = await extractTextFromPdf(imageBase64)
     if (pdfText) {
       rawText    = pdfText
-      confidence = 95  // Digital text layer → high confidence
+      confidence = 95
+      engine     = 'pdfjs'
       console.log('[ocrEngine] PDF text layer extracted via pdfjs-dist:', rawText.length, 'chars')
-    } else {
-      // PDF has no text layer (scanned image) → render to PNG, then OCR
-      console.log('[ocrEngine] No text layer in PDF — rendering to PNG for OCR...')
-      const { pdfFirstPageToPng } = await import('./pdfToImage')
-      const png = await pdfFirstPageToPng(imageBase64)
-      if (png) {
-        const result = await runTesseractWithFallback(png)
-        rawText    = result.text
-        confidence = result.confidence
-      }
     }
-  } else {
-    // Regular image → Tesseract OCR with auto-language detection
-    const result = await runTesseractWithFallback(imageBase64)
-    rawText    = result.text
-    confidence = result.confidence
   }
 
-  // ── Semantic validation ────────────────────────────────────────────────────
+  // ── Strategy 2: AWS Textract (fast, multi-language, structured) ──────────
+  if (!rawText && hasAWSCredentials()) {
+    console.log('[ocrEngine] AWS credentials available — using Textract...')
+
+    // For PDFs, render to PNG first for Textract
+    let imageForTextract = imageBase64
+    if (isPDF) {
+      try {
+        const { pdfFirstPageToPng } = await import('./pdfToImage')
+        const png = await pdfFirstPageToPng(imageBase64)
+        if (png) imageForTextract = png
+      } catch (err) {
+        console.warn('[ocrEngine] PDF render for Textract failed:', err instanceof Error ? err.message : err)
+      }
+    }
+
+    const textractResult = await runTextractOCR(imageForTextract)
+    if (textractResult && textractResult.text.length > 10) {
+      rawText    = textractResult.text
+      confidence = textractResult.confidence
+      kvPairs    = textractResult.kvPairs
+      engine     = 'textract'
+      console.log(`[ocrEngine] Textract: ${rawText.length} chars, ${confidence.toFixed(0)}% confidence, ${Object.keys(kvPairs).length} KV pairs`)
+    }
+  }
+
+  // ── Strategy 3: Tesseract.js (self-hosted fallback) ──────────────────────
+  if (!rawText) {
+    console.log('[ocrEngine] Using Tesseract.js OCR (self-hosted)...')
+
+    let imageForOCR = imageBase64
+    if (isPDF) {
+      try {
+        const { pdfFirstPageToPng } = await import('./pdfToImage')
+        const png = await pdfFirstPageToPng(imageBase64)
+        if (png) imageForOCR = png
+      } catch (err) {
+        console.warn('[ocrEngine] PDF render failed:', err instanceof Error ? err.message : err)
+      }
+    }
+
+    if (imageForOCR !== imageBase64 || !isPDF) {
+      const result = await runTesseractWithFallback(imageForOCR)
+      rawText    = result.text
+      confidence = result.confidence
+      engine     = 'tesseract'
+    }
+  }
+
+  // ── Semantic validation ──────────────────────────────────────────────────
   const docType        = detectDocumentType(rawText)
   let semanticAlerts: SemanticAlert[] = []
 
@@ -194,17 +339,20 @@ export async function runOCR(imageBase64: string): Promise<OcrResult> {
   const totalPenalty  = semanticAlerts.reduce((s, a) => s + a.penalty, 0)
   const semanticScore = Math.min(100, totalPenalty)
 
-  // ── Extract key-value pairs from OCR text ──────────────────────────────────
-  const keyValuePairs = extractKeyValuePairsFromText(rawText)
+  // ── Extract key-value pairs (from text if Textract didn't provide them) ─
+  if (Object.keys(kvPairs).length === 0) {
+    kvPairs = extractKeyValuePairsFromText(rawText)
+  }
 
   return {
     rawText,
-    tables:        [],  // Tesseract doesn't provide table structure
-    keyValuePairs,
+    tables:        [],
+    keyValuePairs: kvPairs,
     semanticAlerts,
     semanticScore,
     analysisMs:    Date.now() - t0,
     ocrConfidence: Math.round(confidence),
+    engine,
   }
 }
 
@@ -232,31 +380,24 @@ async function runTesseractOCR(
 }
 
 /**
- * Run OCR with automatic language detection.
- * First tries English (fast, handles Latin scripts well).
- * If confidence is very low (<25%) and barely any text extracted,
- * retries with Arabic for Middle Eastern / North African documents.
+ * Run Tesseract OCR with automatic language detection.
+ * First tries English, falls back to Arabic if low confidence.
  */
 async function runTesseractWithFallback(
   imageBase64: string,
 ): Promise<{ text: string; confidence: number; lang: string }> {
-  // First pass: English (handles all Latin-script documents)
   const engResult = await runTesseractOCR(imageBase64, 'eng')
 
-  // If good result, return immediately
   if (engResult.confidence >= 30 && engResult.text.trim().length > 20) {
     return engResult
   }
 
-  // Low confidence or very little text → try Arabic
   console.log(`[ocrEngine] Low confidence (${engResult.confidence}%) — trying Arabic OCR...`)
   try {
     const araResult = await runTesseractOCR(imageBase64, 'ara')
 
-    // Use Arabic result if it's better
     if (araResult.confidence > engResult.confidence || hasArabicScript(araResult.text)) {
       console.log(`[ocrEngine] Arabic OCR better: ${araResult.confidence}% vs eng ${engResult.confidence}%`)
-      // Combine: Arabic text + any English text (MRZ zones are always Latin)
       if (engResult.text.trim().length > 10) {
         return {
           text: araResult.text + '\n--- Latin text ---\n' + engResult.text,
@@ -270,7 +411,6 @@ async function runTesseractWithFallback(
     console.warn('[ocrEngine] Arabic OCR fallback failed:', err instanceof Error ? err.message : err)
   }
 
-  // Stick with English result
   return engResult
 }
 
@@ -279,9 +419,8 @@ async function runTesseractWithFallback(
 function extractKeyValuePairsFromText(text: string): Record<string, string> {
   const kvPairs: Record<string, string> = {}
 
-  // Common patterns: "Key: Value" or "Key Value" on same line
   const patterns = [
-    /^(.+?):\s+(.+)$/gm,                                                    // Key: Value
+    /^(.+?):\s+(.+)$/gm,
     /^(nombre|name|apellido|surname|fecha|date|numero|number|sexo|sex|nacionalidad|nationality|direccion|address|domicilio)\s*[:\-]?\s*(.+)/gim,
   ]
 
@@ -324,7 +463,7 @@ function detectDocumentType(rawText: string): 'financial' | 'id' | 'other' {
   return 'other'
 }
 
-// ── Semantic validators (ported from textractAnalysis.ts) ───────────────────
+// ── Semantic validators ─────────────────────────────────────────────────────
 
 function validateFinancialDocument(rawText: string): SemanticAlert[] {
   const alerts: SemanticAlert[] = []
@@ -395,7 +534,7 @@ function validateFinancialDocument(rawText: string): SemanticAlert[] {
 function validateIDDocument(rawText: string): SemanticAlert[] {
   const alerts: SemanticAlert[] = []
 
-  // NIF/NIE validation for identity documents
+  // NIF/NIE validation
   const nifPattern = /\b([0-9]{8}[A-Z])\b/gi
   const nifMatches = rawText.match(nifPattern) ?? []
 
