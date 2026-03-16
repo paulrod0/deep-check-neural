@@ -101,24 +101,31 @@ function formatField(val: string | boolean | undefined): string {
 export default function AdmissionsDemoPage() {
   const [state,    setState]    = useState<AnalysisState>('idle')
   const [preview,  setPreview]  = useState<string | null>(null)
+  const [isPdf,    setIsPdf]    = useState(false)
+  const [fileName, setFileName] = useState('')
   const [steps,    setSteps]    = useState<ProgressStep[]>(STEPS_TEMPLATE.map(s => ({ ...s })))
   const [result,   setResult]   = useState<AdmissionsVerifyResponse | null>(null)
   const [errMsg,   setErrMsg]   = useState<string>('')
   const [drag,     setDrag]     = useState(false)
-  const fileRef = useRef<HTMLInputElement>(null)
+  const fileRef  = useRef<HTMLInputElement>(null)
+  const timersRef = useRef<ReturnType<typeof setTimeout>[]>([])
 
   // ── Simulate step-by-step progress while API runs ──────────────────────────
 
   const animateSteps = useCallback(() => {
-    const STEP_DELAYS = [0, 1200, 2400, 3200, 4800, 6200]
+    // Clear any previous timers
+    timersRef.current.forEach(clearTimeout)
+    timersRef.current = []
+    const STEP_DELAYS = [0, 1400, 2800, 4000, 5400, 7000]
     STEP_DELAYS.forEach((delay, i) => {
-      setTimeout(() => {
+      const t = setTimeout(() => {
         setSteps(prev => prev.map((s, idx) => {
-          if (idx < i)  return { ...s, status: 'done' }
+          if (idx < i)   return { ...s, status: 'done' }
           if (idx === i) return { ...s, status: 'running' }
           return s
         }))
       }, delay)
+      timersRef.current.push(t)
     })
   }, [])
 
@@ -127,18 +134,29 @@ export default function AdmissionsDemoPage() {
   const analyzeImage = useCallback(async (file: File) => {
     setErrMsg('')
     setResult(null)
-    setState('uploading')
     setSteps(STEPS_TEMPLATE.map(s => ({ ...s })))
+    setFileName(file.name)
+    const pdf = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')
+    setIsPdf(pdf)
 
-    // Preview
-    const reader = new FileReader()
-    reader.onload = e => setPreview(e.target?.result as string)
-    reader.readAsDataURL(file)
-
-    // Base64 encode
-    const arrayBuffer = await file.arrayBuffer()
-    const base64 = btoa(String.fromCharCode(...new Uint8Array(arrayBuffer)))
-    const dataUrl = `data:${file.type || 'image/jpeg'};base64,${base64}`
+    // Read file as data URL — handles any size, works for images and PDF
+    let dataUrl: string
+    try {
+      dataUrl = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader()
+        reader.onload  = e => {
+          const result = e.target?.result as string
+          setPreview(result)  // set preview from same read
+          resolve(result)
+        }
+        reader.onerror = () => reject(new Error('Failed to read file'))
+        reader.readAsDataURL(file)
+      })
+    } catch (readErr) {
+      setErrMsg(`File read failed: ${readErr instanceof Error ? readErr.message : 'unknown'}`)
+      setState('error')
+      return
+    }
 
     setState('analyzing')
     animateSteps()
@@ -151,6 +169,7 @@ export default function AdmissionsDemoPage() {
       })
 
       // Complete all steps
+      timersRef.current.forEach(clearTimeout)
       setSteps(STEPS_TEMPLATE.map(s => ({ ...s, status: 'done' })))
 
       if (!resp.ok) {
@@ -186,8 +205,11 @@ export default function AdmissionsDemoPage() {
   }, [analyzeImage])
 
   const reset = () => {
+    timersRef.current.forEach(clearTimeout)
     setState('idle')
     setPreview(null)
+    setIsPdf(false)
+    setFileName('')
     setResult(null)
     setErrMsg('')
     setSteps(STEPS_TEMPLATE.map(s => ({ ...s })))
@@ -321,16 +343,35 @@ export default function AdmissionsDemoPage() {
 
             {/* Preview */}
             {preview && (
-              <div style={{ borderRadius: 16, overflow: 'hidden', border: '1px solid #1e1e30', position: 'relative' }}>
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={preview} alt="Document preview" style={{ width: '100%', display: 'block', maxHeight: 420, objectFit: 'contain', background: '#0d0d1a' }} />
-                <div style={{
-                  position: 'absolute', inset: 0,
-                  background: 'rgba(0,255,157,0.05)',
-                  animation: 'scanline 2s linear infinite',
-                  backgroundImage: 'repeating-linear-gradient(0deg, transparent, transparent 10px, rgba(0,255,157,0.04) 10px, rgba(0,255,157,0.04) 11px)',
-                  backgroundSize: '100% 200px',
-                }} />
+              <div style={{ borderRadius: 16, overflow: 'hidden', border: '1px solid #1e1e30', position: 'relative', background: '#0d0d1a' }}>
+                {isPdf ? (
+                  /* PDF — show iframe embed with filename badge */
+                  <div style={{ height: 380, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 16, padding: 24 }}>
+                    <div style={{ fontSize: 64 }}>📄</div>
+                    <div style={{ textAlign: 'center' }}>
+                      <div style={{ fontSize: 14, fontWeight: 700, color: '#e0e0e0', marginBottom: 4 }}>{fileName}</div>
+                      <div style={{ fontSize: 12, color: '#555' }}>PDF — sending to AWS Textract for full text extraction</div>
+                    </div>
+                    <div style={{
+                      fontSize: 11, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase',
+                      background: 'rgba(0,255,157,0.1)', border: '1px solid rgba(0,255,157,0.25)',
+                      color: '#00ff9d', padding: '4px 12px', borderRadius: 20,
+                    }}>OCR in progress…</div>
+                  </div>
+                ) : (
+                  /* Image */
+                  <>
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={preview} alt="Document" style={{ width: '100%', display: 'block', maxHeight: 420, objectFit: 'contain' }} />
+                    <div style={{
+                      position: 'absolute', inset: 0,
+                      animation: 'scanline 2s linear infinite',
+                      backgroundImage: 'repeating-linear-gradient(0deg, transparent, transparent 10px, rgba(0,255,157,0.04) 10px, rgba(0,255,157,0.04) 11px)',
+                      backgroundSize: '100% 200px',
+                      pointerEvents: 'none',
+                    }} />
+                  </>
+                )}
               </div>
             )}
 

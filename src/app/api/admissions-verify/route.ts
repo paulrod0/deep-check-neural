@@ -409,14 +409,24 @@ export async function POST(req: NextRequest): Promise<NextResponse<AdmissionsVer
     return NextResponse.json({ error: 'Request body must be JSON with { image: base64String }' }, { status: 400 })
   }
 
+  // ── Detect PDF (AWS Textract supports PDF bytes; CNN/frequency/Rekognition need raster images) ──
+  const isPDF = image.startsWith('data:application/pdf') ||
+    image.startsWith('data:application/x-pdf') ||
+    (() => {
+      // Check raw base64 magic bytes: PDF starts with %PDF → base64 "JVBE"
+      const raw = image.includes(',') ? image.split(',')[1] : image
+      return raw.startsWith('JVBE')
+    })()
+
   // ── Run full forensics pipeline ──────────────────────────────────────────────
   let forensicsResult
   try {
     forensicsResult = await runDocumentForensics(image, {
       enableTextract:    true,
-      enableCnn:         true,
-      enableRekognition: true,
-      enableFrequency:   true,
+      // Skip pixel-based analyses for PDF — Sharp cannot process PDFs
+      enableCnn:         !isPDF,
+      enableRekognition: !isPDF,
+      enableFrequency:   !isPDF,
     })
   } catch (err) {
     console.error('[admissions-verify] runDocumentForensics failed:', err)
@@ -485,6 +495,15 @@ export async function POST(req: NextRequest): Promise<NextResponse<AdmissionsVer
     semanticScore:  forensicsResult.semanticScore,
     semanticAlerts: forensics.semanticAlerts,
   }, extractedData)
+
+  // PDF-specific info alert
+  if (isPDF) {
+    alerts.unshift({
+      level:   'info',
+      code:    'PDF_MODE',
+      message: 'PDF document: OCR/text analysis active (AWS Textract). Pixel-level forensics (CNN, frequency, Rekognition) skipped — upload a photo or scan for full analysis.',
+    })
+  }
 
   return NextResponse.json({
     documentType:      docType,
