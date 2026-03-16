@@ -167,16 +167,16 @@ def build_path_lists():
 
 # ── Augmentations ─────────────────────────────────────────────────────────────
 TRAIN_AUG = A.Compose([
-    A.RandomResizedCrop(IMG_SIZE, IMG_SIZE, scale=(0.8, 1.0)),
+    A.RandomResizedCrop(size=(IMG_SIZE, IMG_SIZE), scale=(0.8, 1.0)),
     A.HorizontalFlip(p=0.5),
     A.OneOf([
-        A.ImageCompression(quality_lower=40, quality_upper=95),
+        A.ImageCompression(quality_range=(40, 95)),
         A.GaussianBlur(blur_limit=(3, 7)),
-        A.GaussNoise(var_limit=(10, 50)),
+        A.GaussNoise(std_range=(0.04, 0.22)),
     ], p=0.7),
     A.ColorJitter(brightness=0.2, contrast=0.2, saturation=0.2, hue=0.1, p=0.5),
     A.RandomGamma(gamma_limit=(70, 130), p=0.3),
-    A.CoarseDropout(max_holes=4, max_height=20, max_width=20, p=0.3),
+    A.CoarseDropout(num_holes_range=(1, 4), hole_height_range=(10, 20), hole_width_range=(10, 20), p=0.3),
     A.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
     ToTensorV2(),
 ])
