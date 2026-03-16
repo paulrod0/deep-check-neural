@@ -625,6 +625,11 @@ const VerificationCamera = forwardRef<VerificationCameraHandle, VerificationCame
         const lastDeepfakeCnnAlertRef = useRef<number>(0)
         const deepfakeCnnRunningRef   = useRef<boolean>(false)
 
+        // Pixel deepfake model (server-side EfficientNet-B4)
+        const pixelDeepfakeRunningRef = useRef<boolean>(false)
+        const lastPixelAlertRef       = useRef<number>(0)
+        const pixelModelAvailableRef  = useRef<boolean | null>(null)  // null=unknown, true/false
+
         // Veritas Engine v2 — L1 rPPG, L2 FACS, ensemble, audit chain
         const rppgDetectorRef       = useRef<RPPGCouplingDetector>(new RPPGCouplingDetector())
         const facsEngineRef         = useRef<FACSConstraintEngine>(new FACSConstraintEngine())
@@ -995,6 +1000,72 @@ const VerificationCamera = forwardRef<VerificationCameraHandle, VerificationCame
                                 })
                                 .catch(() => {/* model not loaded yet — silently skip */})
                                 .finally(() => { deepfakeCnnRunningRef.current = false })
+                        }
+                    }
+
+                    // ── Pixel Deepfake Model (server-side EfficientNet-B4) ────
+                    // Runs every 150 frames (~10s at 15fps), only if server model available
+                    if (
+                        pixelModelAvailableRef.current !== false &&
+                        !pixelDeepfakeRunningRef.current &&
+                        frameIdx % 150 === 0
+                    ) {
+                        const video = webcamRef.current?.video
+                        if (video && video.readyState >= 4) {
+                            pixelDeepfakeRunningRef.current = true
+                            const offscreen = new OffscreenCanvas(224, 224)
+                            const offCtx = offscreen.getContext('2d')
+                            if (offCtx) {
+                                offCtx.drawImage(video, 0, 0, 224, 224)
+                                const imgData = offCtx.getImageData(0, 0, 224, 224)
+                                const pixelsRGBA = Array.from(imgData.data)
+
+                                fetch('/api/deepfake', {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({ pixelsRGBA, imageWidth: 224, imageHeight: 224 }),
+                                })
+                                    .then(r => r.json())
+                                    .then((pixelResult: {
+                                        modelAvailable: boolean; score: number; label: string;
+                                        confidence: number; calibratedProb: number; analysisMs: number
+                                    }) => {
+                                        // Track model availability to skip calls if not deployed
+                                        pixelModelAvailableRef.current = pixelResult.modelAvailable
+
+                                        if (!pixelResult.modelAvailable) return
+
+                                        // Update CNN display if pixel model scores higher risk
+                                        if (pixelResult.score > 60) {
+                                            setDeepfakeCnnDisplay(prev => ({
+                                                risk:  Math.max(prev?.risk ?? 0, pixelResult.score),
+                                                label: pixelResult.label === 'fake' ? 'Deepfake' : (prev?.label ?? 'Human'),
+                                            }))
+                                        }
+
+                                        // Fire anti-cheat alert — rate-limited to once per 30s
+                                        const now3 = performance.now()
+                                        if (
+                                            pixelResult.label === 'fake' &&
+                                            pixelResult.score >= 70 &&
+                                            now3 - lastPixelAlertRef.current > 30000
+                                        ) {
+                                            lastPixelAlertRef.current = now3
+                                            onAntiCheatEvent?.({
+                                                type: 'deepfake_cnn_alert',
+                                                confidence: pixelResult.calibratedProb,
+                                                detail: `Pixel model: synthetic face detected (score ${pixelResult.score}%, ${pixelResult.analysisMs}ms)`,
+                                                timestamp: now3,
+                                            })
+                                        }
+                                    })
+                                    .catch(() => { pixelModelAvailableRef.current = false })
+                                    .finally(() => { pixelDeepfakeRunningRef.current = false })
+                            } else {
+                                pixelDeepfakeRunningRef.current = false
+                            }
+                        } else {
+                            pixelDeepfakeRunningRef.current = false
                         }
                     }
 
