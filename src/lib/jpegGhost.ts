@@ -151,32 +151,65 @@ export async function runJPEGGhost(imageBase64: string): Promise<JPEGGhostResult
     const maxQ = Math.max(...ghostQualities)
     const qualityRange = maxQ - minQ
 
-    // Compute ghost score
+    // ── Compute ghost score ──────────────────────────────────────────────
+    //
+    // CALIBRATION NOTES:
+    //   - A photo of a physical document (diploma, certificate) taken with a
+    //     phone/camera naturally produces variance 4-10 due to:
+    //       • varied textures (gold paper, white margins, ornate borders)
+    //       • lighting gradients (angle, distance from flash)
+    //       • camera JPEG encoder not matching original print quality
+    //   - A genuine edit (paste from another JPEG source) produces variance 8+
+    //     but ALSO shows a distinct cluster of outlier blocks at a specific
+    //     different quality level, not just random noise.
+    //   - We need to distinguish "natural texture variance" from "actual editing"
+    //     by checking whether outlier blocks cluster at a SPECIFIC alternative
+    //     quality (editing) vs spread across many levels (natural noise).
+    //
     let ghostScore = 0
 
-    // High variance in ghost quality = different sources (strongest signal)
-    // A uniform document has variance ~0-2, edited documents have 4+
-    if (ghostVariance > 2) {
-      ghostScore += Math.min(40, Math.round((ghostVariance - 2) * 8))
+    // Check if outlier blocks cluster at specific quality levels (editing signal)
+    // vs spread across many levels (natural noise from photo of physical doc)
+    const outlierQualities = ghostQualities.filter(q => q !== dominantQuality)
+    const outlierQSet = new Set(outlierQualities)
+    const outlierConcentration = outlierQualities.length > 0
+      ? Math.max(...[...outlierQSet].map(q => outlierQualities.filter(oq => oq === q).length)) / outlierQualities.length
+      : 0
+    // outlierConcentration ~1.0 = all outliers at same quality = likely editing
+    // outlierConcentration ~0.2 = outliers spread across many qualities = natural
+
+    // High variance in ghost quality
+    // Raised thresholds: variance > 6 is suspicious, > 10 is strong
+    // (photos of physical docs typically show variance 3-7)
+    if (ghostVariance > 6) {
+      const varianceContrib = Math.min(35, Math.round((ghostVariance - 6) * 5))
+      // Scale down if outliers are scattered (natural) vs concentrated (editing)
+      ghostScore += Math.round(varianceContrib * (0.4 + 0.6 * outlierConcentration))
     }
 
-    // Many outlier blocks = selective editing
+    // Many outlier blocks = selective editing (raised from 0.1 to 0.2)
     const outlierRatio = outlierBlocks / numBlocks
-    if (outlierRatio > 0.1) {
-      ghostScore += Math.min(30, Math.round(outlierRatio * 80))
+    if (outlierRatio > 0.2) {
+      const outlierContrib = Math.min(25, Math.round((outlierRatio - 0.2) * 100))
+      ghostScore += Math.round(outlierContrib * (0.3 + 0.7 * outlierConcentration))
     }
 
-    // Wide quality range = multiple source images
-    if (qualityRange > QUALITY_STEP * 2) {
-      ghostScore += Math.min(20, Math.round((qualityRange - QUALITY_STEP * 2) / 2))
+    // Wide quality range = multiple source images (raised threshold)
+    if (qualityRange > QUALITY_STEP * 3) {
+      ghostScore += Math.min(15, Math.round((qualityRange - QUALITY_STEP * 3) / 3))
     }
 
-    // Small number of outliers with very different quality = localized edit
-    if (outlierBlocks > 0 && outlierBlocks <= 8 && qualityRange >= QUALITY_STEP * 3) {
-      ghostScore += Math.min(15, outlierBlocks * 3)
+    // STRONG signal: small number of outliers concentrated at ONE quality
+    // This is the hallmark of a paste-from-different-source edit
+    if (outlierBlocks >= 2 && outlierBlocks <= 12 &&
+        qualityRange >= QUALITY_STEP * 3 &&
+        outlierConcentration >= 0.7) {
+      ghostScore += Math.min(25, outlierBlocks * 3)
     }
 
     ghostScore = Math.min(100, ghostScore)
+
+    console.log(`[jpegGhost] variance=${ghostVariance.toFixed(2)}, dominantQ=${dominantQuality}, outliers=${outlierBlocks}/${numBlocks}, range=${qualityRange}, outlierConcentration=${outlierConcentration.toFixed(2)} → score=${ghostScore}`)
 
     return {
       ghostScore,

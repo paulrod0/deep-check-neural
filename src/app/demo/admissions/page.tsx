@@ -165,6 +165,7 @@ export default function AdmissionsDemoPage() {
 
   // History
   const [history,       setHistory]       = useState<CompletedDoc[]>([])
+  const [feedbackSent,  setFeedbackSent]  = useState<'correct' | 'incorrect' | null>(null)
 
   const frontRef  = useRef<HTMLInputElement>(null)
   const backRef   = useRef<HTMLInputElement>(null)
@@ -310,6 +311,26 @@ export default function AdmissionsDemoPage() {
     }
   }, [selectedType, animateSteps])
 
+  // ── Feedback ──────────────────────────────────────────────────────────────
+
+  const sendFeedback = useCallback(async (correct: boolean) => {
+    if (!result?.verificationId) return
+    setFeedbackSent(correct ? 'correct' : 'incorrect')
+    try {
+      await fetch('/api/admissions-feedback', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          verificationId: result.verificationId,
+          correct,
+          expectedVerdict: correct ? undefined : (result.verdict === 'authentic' ? 'tampered' : 'authentic'),
+        }),
+      })
+    } catch {
+      // Non-critical
+    }
+  }, [result])
+
   // ── Reset ────────────────────────────────────────────────────────────────
 
   const reset = () => {
@@ -324,6 +345,7 @@ export default function AdmissionsDemoPage() {
     setDragBack(false)
     setResult(null)
     setErrMsg('')
+    setFeedbackSent(null)
     setSteps(STEPS_TEMPLATE.map(s => ({ ...s })))
   }
 
@@ -841,11 +863,11 @@ export default function AdmissionsDemoPage() {
                 </div>
                 <div style={{ fontSize: 13, color: '#555' }}>
                   Processing: <span style={{ color: '#888' }}>{result.processingMs}ms</span> ·
-                  7 forensic layers: ELA + Cross-val + FFT + Text + EXIF + Semantic + Face{result.mrzAnalysis?.detected ? ' + MRZ' : ''}
+                  9 forensic layers: ELA + Ghost + WordAnomaly + Cross-val + FFT + Text + EXIF + Semantic + Face{result.mrzAnalysis?.detected ? ' + MRZ' : ''}
                 </div>
               </div>
 
-              {/* New analysis button */}
+              {/* New analysis + feedback buttons */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                 <button onClick={reset} style={{
                   background: 'linear-gradient(135deg, #00ff9d, #00c97e)',
@@ -855,6 +877,54 @@ export default function AdmissionsDemoPage() {
                 }}>
                   + New Document
                 </button>
+
+                {/* Feedback: was this result correct? (trains the model) */}
+                {result.verificationId && !feedbackSent && (
+                  <div style={{
+                    background: '#0d0d1a', border: '1px solid #1e1e30',
+                    borderRadius: 12, padding: '10px 14px', textAlign: 'center',
+                  }}>
+                    <div style={{ fontSize: 10, color: '#555', marginBottom: 6, letterSpacing: 0.5, textTransform: 'uppercase' }}>
+                      Was this result correct?
+                    </div>
+                    <div style={{ display: 'flex', gap: 6, justifyContent: 'center' }}>
+                      <button
+                        onClick={() => sendFeedback(true)}
+                        style={{
+                          background: 'rgba(0,255,157,0.10)', border: '1px solid #00ff9d44',
+                          color: '#00ff9d', borderRadius: 8, padding: '6px 14px',
+                          fontSize: 12, fontWeight: 700, cursor: 'pointer',
+                        }}
+                      >
+                        ✓ Yes
+                      </button>
+                      <button
+                        onClick={() => sendFeedback(false)}
+                        style={{
+                          background: 'rgba(255,77,77,0.10)', border: '1px solid #ff4d4d44',
+                          color: '#ff4d4d', borderRadius: 8, padding: '6px 14px',
+                          fontSize: 12, fontWeight: 700, cursor: 'pointer',
+                        }}
+                      >
+                        ✗ No
+                      </button>
+                    </div>
+                  </div>
+                )}
+                {feedbackSent && (
+                  <div style={{
+                    background: feedbackSent === 'correct' ? 'rgba(0,255,157,0.08)' : 'rgba(255,77,77,0.08)',
+                    border: `1px solid ${feedbackSent === 'correct' ? '#00ff9d33' : '#ff4d4d33'}`,
+                    borderRadius: 12, padding: '10px 14px', textAlign: 'center',
+                  }}>
+                    <div style={{ fontSize: 11, color: feedbackSent === 'correct' ? '#00ff9d' : '#ff4d4d', fontWeight: 700 }}>
+                      {feedbackSent === 'correct' ? '✓ Thanks! Feedback recorded' : '✗ Feedback recorded — we\'ll improve'}
+                    </div>
+                    <div style={{ fontSize: 10, color: '#444', marginTop: 2 }}>
+                      Training data saved for model improvement
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
 
