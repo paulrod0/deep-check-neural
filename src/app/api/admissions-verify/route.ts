@@ -136,11 +136,52 @@ const CV_KW = [
 ]
 
 const ID_KW = [
-  'documento nacional de identidad', 'dni', 'nie',
-  'tarjeta de residencia', 'permiso de residencia',
-  'national identity', 'identity card', 'carte nationale',
-  'personalausweis', 'carta d\'identità', 'identiteitskaart',
+  // ── Spanish DNI / NIE ─────────────────────────────────────────────────────
+  'documento nacional de identidad', 'dni', 'nie', 'd.n.i',
+  'tarjeta de identidad', 'tarjeta de residencia', 'permiso de residencia',
+  'españa', 'espagne', 'spanien', 'reino de españa',
+  'ministerio del interior',
+  // ── Spanish DNI OCR fragments (Textract often returns these) ──────────────
+  'apellido', 'primer apellido', 'segundo apellido',
+  'fecha de nacimiento', 'fecha de validez', 'fecha de expedición',
+  'nacionalidad', 'sexo', 'domicilio', 'lugar de nacimiento',
+  'num soporte', 'equipo', 'idesp',
+  // ── Passport ──────────────────────────────────────────────────────────────
+  'passport', 'pasaporte', 'reisepass', 'passeport', 'passaporto',
+  'type/tipo', 'type / type', 'issuing authority',
+  // ── Generic identity document (multi-country) ──────────────────────────────
+  'national identity', 'identity card', 'carte nationale', 'carte d\'identité',
+  'personalausweis', 'carta d\'identità', 'identiteitskaart', 'bilhete de identidade',
+  'cartão de cidadão', 'identity document', 'documento de identidad',
+  'permis de conduire', 'driving licence', 'permiso de conducir',
+  'date of birth', 'date of expiry', 'date of issue',
+  'place of birth', 'nationality', 'authority',
+  // ── MRZ-adjacent keywords (appear near MRZ zones) ────────────────────────
+  'machine readable', 'mrz',
 ]
+
+// ── Passport-specific keywords (subset, high confidence) ────────────────────
+
+const PASSPORT_KW = [
+  'passport', 'pasaporte', 'reisepass', 'passeport', 'passaporto',
+  'travel document', 'documento de viaje',
+]
+
+// ── MRZ pattern detection ───────────────────────────────────────────────────
+
+/** Check if OCR text contains MRZ-like lines (uppercase + digits + '<', 30+ chars) */
+function hasMRZPattern(text: string): boolean {
+  const lines = text.split('\n')
+  let mrzLineCount = 0
+  for (const line of lines) {
+    const clean = line.replace(/\s/g, '')
+    // MRZ lines: 30-44 chars of [A-Z0-9<] only
+    if (clean.length >= 28 && /^[A-Z0-9<]{28,44}$/.test(clean)) {
+      mrzLineCount++
+    }
+  }
+  return mrzLineCount >= 2 // TD1 has 3 lines, TD2/TD3 have 2
+}
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -162,41 +203,99 @@ function classifyDocument(
   cnnType:     DocumentClass | null,
   ocrLower:    string,
   rekResult:   Partial<RekognitionResult> | undefined,
+  ocrRaw:      string,
 ): AdmissionsDocTypeResult {
 
   const academicScore = countKeywords(ocrLower, [...ACADEMIC_KW_ES, ...ACADEMIC_KW_EN])
   const cvScore       = countKeywords(ocrLower, CV_KW)
   const idScore       = countKeywords(ocrLower, ID_KW)
+  const passportScore = countKeywords(ocrLower, PASSPORT_KW)
+  const hasMRZ        = hasMRZPattern(ocrRaw)
   const hasTranscript = ocrLower.includes('transcript') || ocrLower.includes('expediente')
+  const hasFace       = (rekResult?.faceCount ?? 0) > 0
 
-  // CNN-based type
+  // ── 1. Strong MRZ signal → identity document (highest priority) ────────────
+  //    MRZ is a cryptographic proof of being a government-issued ID
+  if (hasMRZ) {
+    if (passportScore >= 1 || ocrLower.includes('p<') || cnnType === 'passport') {
+      return { type: 'passport', label: 'International Passport', confidence: 0.95, isIdentity: true, isAcademic: false, isRelevant: true }
+    }
+    const isNIE = ocrLower.includes('nie') || ocrLower.includes('extranjero') || ocrLower.includes('tarjeta de residencia')
+    const isDNI = ocrLower.includes('españa') || ocrLower.includes('espagne') || ocrLower.includes('idesp') || ocrLower.includes('dni')
+    return {
+      type: 'dni',
+      label: isNIE ? 'Spanish NIE / Residence Permit' : isDNI ? 'Spanish DNI (National ID)' : 'National Identity Card',
+      confidence: 0.95,
+      isIdentity: true, isAcademic: false, isRelevant: true,
+    }
+  }
+
+  // ── 2. CNN model classification (if model is deployed) ─────────────────────
   if (cnnType === 'passport') {
     return { type: 'passport', label: 'International Passport', confidence: 0.90, isIdentity: true, isAcademic: false, isRelevant: true }
   }
-  if (cnnType === 'id_card' || idScore >= 1) {
+  if (cnnType === 'id_card') {
     const isNIE = ocrLower.includes('nie') || ocrLower.includes('extranjero')
-    return { type: 'dni', label: isNIE ? 'Spanish NIE (Residency Permit)' : 'National ID Card (DNI)', confidence: 0.85, isIdentity: true, isAcademic: false, isRelevant: true }
+    return { type: 'dni', label: isNIE ? 'Spanish NIE (Residency Permit)' : 'National ID Card (DNI)', confidence: 0.88, isIdentity: true, isAcademic: false, isRelevant: true }
   }
+
+  // ── 3. Keyword-based identity detection (works even when CNN model is not deployed) ──
+  //    idScore >= 2: at least 2 identity keywords found → strong signal
+  //    idScore == 1 + hasFace: 1 keyword + photo → likely ID document
+  if (idScore >= 2 || (idScore >= 1 && hasFace)) {
+    if (passportScore >= 1) {
+      return { type: 'passport', label: 'International Passport', confidence: 0.85, isIdentity: true, isAcademic: false, isRelevant: true }
+    }
+    const isNIE = ocrLower.includes('nie') || ocrLower.includes('extranjero') || ocrLower.includes('tarjeta de residencia')
+    const isDNI = ocrLower.includes('españa') || ocrLower.includes('espagne') || ocrLower.includes('dni') || ocrLower.includes('idesp')
+    const isLicence = ocrLower.includes('permiso de conducir') || ocrLower.includes('driving licence') || ocrLower.includes('permis de conduire')
+    return {
+      type: 'dni',
+      label: isLicence ? 'Driving Licence' : isNIE ? 'Spanish NIE / Residence Permit' : isDNI ? 'Spanish DNI (National ID)' : 'National Identity Card',
+      confidence: idScore >= 2 ? 0.85 : 0.75,
+      isIdentity: true, isAcademic: false, isRelevant: true,
+    }
+  }
+
+  // ── 4. Academic documents ──────────────────────────────────────────────────
   if (cnnType === 'certificate' || academicScore >= 2) {
     if (hasTranscript) {
       return { type: 'academic_transcript', label: 'Academic Transcript / Grade Record', confidence: 0.80, isIdentity: false, isAcademic: true, isRelevant: true }
     }
     return { type: 'degree_certificate', label: 'Degree / Diploma Certificate', confidence: 0.80, isIdentity: false, isAcademic: true, isRelevant: true }
   }
+
+  // ── 5. CV / Résumé ────────────────────────────────────────────────────────
   if (cvScore >= 2) {
     return { type: 'cv_resume', label: 'CV / Résumé', confidence: 0.75, isIdentity: false, isAcademic: false, isRelevant: true }
   }
+
+  // ── 6. Other CNN types ─────────────────────────────────────────────────────
   if (cnnType === 'invoice') {
     return { type: 'invoice', label: 'Invoice / Financial Document', confidence: 0.80, isIdentity: false, isAcademic: false, isRelevant: false }
   }
   if (cnnType === 'payslip') {
     return { type: 'payslip', label: 'Payslip / Employment Document', confidence: 0.80, isIdentity: false, isAcademic: false, isRelevant: false }
   }
-  if (cnnType === 'media_photo' || (rekResult?.faceCount ?? 0) > 0) {
-    return { type: 'photo', label: 'Photo / Portrait', confidence: 0.70, isIdentity: false, isAcademic: false, isRelevant: false }
+
+  // ── 7. Face-only fallback — ONLY if NO identity signals were found above ──
+  //    A DNI/passport has a face but also has keywords or MRZ.
+  //    Only classify as "photo" if there's a face AND zero ID indicators.
+  if (cnnType === 'media_photo' && idScore === 0 && !hasFace) {
+    return { type: 'photo', label: 'Photo / Media Image', confidence: 0.60, isIdentity: false, isAcademic: false, isRelevant: false }
   }
 
-  return { type: 'other', label: 'Unknown Document', confidence: 0.40, isIdentity: false, isAcademic: false, isRelevant: false }
+  // ── 8. Last resort: if there IS a face + at least 1 identity keyword, treat as ID ──
+  if (hasFace && idScore >= 1) {
+    return { type: 'dni', label: 'Identity Document (unclassified)', confidence: 0.60, isIdentity: true, isAcademic: false, isRelevant: true }
+  }
+
+  // ── 9. No signals at all ───────────────────────────────────────────────────
+  if (hasFace) {
+    return { type: 'photo', label: 'Photo / Portrait', confidence: 0.50, isIdentity: false, isAcademic: false, isRelevant: false }
+  }
+
+  return { type: 'other', label: 'Unknown Document', confidence: 0.30, isIdentity: false, isAcademic: false, isRelevant: false }
 }
 
 // ── Field extraction from OCR text ────────────────────────────────────────────
@@ -483,10 +582,11 @@ export async function POST(req: NextRequest): Promise<NextResponse<AdmissionsVer
     forensicsResult.documentType,
     ocrLower,
     forensicsResult.rekognitionResult as Partial<RekognitionResult> | undefined,
+    ocrText,
   )
 
-  // ── Parse MRZ (ID/passport only) ─────────────────────────────────────────────
-  const mrzAnalysis = docType.isIdentity ? extractMRZ(ocrText) : null
+  // ── Parse MRZ (try on ALL documents — MRZ presence confirms it's an ID) ──────
+  const mrzAnalysis = extractMRZ(ocrText)
 
   // ── Extract fields ────────────────────────────────────────────────────────────
   const extractedData = extractFields(

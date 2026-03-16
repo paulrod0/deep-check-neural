@@ -98,6 +98,16 @@ function formatField(val: string | boolean | undefined): string {
 
 // ── Component ──────────────────────────────────────────────────────────────────
 
+// ── Completed document result type ─────────────────────────────────────────────
+
+interface CompletedDoc {
+  id:       string
+  fileName: string
+  isPdf:    boolean
+  preview:  string
+  result:   AdmissionsVerifyResponse
+}
+
 export default function AdmissionsDemoPage() {
   const [state,    setState]    = useState<AnalysisState>('idle')
   const [preview,  setPreview]  = useState<string | null>(null)
@@ -107,6 +117,9 @@ export default function AdmissionsDemoPage() {
   const [result,   setResult]   = useState<AdmissionsVerifyResponse | null>(null)
   const [errMsg,   setErrMsg]   = useState<string>('')
   const [drag,     setDrag]     = useState(false)
+  // ── Multi-document history ────────────────────────────────────────────────
+  const [history,  setHistory]  = useState<CompletedDoc[]>([])
+  const [viewDoc,  setViewDoc]  = useState<CompletedDoc | null>(null)
   const fileRef  = useRef<HTMLInputElement>(null)
   const timersRef = useRef<ReturnType<typeof setTimeout>[]>([])
 
@@ -180,6 +193,15 @@ export default function AdmissionsDemoPage() {
       const data = await resp.json() as AdmissionsVerifyResponse
       setResult(data)
       setState('done')
+
+      // Save to multi-document history
+      setHistory(prev => [{
+        id:       `doc-${Date.now()}`,
+        fileName: file.name,
+        isPdf:    pdf,
+        preview:  dataUrl.slice(0, 200), // just enough for type detection, not full data URL
+        result:   data,
+      }, ...prev])
     } catch (err) {
       setErrMsg(err instanceof Error ? err.message : 'Unknown error')
       setState('error')
@@ -211,6 +233,7 @@ export default function AdmissionsDemoPage() {
     setIsPdf(false)
     setFileName('')
     setResult(null)
+    setViewDoc(null)
     setErrMsg('')
     setSteps(STEPS_TEMPLATE.map(s => ({ ...s })))
   }
@@ -658,6 +681,69 @@ export default function AdmissionsDemoPage() {
                 </pre>
               </details>
             )}
+          </div>
+        )}
+
+        {/* ── Multi-document history ──────────────────────────────────── */}
+        {history.length > 0 && (
+          <div style={{ marginTop: 40 }}>
+            <h2 style={{ fontSize: 16, fontWeight: 800, color: '#555', letterSpacing: -0.3, margin: '0 0 16px' }}>
+              Verified Documents ({history.length})
+            </h2>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              {history.map(doc => (
+                <div
+                  key={doc.id}
+                  onClick={() => { setViewDoc(doc); setResult(doc.result); setState('done') }}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: 14,
+                    background: '#0d0d1a', border: '1px solid #1e1e30', borderRadius: 14,
+                    padding: '14px 18px', cursor: 'pointer',
+                    transition: 'border-color 0.2s',
+                  }}
+                  onMouseEnter={e => (e.currentTarget.style.borderColor = '#00ff9d44')}
+                  onMouseLeave={e => (e.currentTarget.style.borderColor = '#1e1e30')}
+                >
+                  {/* Verdict badge */}
+                  <div style={{
+                    width: 48, height: 48, borderRadius: 12,
+                    background: `${scoreColor(doc.result.authenticityScore)}11`,
+                    border: `2px solid ${scoreColor(doc.result.authenticityScore)}44`,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    fontSize: 20, fontWeight: 900, color: scoreColor(doc.result.authenticityScore),
+                    flexShrink: 0,
+                  }}>
+                    {doc.result.authenticityScore}
+                  </div>
+                  {/* Doc info */}
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 14, fontWeight: 700, color: '#e0e0e0', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                      {doc.fileName}
+                    </div>
+                    <div style={{ fontSize: 12, color: '#555', marginTop: 2 }}>
+                      {doc.result.documentType.label} · {doc.result.processingMs}ms
+                    </div>
+                  </div>
+                  {/* Type badge */}
+                  <span style={{
+                    fontSize: 10, fontWeight: 700, letterSpacing: 0.8, textTransform: 'uppercase',
+                    padding: '3px 8px', borderRadius: 20,
+                    background: doc.result.documentType.isIdentity ? 'rgba(122,179,255,0.12)' :
+                                doc.result.documentType.isAcademic ? 'rgba(0,255,157,0.10)' : 'rgba(255,215,0,0.10)',
+                    color: doc.result.documentType.isIdentity ? '#7ab3ff' :
+                           doc.result.documentType.isAcademic ? '#00ff9d' : '#ffd700',
+                    border: `1px solid ${doc.result.documentType.isIdentity ? '#7ab3ff33' : doc.result.documentType.isAcademic ? '#00ff9d33' : '#ffd70033'}`,
+                    flexShrink: 0,
+                  }}>
+                    {doc.result.documentType.isIdentity ? 'IDENTITY' : doc.result.documentType.isAcademic ? 'ACADEMIC' : doc.result.documentType.type.toUpperCase()}
+                  </span>
+                  {/* Verdict */}
+                  <span style={{ fontSize: 16, flexShrink: 0 }}>
+                    {verdictIcon(doc.result.verdict)}
+                  </span>
+                </div>
+              ))}
+            </div>
           </div>
         )}
 
