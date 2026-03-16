@@ -158,6 +158,32 @@ const ID_KW = [
   'permis de conduire', 'driving licence', 'permiso de conducir',
   'date of birth', 'date of expiry', 'date of issue',
   'place of birth', 'nationality', 'authority',
+  // ── Arabic / Middle East / North Africa identity documents
+  '\u0628\u0637\u0627\u0642\u0629',                    // بطاقة (card)
+  '\u0647\u0648\u064a\u0629',                          // هوية (identity)
+  '\u0628\u0637\u0627\u0642\u0629 \u0647\u0648\u064a\u0629',  // بطاقة هوية (identity card)
+  '\u062c\u0648\u0627\u0632',                          // جواز (passport)
+  '\u062c\u0648\u0627\u0632 \u0633\u0641\u0631',       // جواز سفر (passport)
+  '\u062a\u0627\u0631\u064a\u062e \u0627\u0644\u0645\u064a\u0644\u0627\u062f',  // تاريخ الميلاد (date of birth)
+  '\u062a\u0627\u0631\u064a\u062e \u0627\u0644\u0627\u0646\u062a\u0647\u0627\u0621', // تاريخ الانتهاء (expiry date)
+  '\u0627\u0644\u062c\u0646\u0633\u064a\u0629',        // الجنسية (nationality)
+  '\u0627\u0644\u0627\u0633\u0645',                    // الاسم (name)
+  '\u0631\u0642\u0645',                                // رقم (number)
+  // ── Arabic country names
+  '\u0627\u0644\u0645\u0645\u0644\u0643\u0629 \u0627\u0644\u0639\u0631\u0628\u064a\u0629 \u0627\u0644\u0633\u0639\u0648\u062f\u064a\u0629', // Saudi Arabia
+  '\u0627\u0644\u0625\u0645\u0627\u0631\u0627\u062a',  // Emirates
+  '\u0645\u0635\u0631',                                // Egypt
+  '\u0627\u0644\u0623\u0631\u062f\u0646',              // Jordan
+  '\u0627\u0644\u0639\u0631\u0627\u0642',              // Iraq
+  '\u0627\u0644\u0645\u063a\u0631\u0628',              // Morocco
+  '\u062a\u0648\u0646\u0633',                          // Tunisia
+  '\u0644\u0628\u0646\u0627\u0646',                    // Lebanon
+  // ── Country names in Latin (Arabic countries)
+  'saudi arabia', 'kingdom of saudi arabia', 'united arab emirates', 'uae',
+  'egypt', 'jordan', 'iraq', 'morocco', 'tunisia', 'lebanon', 'qatar',
+  'bahrain', 'kuwait', 'oman', 'algeria', 'libya', 'sudan', 'yemen',
+  // ── Other non-Latin script countries
+  'türkiye', 'turkiye', 'republic of turkey',
   // ── MRZ-adjacent keywords
   'machine readable', 'mrz',
 ]
@@ -191,6 +217,47 @@ function countKeywords(text: string, keywords: string[]): number {
   return keywords.filter(kw => text.includes(kw)).length
 }
 
+/** Detect country from Arabic or mixed text */
+function detectArabicCountry(raw: string, lower: string): string | null {
+  // Arabic country names in Arabic script
+  const countryMap: [string, string][] = [
+    ['\u0627\u0644\u0645\u0645\u0644\u0643\u0629 \u0627\u0644\u0639\u0631\u0628\u064a\u0629 \u0627\u0644\u0633\u0639\u0648\u062f\u064a\u0629', 'Saudi Arabia'],
+    ['\u0627\u0644\u0633\u0639\u0648\u062f\u064a\u0629', 'Saudi Arabia'],
+    ['\u0627\u0644\u0625\u0645\u0627\u0631\u0627\u062a', 'UAE'],
+    ['\u0645\u0635\u0631', 'Egypt'],
+    ['\u0627\u0644\u0623\u0631\u062f\u0646', 'Jordan'],
+    ['\u0627\u0644\u0639\u0631\u0627\u0642', 'Iraq'],
+    ['\u0627\u0644\u0645\u063a\u0631\u0628', 'Morocco'],
+    ['\u062a\u0648\u0646\u0633', 'Tunisia'],
+    ['\u0644\u0628\u0646\u0627\u0646', 'Lebanon'],
+    ['\u0642\u0637\u0631', 'Qatar'],
+    ['\u0627\u0644\u0628\u062d\u0631\u064a\u0646', 'Bahrain'],
+    ['\u0627\u0644\u0643\u0648\u064a\u062a', 'Kuwait'],
+    ['\u0639\u0645\u0627\u0646', 'Oman'],
+    ['\u0627\u0644\u062c\u0632\u0627\u0626\u0631', 'Algeria'],
+    ['\u0644\u064a\u0628\u064a\u0627', 'Libya'],
+    ['\u0627\u0644\u0633\u0648\u062f\u0627\u0646', 'Sudan'],
+    ['\u0627\u0644\u064a\u0645\u0646', 'Yemen'],
+  ]
+  for (const [arabic, english] of countryMap) {
+    if (raw.includes(arabic)) return english
+  }
+  // Latin name fallback
+  const latinCountries: [string, string][] = [
+    ['saudi', 'Saudi Arabia'], ['emirates', 'UAE'], ['uae', 'UAE'],
+    ['egypt', 'Egypt'], ['jordan', 'Jordan'], ['iraq', 'Iraq'],
+    ['morocco', 'Morocco'], ['tunisia', 'Tunisia'], ['lebanon', 'Lebanon'],
+    ['qatar', 'Qatar'], ['bahrain', 'Bahrain'], ['kuwait', 'Kuwait'],
+    ['oman', 'Oman'], ['algeria', 'Algeria'], ['libya', 'Libya'],
+    ['sudan', 'Sudan'], ['yemen', 'Yemen'], ['turkey', 'Turkey'],
+    ['türkiye', 'Turkey'], ['turkiye', 'Turkey'],
+  ]
+  for (const [kw, name] of latinCountries) {
+    if (lower.includes(kw)) return name
+  }
+  return null
+}
+
 function firstMatch(text: string, patterns: RegExp[]): string | undefined {
   for (const re of patterns) {
     const m = text.match(re)
@@ -209,10 +276,11 @@ function classifyDocument(
 
   const academicScore = countKeywords(ocrLower, [...ACADEMIC_KW_ES, ...ACADEMIC_KW_EN])
   const cvScore       = countKeywords(ocrLower, CV_KW)
-  const idScore       = countKeywords(ocrLower, ID_KW)
-  const passportScore = countKeywords(ocrLower, PASSPORT_KW)
+  const idScore       = countKeywords(ocrLower, ID_KW) + countKeywords(ocrRaw, ID_KW) // check raw for Arabic chars
+  const passportScore = countKeywords(ocrLower, PASSPORT_KW) + countKeywords(ocrRaw, PASSPORT_KW)
   const hasMRZ        = hasMRZPattern(ocrRaw)
   const hasTranscript = ocrLower.includes('transcript') || ocrLower.includes('expediente')
+  const hasArabic     = /[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF]{3,}/.test(ocrRaw)
 
   // ── 1. Strong MRZ signal → identity document (highest priority)
   if (hasMRZ) {
@@ -230,16 +298,35 @@ function classifyDocument(
   }
 
   // ── 2. Keyword-based identity detection
-  if (idScore >= 2 || (idScore >= 1 && hasFace)) {
+  if (idScore >= 2 || (idScore >= 1 && hasFace) || (hasArabic && hasFace)) {
     if (passportScore >= 1) {
       return { type: 'passport', label: 'International Passport', confidence: 0.85, isIdentity: true, isAcademic: false, isRelevant: true }
     }
     const isNIE = ocrLower.includes('nie') || ocrLower.includes('extranjero') || ocrLower.includes('tarjeta de residencia')
     const isDNI = ocrLower.includes('españa') || ocrLower.includes('espana') || ocrLower.includes('espagne') || ocrLower.includes('dni') || ocrLower.includes('idesp')
     const isLicence = ocrLower.includes('permiso de conducir') || ocrLower.includes('driving licence') || ocrLower.includes('permis de conduire')
+
+    // Detect Arabic ID cards
+    const isArabicID = hasArabic && (
+      ocrRaw.includes('\u0628\u0637\u0627\u0642\u0629') || // بطاقة
+      ocrRaw.includes('\u0647\u0648\u064a\u0629') ||       // هوية
+      ocrLower.includes('saudi') || ocrLower.includes('emirates') || ocrLower.includes('uae') ||
+      ocrLower.includes('egypt') || ocrLower.includes('jordan') || ocrLower.includes('morocco') ||
+      ocrLower.includes('tunisia') || ocrLower.includes('lebanon') || ocrLower.includes('iraq') ||
+      ocrLower.includes('qatar') || ocrLower.includes('bahrain') || ocrLower.includes('kuwait') ||
+      ocrLower.includes('oman') || ocrLower.includes('algeria')
+    )
+
+    // Detect country from Arabic text
+    const arabicCountry = hasArabic ? detectArabicCountry(ocrRaw, ocrLower) : null
+
     return {
-      type: 'dni',
-      label: isLicence ? 'Driving Licence' : isNIE ? 'Spanish NIE / Residence Permit' : isDNI ? 'Spanish DNI (National ID)' : 'National Identity Card',
+      type: isArabicID ? 'eu_id' : 'dni',
+      label: isLicence ? 'Driving Licence'
+           : isNIE ? 'Spanish NIE / Residence Permit'
+           : isDNI ? 'Spanish DNI (National ID)'
+           : isArabicID ? `National Identity Card${arabicCountry ? ` (${arabicCountry})` : ''}`
+           : 'National Identity Card',
       confidence: idScore >= 2 ? 0.85 : 0.75,
       isIdentity: true, isAcademic: false, isRelevant: true,
     }
@@ -260,7 +347,14 @@ function classifyDocument(
 
   // ── 5. Face + at least 1 identity keyword → treat as ID
   if (hasFace && idScore >= 1) {
-    return { type: 'dni', label: 'Identity Document (unclassified)', confidence: 0.60, isIdentity: true, isAcademic: false, isRelevant: true }
+    const country = detectArabicCountry(ocrRaw, ocrLower)
+    return { type: 'dni', label: country ? `Identity Document (${country})` : 'Identity Document (unclassified)', confidence: 0.60, isIdentity: true, isAcademic: false, isRelevant: true }
+  }
+
+  // ── 5b. Face + Arabic text → likely Arabic ID card
+  if (hasFace && hasArabic) {
+    const country = detectArabicCountry(ocrRaw, ocrLower)
+    return { type: 'eu_id', label: `National Identity Card${country ? ` (${country})` : ' (Arabic)'}`, confidence: 0.70, isIdentity: true, isAcademic: false, isRelevant: true }
   }
 
   // ── 6. Face only → photo
@@ -318,37 +412,50 @@ function extractFields(
 
   // ── Identity documents from OCR text + key-value pairs
   if (docType === 'passport' || docType === 'dni' || docType === 'eu_id') {
-    const fullName   = kv_get(['nombre', 'name', 'apellido', 'surname', 'nom']) ??
+    const fullName   = kv_get(['nombre', 'name', 'apellido', 'surname', 'nom', '\u0627\u0644\u0627\u0633\u0645']) ??
       firstMatch(txt, [
         /(?:nombre|name|nom)\s*[:\-]?\s*([A-ZÁÉÍÓÚÜÑ][^\n,]{2,50})/i,
         // Spanish DNI layout: name appears as standalone ALL-CAPS line after IDENTIDAD
         /(?:IDENTIDAD|IDENTITY).*?\n.*?\n.*?([A-ZÁÉÍÓÚÜÑ]{3,}(?:\s+[A-ZÁÉÍÓÚÜÑ]{2,})*)/,
+        // Arabic name: sequence of Arabic chars after الاسم
+        /\u0627\u0644\u0627\u0633\u0645\s*[:\-]?\s*([\u0600-\u06FF\u0750-\u077F\s]{3,50})/,
+        // General: any Arabic word sequence of 3+ words (likely a name)
+        /([\u0600-\u06FF]{2,}(?:\s+[\u0600-\u06FF]{2,}){1,4})/,
       ])
-    const docNumber  = kv_get(['número', 'number', 'num', 'document']) ??
+    const docNumber  = kv_get(['número', 'number', 'num', 'document', '\u0631\u0642\u0645']) ??
       firstMatch(txt, [
         /(?:num(?:ero)?\.?\s*(?:soporte|documento|doc)?)\s*[:\-]?\s*([A-Z0-9]{6,12})/i,
         // Spanish DNI number: 8 digits + 1 letter
         /\b(\d{8}[A-Z])\b/,
+        // Generic document number: alphanumeric 6-15 chars
+        /(?:number|no\.?|num|رقم)\s*[:\-]?\s*([A-Z0-9]{6,15})/i,
       ])
-    const dob        = kv_get(['nacimiento', 'birth', 'naissance']) ??
+    const dob        = kv_get(['nacimiento', 'birth', 'naissance', '\u062a\u0627\u0631\u064a\u062e \u0627\u0644\u0645\u064a\u0644\u0627\u062f']) ??
       firstMatch(txt, [
         // DD MM YYYY or DD/MM/YYYY patterns
         /(?:nacimiento|birth|nac)\S*\s*[:\-]?\s*(\d{2}\s+\d{2}\s+\d{4})/i,
         // Fallback: date after name, before EMISION
         /(\d{2}\s+\d{2}\s+\d{4})(?=[\s\S]*?(?:EMISION|VALIDEZ|expiry))/i,
+        // DD/MM/YYYY with separators
+        /(\d{2}[\/\-\.]\d{2}[\/\-\.]\d{4})/,
       ])
-    const nationality = kv_get(['nacionalidad', 'nationality', 'nationalité']) ??
+    const nationality = kv_get(['nacionalidad', 'nationality', 'nationalité', '\u0627\u0644\u062c\u0646\u0633\u064a\u0629']) ??
       firstMatch(txt, [
         /(?:nacionalidad|nationality)\s*[:\-]?\s*([A-Za-zÁÉÍÓÚÜÑ]+)/i,
+        // Arabic nationality
+        /\u0627\u0644\u062c\u0646\u0633\u064a\u0629\s*[:\-]?\s*([\u0600-\u06FF\s]{2,30})/,
       ])
     // Parse expiry date
     const expiryDate = firstMatch(txt, [
       /VALIDEZ\s*[:\-]?\s*(\d{2}\s+\d{2}\s+\d{4})/i,
       /(?:validez|expiry|caducidad)\S*\s*[:\-]?\s*(\d{2}[\s\/\-\.]\d{2}[\s\/\-\.]\d{4})/i,
+      /\u062a\u0627\u0631\u064a\u062e \u0627\u0644\u0627\u0646\u062a\u0647\u0627\u0621\s*[:\-]?\s*(\d{2}[\s\/\-\.]\d{2}[\s\/\-\.]\d{4})/,
     ])
     // Parse issuing country
-    const issuingCountry = txt.includes('ESPAÑA') || txt.includes('ESPANA') || txt.includes('ESPAGNE')
-      ? 'ESP' : undefined
+    const issuingCountryFromText = detectArabicCountry(txt, txt.toLowerCase())
+    const issuingCountry = (txt.includes('ESPAÑA') || txt.includes('ESPANA') || txt.includes('ESPAGNE'))
+      ? 'ESP'
+      : issuingCountryFromText ?? undefined
 
     return {
       fullName,

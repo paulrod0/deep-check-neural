@@ -65,9 +65,6 @@ const nextConfig: NextConfig = {
   // Server-side packages that must NOT be bundled (need native Node.js modules)
   serverExternalPackages: [
     'tesseract.js',
-    '@vladmandic/face-api',
-    '@tensorflow/tfjs',
-    '@tensorflow/tfjs-node',
     'canvas',
     'sharp',
     'onnxruntime-node',

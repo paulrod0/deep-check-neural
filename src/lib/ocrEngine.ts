@@ -7,11 +7,14 @@
  * Pipeline:
  *   1. Accept base64 image (PNG/JPEG) or PDF data URL
  *   2. If PDF: extract text via pdfjs-dist first; if no text → render + OCR
- *   3. Run Tesseract.js with spa+eng for maximum coverage
+ *   3. Run Tesseract.js — auto-detects script for language selection
  *   4. Semantic validation: NIF/CIF, IBAN, MRZ, dates, math
  *   5. Return TextractResult-compatible output
  *
- * Language coverage: Spanish + English (covers ~95% of EU admissions docs)
+ * Language support:
+ *   - Latin scripts: eng (covers English, Spanish, French, German, Italian, Portuguese)
+ *   - Arabic script: ara+eng (Arabic + mixed Latin text)
+ *   - Auto-detection: tries eng first, falls back to ara if low confidence
  */
 
 import { createWorker, Worker as TesseractWorker } from 'tesseract.js'
@@ -43,33 +46,41 @@ export interface OcrResult {
   ocrConfidence:  number    // 0–100 average OCR confidence
 }
 
-// ── Tesseract worker pool (lazy singleton) ──────────────────────────────────
+// ── Tesseract worker pool (per-language lazy singletons) ────────────────────
 
-let _worker: TesseractWorker | null = null
-let _workerReady = false
-let _workerInitializing: Promise<TesseractWorker> | null = null
+const _workers: Map<string, TesseractWorker> = new Map()
+const _workerInitPromises: Map<string, Promise<TesseractWorker>> = new Map()
 
-async function getWorker(): Promise<TesseractWorker> {
-  if (_worker && _workerReady) return _worker
+const TESSDATA_URL = 'https://tessdata.projectnaptha.com/4.0.0'
 
-  if (_workerInitializing) return _workerInitializing
+async function getWorker(lang: string = 'eng'): Promise<TesseractWorker> {
+  const existing = _workers.get(lang)
+  if (existing) return existing
 
-  _workerInitializing = (async () => {
-    // Use 'eng' only for faster initialization (~4MB vs ~24MB for spa+eng).
-    // English OCR handles Spanish characters well enough for document classification.
-    // Spanish MRZ/NIF/IBAN fields are in a structured format that doesn't need spanish model.
-    console.log('[ocrEngine] Initializing Tesseract.js worker (eng)...')
+  const pending = _workerInitPromises.get(lang)
+  if (pending) return pending
+
+  const initPromise = (async () => {
+    console.log(`[ocrEngine] Initializing Tesseract.js worker (${lang})...`)
     const t0 = Date.now()
-    const w = await createWorker('eng', 1, {
-      langPath: 'https://tessdata.projectnaptha.com/4.0.0',
+    const w = await createWorker(lang, 1, {
+      langPath: TESSDATA_URL,
     })
-    _worker = w
-    _workerReady = true
-    console.log(`[ocrEngine] Tesseract.js worker ready (${Date.now() - t0}ms)`)
+    _workers.set(lang, w)
+    console.log(`[ocrEngine] Tesseract.js worker ready: ${lang} (${Date.now() - t0}ms)`)
     return w
   })()
 
-  return _workerInitializing
+  _workerInitPromises.set(lang, initPromise)
+  return initPromise
+}
+
+/** Detect if an image buffer likely contains Arabic script (heuristic) */
+function hasArabicScript(text: string): boolean {
+  // Arabic Unicode range: \u0600-\u06FF (Arabic), \u0750-\u077F (Arabic Supplement)
+  // \u08A0-\u08FF (Arabic Extended-A), \uFB50-\uFDFF (Arabic Pres Forms-A)
+  const arabicChars = text.match(/[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF]/g)
+  return (arabicChars?.length ?? 0) > 5
 }
 
 // ── PDF text extraction via pdfjs-dist ──────────────────────────────────────
@@ -158,14 +169,14 @@ export async function runOCR(imageBase64: string): Promise<OcrResult> {
       const { pdfFirstPageToPng } = await import('./pdfToImage')
       const png = await pdfFirstPageToPng(imageBase64)
       if (png) {
-        const result = await runTesseractOCR(png)
+        const result = await runTesseractWithFallback(png)
         rawText    = result.text
         confidence = result.confidence
       }
     }
   } else {
-    // Regular image → Tesseract OCR
-    const result = await runTesseractOCR(imageBase64)
+    // Regular image → Tesseract OCR with auto-language detection
+    const result = await runTesseractWithFallback(imageBase64)
     rawText    = result.text
     confidence = result.confidence
   }
@@ -199,9 +210,12 @@ export async function runOCR(imageBase64: string): Promise<OcrResult> {
 
 // ── Tesseract OCR execution ─────────────────────────────────────────────────
 
-async function runTesseractOCR(imageBase64: string): Promise<{ text: string; confidence: number }> {
+async function runTesseractOCR(
+  imageBase64: string,
+  lang: string = 'eng',
+): Promise<{ text: string; confidence: number; lang: string }> {
   try {
-    const worker = await getWorker()
+    const worker = await getWorker(lang)
     const buffer = base64ToBuffer(imageBase64)
 
     const { data } = await worker.recognize(buffer)
@@ -209,11 +223,55 @@ async function runTesseractOCR(imageBase64: string): Promise<{ text: string; con
     return {
       text:       data.text,
       confidence: data.confidence,
+      lang,
     }
   } catch (err) {
-    console.error('[ocrEngine] Tesseract OCR failed:', err instanceof Error ? err.message : err)
-    return { text: '', confidence: 0 }
+    console.error(`[ocrEngine] Tesseract OCR (${lang}) failed:`, err instanceof Error ? err.message : err)
+    return { text: '', confidence: 0, lang }
   }
+}
+
+/**
+ * Run OCR with automatic language detection.
+ * First tries English (fast, handles Latin scripts well).
+ * If confidence is very low (<25%) and barely any text extracted,
+ * retries with Arabic for Middle Eastern / North African documents.
+ */
+async function runTesseractWithFallback(
+  imageBase64: string,
+): Promise<{ text: string; confidence: number; lang: string }> {
+  // First pass: English (handles all Latin-script documents)
+  const engResult = await runTesseractOCR(imageBase64, 'eng')
+
+  // If good result, return immediately
+  if (engResult.confidence >= 30 && engResult.text.trim().length > 20) {
+    return engResult
+  }
+
+  // Low confidence or very little text → try Arabic
+  console.log(`[ocrEngine] Low confidence (${engResult.confidence}%) — trying Arabic OCR...`)
+  try {
+    const araResult = await runTesseractOCR(imageBase64, 'ara')
+
+    // Use Arabic result if it's better
+    if (araResult.confidence > engResult.confidence || hasArabicScript(araResult.text)) {
+      console.log(`[ocrEngine] Arabic OCR better: ${araResult.confidence}% vs eng ${engResult.confidence}%`)
+      // Combine: Arabic text + any English text (MRZ zones are always Latin)
+      if (engResult.text.trim().length > 10) {
+        return {
+          text: araResult.text + '\n--- Latin text ---\n' + engResult.text,
+          confidence: Math.max(araResult.confidence, engResult.confidence),
+          lang: 'ara+eng',
+        }
+      }
+      return araResult
+    }
+  } catch (err) {
+    console.warn('[ocrEngine] Arabic OCR fallback failed:', err instanceof Error ? err.message : err)
+  }
+
+  // Stick with English result
+  return engResult
 }
 
 // ── Key-value pair extraction from raw text ─────────────────────────────────
