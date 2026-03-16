@@ -3,27 +3,28 @@
  * ===========================
  * IE University Admissions — Document Authenticity Verification
  *
+ * **Self-hosted pipeline — zero AWS dependency.**
+ *
  * Accepts any document image (DNI, passport, degree, diploma, CV, transcript).
  * Runs the full Deep-Check forensics stack server-side:
- *   1. DocForensics CNN       — document type classification + manipulation score
- *   2. AWS Textract           — OCR + semantic field validation
- *   3. AWS Rekognition        — face quality analysis (ID docs)
- *   4. Frequency analysis     — FFT spectral + wavelet splice detection
- *   5. MRZ parsing            — ICAO 9303 check-digit validation (ID/passport)
+ *   1. Tesseract.js OCR      — text extraction (spa+eng, offline)
+ *   2. face-api.js           — face detection + quality (offline)
+ *   3. Frequency analysis     — FFT spectral + wavelet splice detection
+ *   4. MRZ parsing            — ICAO 9303 check-digit validation (offline)
+ *   5. Semantic validation    — NIF/CIF, IBAN, date, MRZ checksums
  *   6. Academic keyword scan  — degree/certificate structural validation
  *
- * All 4 main analyses run in parallel via runDocumentForensics().
  * No authentication required — demo endpoint.
  */
 
 import { NextRequest, NextResponse }    from 'next/server'
-import { runDocumentForensics }         from '@/lib/documentForensics'
+import { runOCR }                       from '@/lib/ocrEngine'
+import { detectFaces }                  from '@/lib/faceDetection'
 import { parseMRZ }                     from '@/lib/mrzParser'
-import { pdfFirstPageToPng, isPdfInput } from '@/lib/pdfToImage'
-import type { MRZFields }               from '@/lib/mrzParser'
-import type { DocumentClass }           from '@/lib/docForensicsCnn'
-import type { TextractResult }          from '@/lib/textractAnalysis'
-import type { RekognitionResult }       from '@/lib/rekognitionAnalysis'
+import { isPdfInput }                   from '@/lib/pdfToImage'
+import type { MRZFields }              from '@/lib/mrzParser'
+import type { OcrResult }              from '@/lib/ocrEngine'
+import type { FaceDetectionResult }    from '@/lib/faceDetection'
 
 // ── Response types ─────────────────────────────────────────────────────────────
 
@@ -79,13 +80,14 @@ export interface AdmissionsMRZAnalysis {
 }
 
 export interface AdmissionsForensicsSignals {
-  manipulationScore: number   // 0–100 (CNN)
+  manipulationScore: number   // 0–100 (frequency-based)
   frequencyScore:    number   // 0–100 (FFT/wavelet)
-  semanticScore:     number   // 0–100 (Textract anomaly)
-  rekognitionScore:  number   // 0–100 (face quality anomaly)
+  semanticScore:     number   // 0–100 (OCR semantic anomaly)
+  faceQualityScore:  number   // 0–100 (face quality anomaly)
   overallRiskScore:  number   // 0–100 weighted combination
   faceDetected:      boolean
   faceCount:         number
+  ocrConfidence:     number   // 0–100 Tesseract confidence
   semanticAlerts:    { type: string; label: string; detail: string }[]
 }
 
@@ -136,31 +138,31 @@ const CV_KW = [
 ]
 
 const ID_KW = [
-  // ── Spanish DNI / NIE ─────────────────────────────────────────────────────
+  // ── Spanish DNI / NIE
   'documento nacional de identidad', 'dni', 'nie', 'd.n.i',
   'tarjeta de identidad', 'tarjeta de residencia', 'permiso de residencia',
-  'españa', 'espagne', 'spanien', 'reino de españa',
+  'españa', 'espana', 'espagne', 'spanien', 'reino de españa', 'reino de espana',
   'ministerio del interior',
-  // ── Spanish DNI OCR fragments (Textract often returns these) ──────────────
+  // ── Spanish DNI OCR fragments
   'apellido', 'primer apellido', 'segundo apellido',
   'fecha de nacimiento', 'fecha de validez', 'fecha de expedición',
   'nacionalidad', 'sexo', 'domicilio', 'lugar de nacimiento',
   'num soporte', 'equipo', 'idesp',
-  // ── Passport ──────────────────────────────────────────────────────────────
+  // ── Passport
   'passport', 'pasaporte', 'reisepass', 'passeport', 'passaporto',
   'type/tipo', 'type / type', 'issuing authority',
-  // ── Generic identity document (multi-country) ──────────────────────────────
-  'national identity', 'identity card', 'carte nationale', 'carte d\'identité',
-  'personalausweis', 'carta d\'identità', 'identiteitskaart', 'bilhete de identidade',
+  // ── Generic identity document (multi-country)
+  'national identity', 'identity card', 'carte nationale', "carte d'identité",
+  'personalausweis', "carta d'identità", 'identiteitskaart', 'bilhete de identidade',
   'cartão de cidadão', 'identity document', 'documento de identidad',
   'permis de conduire', 'driving licence', 'permiso de conducir',
   'date of birth', 'date of expiry', 'date of issue',
   'place of birth', 'nationality', 'authority',
-  // ── MRZ-adjacent keywords (appear near MRZ zones) ────────────────────────
+  // ── MRZ-adjacent keywords
   'machine readable', 'mrz',
 ]
 
-// ── Passport-specific keywords (subset, high confidence) ────────────────────
+// ── Passport-specific keywords (subset, high confidence)
 
 const PASSPORT_KW = [
   'passport', 'pasaporte', 'reisepass', 'passeport', 'passaporto',
@@ -175,12 +177,12 @@ function hasMRZPattern(text: string): boolean {
   let mrzLineCount = 0
   for (const line of lines) {
     const clean = line.replace(/\s/g, '')
-    // MRZ lines: 30-44 chars of [A-Z0-9<] only
+    // MRZ lines: 28-44 chars of [A-Z0-9<] only
     if (clean.length >= 28 && /^[A-Z0-9<]{28,44}$/.test(clean)) {
       mrzLineCount++
     }
   }
-  return mrzLineCount >= 2 // TD1 has 3 lines, TD2/TD3 have 2
+  return mrzLineCount >= 2
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
@@ -200,10 +202,9 @@ function firstMatch(text: string, patterns: RegExp[]): string | undefined {
 // ── Document type classification ───────────────────────────────────────────────
 
 function classifyDocument(
-  cnnType:     DocumentClass | null,
   ocrLower:    string,
-  rekResult:   Partial<RekognitionResult> | undefined,
   ocrRaw:      string,
+  hasFace:     boolean,
 ): AdmissionsDocTypeResult {
 
   const academicScore = countKeywords(ocrLower, [...ACADEMIC_KW_ES, ...ACADEMIC_KW_EN])
@@ -212,16 +213,14 @@ function classifyDocument(
   const passportScore = countKeywords(ocrLower, PASSPORT_KW)
   const hasMRZ        = hasMRZPattern(ocrRaw)
   const hasTranscript = ocrLower.includes('transcript') || ocrLower.includes('expediente')
-  const hasFace       = (rekResult?.faceCount ?? 0) > 0
 
-  // ── 1. Strong MRZ signal → identity document (highest priority) ────────────
-  //    MRZ is a cryptographic proof of being a government-issued ID
+  // ── 1. Strong MRZ signal → identity document (highest priority)
   if (hasMRZ) {
-    if (passportScore >= 1 || ocrLower.includes('p<') || cnnType === 'passport') {
+    if (passportScore >= 1 || ocrLower.includes('p<')) {
       return { type: 'passport', label: 'International Passport', confidence: 0.95, isIdentity: true, isAcademic: false, isRelevant: true }
     }
     const isNIE = ocrLower.includes('nie') || ocrLower.includes('extranjero') || ocrLower.includes('tarjeta de residencia')
-    const isDNI = ocrLower.includes('españa') || ocrLower.includes('espagne') || ocrLower.includes('idesp') || ocrLower.includes('dni')
+    const isDNI = ocrLower.includes('españa') || ocrLower.includes('espana') || ocrLower.includes('espagne') || ocrLower.includes('idesp') || ocrLower.includes('dni')
     return {
       type: 'dni',
       label: isNIE ? 'Spanish NIE / Residence Permit' : isDNI ? 'Spanish DNI (National ID)' : 'National Identity Card',
@@ -230,24 +229,13 @@ function classifyDocument(
     }
   }
 
-  // ── 2. CNN model classification (if model is deployed) ─────────────────────
-  if (cnnType === 'passport') {
-    return { type: 'passport', label: 'International Passport', confidence: 0.90, isIdentity: true, isAcademic: false, isRelevant: true }
-  }
-  if (cnnType === 'id_card') {
-    const isNIE = ocrLower.includes('nie') || ocrLower.includes('extranjero')
-    return { type: 'dni', label: isNIE ? 'Spanish NIE (Residency Permit)' : 'National ID Card (DNI)', confidence: 0.88, isIdentity: true, isAcademic: false, isRelevant: true }
-  }
-
-  // ── 3. Keyword-based identity detection (works even when CNN model is not deployed) ──
-  //    idScore >= 2: at least 2 identity keywords found → strong signal
-  //    idScore == 1 + hasFace: 1 keyword + photo → likely ID document
+  // ── 2. Keyword-based identity detection
   if (idScore >= 2 || (idScore >= 1 && hasFace)) {
     if (passportScore >= 1) {
       return { type: 'passport', label: 'International Passport', confidence: 0.85, isIdentity: true, isAcademic: false, isRelevant: true }
     }
     const isNIE = ocrLower.includes('nie') || ocrLower.includes('extranjero') || ocrLower.includes('tarjeta de residencia')
-    const isDNI = ocrLower.includes('españa') || ocrLower.includes('espagne') || ocrLower.includes('dni') || ocrLower.includes('idesp')
+    const isDNI = ocrLower.includes('españa') || ocrLower.includes('espana') || ocrLower.includes('espagne') || ocrLower.includes('dni') || ocrLower.includes('idesp')
     const isLicence = ocrLower.includes('permiso de conducir') || ocrLower.includes('driving licence') || ocrLower.includes('permis de conduire')
     return {
       type: 'dni',
@@ -257,42 +245,36 @@ function classifyDocument(
     }
   }
 
-  // ── 4. Academic documents ──────────────────────────────────────────────────
-  if (cnnType === 'certificate' || academicScore >= 2) {
+  // ── 3. Academic documents
+  if (academicScore >= 2) {
     if (hasTranscript) {
       return { type: 'academic_transcript', label: 'Academic Transcript / Grade Record', confidence: 0.80, isIdentity: false, isAcademic: true, isRelevant: true }
     }
     return { type: 'degree_certificate', label: 'Degree / Diploma Certificate', confidence: 0.80, isIdentity: false, isAcademic: true, isRelevant: true }
   }
 
-  // ── 5. CV / Résumé ────────────────────────────────────────────────────────
+  // ── 4. CV / Résumé
   if (cvScore >= 2) {
     return { type: 'cv_resume', label: 'CV / Résumé', confidence: 0.75, isIdentity: false, isAcademic: false, isRelevant: true }
   }
 
-  // ── 6. Other CNN types ─────────────────────────────────────────────────────
-  if (cnnType === 'invoice') {
-    return { type: 'invoice', label: 'Invoice / Financial Document', confidence: 0.80, isIdentity: false, isAcademic: false, isRelevant: false }
-  }
-  if (cnnType === 'payslip') {
-    return { type: 'payslip', label: 'Payslip / Employment Document', confidence: 0.80, isIdentity: false, isAcademic: false, isRelevant: false }
-  }
-
-  // ── 7. Face-only fallback — ONLY if NO identity signals were found above ──
-  //    A DNI/passport has a face but also has keywords or MRZ.
-  //    Only classify as "photo" if there's a face AND zero ID indicators.
-  if (cnnType === 'media_photo' && idScore === 0 && !hasFace) {
-    return { type: 'photo', label: 'Photo / Media Image', confidence: 0.60, isIdentity: false, isAcademic: false, isRelevant: false }
-  }
-
-  // ── 8. Last resort: if there IS a face + at least 1 identity keyword, treat as ID ──
+  // ── 5. Face + at least 1 identity keyword → treat as ID
   if (hasFace && idScore >= 1) {
     return { type: 'dni', label: 'Identity Document (unclassified)', confidence: 0.60, isIdentity: true, isAcademic: false, isRelevant: true }
   }
 
-  // ── 9. No signals at all ───────────────────────────────────────────────────
+  // ── 6. Face only → photo
   if (hasFace) {
     return { type: 'photo', label: 'Photo / Portrait', confidence: 0.50, isIdentity: false, isAcademic: false, isRelevant: false }
+  }
+
+  // ── 7. No signals → check for some text content
+  if (ocrLower.length > 100) {
+    // Has substantial text but no classification — generic document
+    if (academicScore >= 1) {
+      return { type: 'degree_certificate', label: 'Academic Document', confidence: 0.55, isIdentity: false, isAcademic: true, isRelevant: true }
+    }
+    return { type: 'other', label: 'Document (unclassified)', confidence: 0.40, isIdentity: false, isAcademic: false, isRelevant: false }
   }
 
   return { type: 'other', label: 'Unknown Document', confidence: 0.30, isIdentity: false, isAcademic: false, isRelevant: false }
@@ -304,22 +286,21 @@ function extractFields(
   rawText:   string,
   docType:   AdmissionsDocType,
   mrzData:   AdmissionsMRZAnalysis | null,
-  textract:  Partial<TextractResult> | undefined,
+  kvPairs:   Record<string, string>,
 ): AdmissionsExtractedFields {
 
-  const kv  = textract?.keyValuePairs ?? {}
   const txt = rawText
 
   // Helper: search key-value pairs (case-insensitive)
   const kv_get = (keys: string[]) => {
     for (const k of keys) {
-      const found = Object.entries(kv).find(([key]) => key.toLowerCase().includes(k.toLowerCase()))
+      const found = Object.entries(kvPairs).find(([key]) => key.toLowerCase().includes(k.toLowerCase()))
       if (found) return found[1]
     }
     return undefined
   }
 
-  // ── Identity documents ─────────────────────────────────────────────────────
+  // ── Identity documents from MRZ
   if (mrzData?.detected && mrzData.fields) {
     const f = mrzData.fields
     return {
@@ -335,7 +316,52 @@ function extractFields(
     }
   }
 
-  // ── Academic documents ─────────────────────────────────────────────────────
+  // ── Identity documents from OCR text + key-value pairs
+  if (docType === 'passport' || docType === 'dni' || docType === 'eu_id') {
+    const fullName   = kv_get(['nombre', 'name', 'apellido', 'surname', 'nom']) ??
+      firstMatch(txt, [
+        /(?:nombre|name|nom)\s*[:\-]?\s*([A-ZÁÉÍÓÚÜÑ][^\n,]{2,50})/i,
+        // Spanish DNI layout: name appears as standalone ALL-CAPS line after IDENTIDAD
+        /(?:IDENTIDAD|IDENTITY).*?\n.*?\n.*?([A-ZÁÉÍÓÚÜÑ]{3,}(?:\s+[A-ZÁÉÍÓÚÜÑ]{2,})*)/,
+      ])
+    const docNumber  = kv_get(['número', 'number', 'num', 'document']) ??
+      firstMatch(txt, [
+        /(?:num(?:ero)?\.?\s*(?:soporte|documento|doc)?)\s*[:\-]?\s*([A-Z0-9]{6,12})/i,
+        // Spanish DNI number: 8 digits + 1 letter
+        /\b(\d{8}[A-Z])\b/,
+      ])
+    const dob        = kv_get(['nacimiento', 'birth', 'naissance']) ??
+      firstMatch(txt, [
+        // DD MM YYYY or DD/MM/YYYY patterns
+        /(?:nacimiento|birth|nac)\S*\s*[:\-]?\s*(\d{2}\s+\d{2}\s+\d{4})/i,
+        // Fallback: date after name, before EMISION
+        /(\d{2}\s+\d{2}\s+\d{4})(?=[\s\S]*?(?:EMISION|VALIDEZ|expiry))/i,
+      ])
+    const nationality = kv_get(['nacionalidad', 'nationality', 'nationalité']) ??
+      firstMatch(txt, [
+        /(?:nacionalidad|nationality)\s*[:\-]?\s*([A-Za-zÁÉÍÓÚÜÑ]+)/i,
+      ])
+    // Parse expiry date
+    const expiryDate = firstMatch(txt, [
+      /VALIDEZ\s*[:\-]?\s*(\d{2}\s+\d{2}\s+\d{4})/i,
+      /(?:validez|expiry|caducidad)\S*\s*[:\-]?\s*(\d{2}[\s\/\-\.]\d{2}[\s\/\-\.]\d{4})/i,
+    ])
+    // Parse issuing country
+    const issuingCountry = txt.includes('ESPAÑA') || txt.includes('ESPANA') || txt.includes('ESPAGNE')
+      ? 'ESP' : undefined
+
+    return {
+      fullName,
+      docNumber,
+      dateOfBirth: dob,
+      expiryDate,
+      nationality,
+      issuingCountry,
+      ocrText: txt,
+    }
+  }
+
+  // ── Academic documents
   if (docType === 'degree_certificate' || docType === 'academic_transcript') {
     const institution = kv_get(['university', 'universidad', 'institution', 'college', 'escola']) ??
       firstMatch(txt, [
@@ -363,7 +389,7 @@ function extractFields(
     return { institution, degree, studentName, graduationDate, ocrText: txt }
   }
 
-  // ── CV ─────────────────────────────────────────────────────────────────────
+  // ── CV
   if (docType === 'cv_resume') {
     const studentName = firstMatch(txt, [
       /^([A-ZÁÉÍÓÚÜÑ][a-záéíóúüñ]+(?: [A-ZÁÉÍÓÚÜÑ][a-záéíóúüñ]+){1,4})/m,
@@ -371,7 +397,7 @@ function extractFields(
     return { studentName, ocrText: txt }
   }
 
-  // ── Generic ───────────────────────────────────────────────────────────────
+  // ── Generic
   return { ocrText: txt }
 }
 
@@ -399,21 +425,20 @@ function extractMRZ(ocrText: string): AdmissionsMRZAnalysis | null {
 
 function computeAuthenticityScore(
   forensics: {
-    cnnScore:         number
-    frequencyScore:   number
-    semanticScore:    number
-    rekognitionScore: number
+    frequencyScore:    number
+    semanticScore:     number
+    faceQualityScore:  number
   },
   mrz:     AdmissionsMRZAnalysis | null,
   docType: AdmissionsDocTypeResult,
+  ocrConfidence: number,
 ): number {
 
-  // Risk scores 0–100 where 100 = highest risk of manipulation
+  // Risk scores 0–100 where 100 = highest risk
   const forensicRisk = (
-    forensics.cnnScore       * 0.35 +
-    forensics.frequencyScore * 0.30 +
-    forensics.semanticScore  * 0.20 +
-    forensics.rekognitionScore * 0.15
+    forensics.frequencyScore   * 0.40 +
+    forensics.semanticScore    * 0.35 +
+    forensics.faceQualityScore * 0.25
   )
 
   let score = 100 - forensicRisk
@@ -422,12 +447,17 @@ function computeAuthenticityScore(
   if (docType.isIdentity && mrz) {
     if (mrz.detected) {
       score = mrz.valid
-        ? score * 0.60 + 100 * 0.40   // MRZ valid → strong boost
-        : score * 0.60 + 0   * 0.40   // MRZ invalid → strong penalty
+        ? score * 0.55 + 100 * 0.45   // MRZ valid → strong boost
+        : score * 0.55 + 0   * 0.45   // MRZ invalid → strong penalty
     }
   }
 
-  // CV/resume: cannot verify cryptographically — cap at 60 (not tampered, but unverifiable)
+  // OCR confidence bonus: high OCR confidence → text readable → more trustworthy
+  if (ocrConfidence >= 80 && docType.isIdentity) {
+    score = Math.min(100, score + 3)
+  }
+
+  // CV/resume: cannot verify cryptographically — cap at 62
   if (docType.type === 'cv_resume') {
     score = Math.min(score, 62)
   }
@@ -438,7 +468,7 @@ function computeAuthenticityScore(
 // ── Verdict ────────────────────────────────────────────────────────────────────
 
 function computeVerdict(score: number, docType: AdmissionsDocTypeResult): 'authentic' | 'suspicious' | 'tampered' {
-  if (docType.type === 'cv_resume') return 'suspicious'  // CVs are always "unverifiable"
+  if (docType.type === 'cv_resume') return 'suspicious'
   if (score >= 72) return 'authentic'
   if (score >= 45) return 'suspicious'
   return 'tampered'
@@ -449,7 +479,7 @@ function computeVerdict(score: number, docType: AdmissionsDocTypeResult): 'authe
 function buildAlerts(
   docType:   AdmissionsDocTypeResult,
   mrz:       AdmissionsMRZAnalysis | null,
-  forensics: { cnnScore: number; frequencyScore: number; semanticScore: number; semanticAlerts: { type: string; label: string; detail: string }[] },
+  forensics: { frequencyScore: number; semanticScore: number; semanticAlerts: { type: string; label: string; detail: string }[] },
   extracted: AdmissionsExtractedFields,
 ): AdmissionsAlert[] {
 
@@ -471,17 +501,11 @@ function buildAlerts(
   }
 
   if (docType.isIdentity && !mrz?.detected) {
-    alerts.push({ level: 'warning', code: 'MRZ_NOT_FOUND', message: 'No MRZ zone detected. Ensure the full document (including bottom strip) is visible in the photo.' })
+    alerts.push({ level: 'warning', code: 'MRZ_NOT_FOUND', message: 'No MRZ zone detected. Ensure the full document (including bottom strip) is visible in the scan.' })
   }
 
   if (extracted.isExpired) {
     alerts.push({ level: 'error', code: 'DOCUMENT_EXPIRED', message: `Document expired on ${extracted.expiryDate ?? 'unknown date'}.` })
-  }
-
-  if (forensics.cnnScore >= 60) {
-    alerts.push({ level: 'error', code: 'HIGH_MANIPULATION_SCORE', message: `Image manipulation detected (CNN score: ${forensics.cnnScore.toFixed(0)}/100). Likely digitally altered.` })
-  } else if (forensics.cnnScore >= 35) {
-    alerts.push({ level: 'warning', code: 'MODERATE_MANIPULATION_SIGNAL', message: `Moderate manipulation signals detected (score: ${forensics.cnnScore.toFixed(0)}/100). Manual review recommended.` })
   }
 
   if (forensics.frequencyScore >= 55) {
@@ -509,145 +533,133 @@ export async function POST(req: NextRequest): Promise<NextResponse<AdmissionsVer
     return NextResponse.json({ error: 'Request body must be JSON with { image: base64String }' }, { status: 400 })
   }
 
-  // ── PDF detection + conversion to raster image ───────────────────────────────
-  // Admissions documents are often scanned and saved as PDF.
-  // Strategy:
-  //   1. Detect if input is PDF (MIME type or base64 magic bytes %PDF → "JVBE")
-  //   2. Convert first page to PNG at 200 DPI using pdfjs-dist + node-canvas
-  //   3. Run ALL forensics on the PNG (CNN + Textract + Rekognition + Frequency)
-  //   4. Also run Textract on original PDF bytes for maximum text quality
-  //   5. If PDF render fails, fall back to Textract-only on the raw PDF
+  // ── PDF detection ─────────────────────────────────────────────────────────
+  const isPDF = isPdfInput(image)
 
-  const isPDF       = isPdfInput(image)
-  let   imageForCnn = image      // raster image used for CNN/Rekognition/frequency
-  let   pdfRendered = false
+  // ── Run analyses in parallel ──────────────────────────────────────────────
+  // 1. OCR (Tesseract.js — handles both PDF and images)
+  // 2. Face detection (face-api.js — needs raster image)
+  // 3. Frequency analysis (sharp — needs raster image)
 
+  // For face and frequency, we need a raster image
+  let imageForPixel = image
   if (isPDF) {
-    console.log('[admissions-verify] PDF detected — converting first page to PNG...')
-    const png = await pdfFirstPageToPng(image)
-    if (png) {
-      imageForCnn  = png
-      pdfRendered  = true
-      console.log('[admissions-verify] PDF rendered to PNG successfully')
-    } else {
-      console.warn('[admissions-verify] PDF render failed — Textract-only mode')
+    console.log('[admissions-verify] PDF detected — rendering to PNG for pixel analyses...')
+    try {
+      const { pdfFirstPageToPng } = await import('@/lib/pdfToImage')
+      const png = await pdfFirstPageToPng(image)
+      if (png) {
+        imageForPixel = png
+        console.log('[admissions-verify] PDF rendered to PNG successfully')
+      } else {
+        console.warn('[admissions-verify] PDF render failed — OCR-only mode')
+      }
+    } catch (err) {
+      console.warn('[admissions-verify] PDF render error:', err instanceof Error ? err.message : err)
     }
   }
 
-  // ── Run full forensics pipeline ──────────────────────────────────────────────
-  // For PDF: run Textract on original PDF (better text quality for digital PDFs)
-  //          run CNN/Rekognition/Frequency on rendered PNG (full pixel forensics)
-  let forensicsResult
-  try {
-    const [textractOnly, pixelForensics] = await Promise.allSettled([
-      // Always run Textract on the original input (handles PDF natively)
-      isPDF ? import('@/lib/textractAnalysis').then(m => m.runTextractAnalysis(image)) : Promise.resolve(null),
-      // Run pixel forensics on PNG (rendered from PDF, or original image)
-      runDocumentForensics(imageForCnn, {
-        enableTextract:    !isPDF,      // for images run Textract here; for PDF ran above
-        enableCnn:         true,
-        enableRekognition: pdfRendered || !isPDF,
-        enableFrequency:   pdfRendered || !isPDF,
-      }),
-    ])
+  // Run all analyses in parallel
+  const [ocrSettled, faceSettled, frequencySettled] = await Promise.allSettled([
+    runOCR(image),
+    imageForPixel !== image || !isPDF
+      ? detectFaces(imageForPixel)
+      : Promise.resolve(null),
+    imageForPixel !== image || !isPDF
+      ? import('@/lib/frequencyAnalysis').then(m => m.runFrequencyAnalysis(imageForPixel))
+      : Promise.resolve(null),
+  ])
 
-    const pixelResult = pixelForensics.status === 'fulfilled'
-      ? pixelForensics.value
-      : null
+  // ── Extract results safely ────────────────────────────────────────────────
+  const ocrResult: OcrResult | null =
+    ocrSettled.status === 'fulfilled' ? ocrSettled.value : null
+  const faceResult: FaceDetectionResult | null =
+    faceSettled.status === 'fulfilled' ? faceSettled.value : null
+  const frequencyResult =
+    frequencySettled.status === 'fulfilled' ? frequencySettled.value : null
 
-    // Merge: use PDF Textract result if available, otherwise use pixel result's Textract
-    const textractResult = (isPDF && textractOnly.status === 'fulfilled' && textractOnly.value)
-      ? textractOnly.value
-      : pixelResult?.textractResult ?? null
-
-    // Combine into unified forensicsResult shape
-    forensicsResult = pixelResult
-      ? { ...pixelResult, textractResult: textractResult ?? pixelResult.textractResult }
-      : {
-          documentType: null, semanticScore: 0, cnnScore: 0,
-          rekognitionScore: 0, frequencyScore: 0, semanticAlerts: [],
-          analysisMs: 0, textractResult: textractResult,
-        }
-
-  } catch (err) {
-    console.error('[admissions-verify] runDocumentForensics failed:', err)
-    return NextResponse.json({ error: 'Forensics pipeline failed' }, { status: 500 })
+  // Log errors
+  if (ocrSettled.status === 'rejected') {
+    console.error('[admissions-verify] OCR error:', ocrSettled.reason)
+  }
+  if (faceSettled.status === 'rejected') {
+    console.error('[admissions-verify] Face detection error:', faceSettled.reason)
+  }
+  if (frequencySettled.status === 'rejected') {
+    console.error('[admissions-verify] Frequency error:', frequencySettled.reason)
   }
 
-  const ocrText  = forensicsResult.textractResult?.rawText ?? ''
+  const ocrText  = ocrResult?.rawText ?? ''
   const ocrLower = ocrText.toLowerCase()
 
-  // ── Classify document ────────────────────────────────────────────────────────
+  // ── Classify document ────────────────────────────────────────────────────
   const docType = classifyDocument(
-    forensicsResult.documentType,
     ocrLower,
-    forensicsResult.rekognitionResult as Partial<RekognitionResult> | undefined,
     ocrText,
+    (faceResult?.faceCount ?? 0) > 0,
   )
 
-  // ── Parse MRZ (try on ALL documents — MRZ presence confirms it's an ID) ──────
+  // ── Parse MRZ ────────────────────────────────────────────────────────────
   const mrzAnalysis = extractMRZ(ocrText)
 
-  // ── Extract fields ────────────────────────────────────────────────────────────
+  // ── Extract fields ───────────────────────────────────────────────────────
   const extractedData = extractFields(
     ocrText,
     docType.type,
     mrzAnalysis,
-    forensicsResult.textractResult as Partial<TextractResult> | undefined,
+    ocrResult?.keyValuePairs ?? {},
   )
 
-  // ── Forensics signal summary ──────────────────────────────────────────────────
+  // ── Forensics signals ────────────────────────────────────────────────────
+  const frequencyScore    = frequencyResult?.score ?? 0
+  const semanticScore     = ocrResult?.semanticScore ?? 0
+  const faceQualityScore  = faceResult?.score ?? 0
+  const ocrConfidence     = ocrResult?.ocrConfidence ?? 0
+
   const forensics: AdmissionsForensicsSignals = {
-    manipulationScore: forensicsResult.cnnScore,
-    frequencyScore:    forensicsResult.frequencyScore,
-    semanticScore:     forensicsResult.semanticScore,
-    rekognitionScore:  forensicsResult.rekognitionScore,
+    manipulationScore: frequencyScore,  // best proxy without CNN
+    frequencyScore,
+    semanticScore,
+    faceQualityScore,
     overallRiskScore:  Math.round(
-      forensicsResult.cnnScore       * 0.35 +
-      forensicsResult.frequencyScore * 0.30 +
-      forensicsResult.semanticScore  * 0.20 +
-      forensicsResult.rekognitionScore * 0.15,
+      frequencyScore   * 0.40 +
+      semanticScore    * 0.35 +
+      faceQualityScore * 0.25,
     ),
-    faceDetected:   (forensicsResult.rekognitionResult?.faceCount ?? 0) > 0,
-    faceCount:      forensicsResult.rekognitionResult?.faceCount ?? 0,
-    semanticAlerts: (forensicsResult.semanticAlerts ?? []).map(a => ({
+    faceDetected:   (faceResult?.faceCount ?? 0) > 0,
+    faceCount:      faceResult?.faceCount ?? 0,
+    ocrConfidence,
+    semanticAlerts: (ocrResult?.semanticAlerts ?? []).map(a => ({
       type:   a.type,
       label:  a.label,
       detail: a.detail,
     })),
   }
 
-  // ── Compute final score & verdict ─────────────────────────────────────────────
+  // ── Compute final score & verdict ─────────────────────────────────────────
   const authenticityScore = computeAuthenticityScore(
-    {
-      cnnScore:         forensicsResult.cnnScore,
-      frequencyScore:   forensicsResult.frequencyScore,
-      semanticScore:    forensicsResult.semanticScore,
-      rekognitionScore: forensicsResult.rekognitionScore,
-    },
+    { frequencyScore, semanticScore, faceQualityScore },
     mrzAnalysis,
     docType,
+    ocrConfidence,
   )
   const verdict = computeVerdict(authenticityScore, docType)
 
-  // ── Build alerts ──────────────────────────────────────────────────────────────
+  // ── Build alerts ──────────────────────────────────────────────────────────
   const alerts = buildAlerts(docType, mrzAnalysis, {
-    cnnScore:       forensicsResult.cnnScore,
-    frequencyScore: forensicsResult.frequencyScore,
-    semanticScore:  forensicsResult.semanticScore,
+    frequencyScore,
+    semanticScore,
     semanticAlerts: forensics.semanticAlerts,
   }, extractedData)
 
-  // PDF-specific info alert
-  if (isPDF) {
-    alerts.unshift({
-      level:   'info',
-      code:    pdfRendered ? 'PDF_FULL_ANALYSIS' : 'PDF_OCR_ONLY',
-      message: pdfRendered
-        ? 'PDF scanned document: first page rendered to 200 DPI PNG. Full analysis active: CNN + Textract + Rekognition + Frequency forensics.'
-        : 'PDF processed: AWS Textract OCR active. Pixel forensics unavailable (PDF render failed). Upload a JPG/PNG scan for full forensic analysis.',
-    })
-  }
+  // Metadata alert
+  alerts.unshift({
+    level:   'info',
+    code:    'SELF_HOSTED',
+    message: isPDF
+      ? 'PDF document: text extracted via pdfjs-dist + Tesseract.js OCR. Face detection + frequency forensics on rendered PNG. Zero cloud dependency.'
+      : 'Image analyzed: Tesseract.js OCR (spa+eng) + face-api.js detection + FFT/wavelet frequency forensics. Zero cloud dependency.',
+  })
 
   return NextResponse.json({
     documentType:      docType,

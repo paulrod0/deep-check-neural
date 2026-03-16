@@ -42,7 +42,7 @@ const securityHeaders = [
       // Fonts
       "font-src 'self' https://fonts.gstatic.com",
       // Connections: self (API routes) + Supabase
-      `connect-src 'self' https://*.supabase.co wss://*.supabase.co`,
+      `connect-src 'self' https://*.supabase.co wss://*.supabase.co https://tessdata.projectnaptha.com`,
       // Media: camera stream
       "media-src 'self' blob:",
       // Workers: face-api wasm workers
@@ -62,6 +62,17 @@ const securityHeaders = [
 const nextConfig: NextConfig = {
   // Required for Docker standalone deployment (node server.js)
   output: 'standalone',
+  // Server-side packages that must NOT be bundled (need native Node.js modules)
+  serverExternalPackages: [
+    'tesseract.js',
+    '@vladmandic/face-api',
+    '@tensorflow/tfjs',
+    '@tensorflow/tfjs-node',
+    'canvas',
+    'sharp',
+    'onnxruntime-node',
+    'pdfjs-dist',
+  ],
   async headers() {
     return [
       {
