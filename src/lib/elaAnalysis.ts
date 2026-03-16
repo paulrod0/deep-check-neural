@@ -31,10 +31,9 @@ export interface ELAResult {
   analysisMs:          number
 }
 
-const ELA_QUALITY   = 75   // JPEG re-compression quality for comparison
-const GRID_SIZE     = 8    // NxN block grid for regional analysis
+const GRID_SIZE     = 12   // 12×12 block grid for finer-grained regional analysis
 const WORK_SIZE     = 512  // resize to this for consistent analysis
-const ANOMALY_SIGMA = 2.0  // blocks > mean + ANOMALY_SIGMA * std are suspicious
+const ANOMALY_SIGMA = 1.5  // blocks > mean + 1.5σ are suspicious (more sensitive)
 
 export async function runELA(imageBase64: string): Promise<ELAResult> {
   const t0 = Date.now()
@@ -54,31 +53,38 @@ export async function runELA(imageBase64: string): Promise<ELAResult> {
     const h = originalRaw.info.height
     const origPixels = new Uint8Array(originalRaw.data)
 
-    // Step 2: Re-compress at known quality
-    const recompressedJpeg = await sharp(originalBuf)
-      .resize(w, h, { fit: 'fill' })
-      .grayscale()
-      .jpeg({ quality: ELA_QUALITY })
-      .toBuffer()
-
-    // Step 3: Decode re-compressed version back to raw pixels
-    const recompRaw = await sharp(recompressedJpeg)
-      .raw()
-      .toBuffer({ resolveWithObject: true })
-
-    const recompPixels = new Uint8Array(recompRaw.data)
-
-    // Step 4: Compute per-pixel residuals
+    // Step 2: Re-compress at TWO quality levels for better sensitivity
+    // Low quality (75) catches gross manipulation, high quality (92) catches subtle edits
+    const ELA_QUALITIES = [75, 92]
     const totalPixels = w * h
-    const residuals = new Float64Array(totalPixels)
+    const residuals = new Float64Array(totalPixels)  // combined max residuals
     let sumResidual = 0
     let maxResidual = 0
 
+    for (const quality of ELA_QUALITIES) {
+      const recompressedJpeg = await sharp(originalBuf)
+        .resize(w, h, { fit: 'fill' })
+        .grayscale()
+        .jpeg({ quality })
+        .toBuffer()
+
+      const recompRaw = await sharp(recompressedJpeg)
+        .raw()
+        .toBuffer({ resolveWithObject: true })
+
+      const recompPixels = new Uint8Array(recompRaw.data)
+
+      for (let i = 0; i < totalPixels; i++) {
+        const diff = Math.abs(origPixels[i] - recompPixels[i])
+        // Take the maximum residual across quality levels
+        if (diff > residuals[i]) residuals[i] = diff
+      }
+    }
+
+    // Compute stats from combined residuals
     for (let i = 0; i < totalPixels; i++) {
-      const diff = Math.abs(origPixels[i] - recompPixels[i])
-      residuals[i] = diff
-      sumResidual += diff
-      if (diff > maxResidual) maxResidual = diff
+      sumResidual += residuals[i]
+      if (residuals[i] > maxResidual) maxResidual = residuals[i]
     }
 
     const meanResidual = sumResidual / totalPixels
@@ -123,26 +129,34 @@ export async function runELA(imageBase64: string): Promise<ELAResult> {
     const suspiciousBlocks = blockMeans.filter(m => m > threshold).length
 
     // Step 6: Compute overall ELA score
-    //   - High mean residual overall → document was re-compressed (moderate signal)
-    //   - High block variance (some blocks much higher than others) → selective editing (strong signal)
+    //   - High block variance (some blocks much higher than others) → selective editing (strongest)
     //   - Many suspicious blocks → likely manipulated regions
+    //   - High max residual with low mean → localized editing
+    //   - High mean residual overall → document was re-compressed
 
     let elaScore = 0
 
     // Block variance contribution (most important: inconsistent editing)
-    if (blockCV > 0.5) {
-      elaScore += Math.min(50, Math.round((blockCV - 0.5) * 50))
+    // Lower threshold: CV > 0.3 is already suspicious for a uniformly compressed document
+    if (blockCV > 0.3) {
+      elaScore += Math.min(45, Math.round((blockCV - 0.3) * 65))
     }
 
     // Suspicious block count contribution
     if (suspiciousBlocks > 0) {
       const suspiciousRatio = suspiciousBlocks / totalBlocks
-      elaScore += Math.min(30, Math.round(suspiciousRatio * 100))
+      elaScore += Math.min(30, Math.round(suspiciousRatio * 120))
     }
 
-    // Overall residual magnitude (high residual = heavily re-compressed, moderate signal)
-    if (meanResidual > 15) {
-      elaScore += Math.min(20, Math.round((meanResidual - 15) / 2))
+    // Max-to-mean ratio: high max but low mean = localized editing (strong signal)
+    const maxToMeanRatio = meanResidual > 0 ? maxResidual / meanResidual : 0
+    if (maxToMeanRatio > 5 && maxResidual > 20) {
+      elaScore += Math.min(20, Math.round((maxToMeanRatio - 5) * 4))
+    }
+
+    // Overall residual magnitude
+    if (meanResidual > 10) {
+      elaScore += Math.min(15, Math.round((meanResidual - 10) / 2))
     }
 
     elaScore = Math.min(100, elaScore)
