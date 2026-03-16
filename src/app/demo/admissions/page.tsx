@@ -52,6 +52,8 @@ const STEPS_TEMPLATE: ProgressStep[] = [
   { id: 'frequency',   label: 'Frequency / spectral forensics (FFT)',   status: 'pending' },
   { id: 'exif',        label: 'EXIF / metadata forensics',              status: 'pending' },
   { id: 'text',        label: 'Text consistency analysis',              status: 'pending' },
+  { id: 'ghost',       label: 'JPEG Ghost (multi-source compression)',  status: 'pending' },
+  { id: 'wordanomaly', label: 'Per-word OCR confidence anomaly',        status: 'pending' },
   { id: 'mrz',         label: 'MRZ check-digit validation (ICAO)',      status: 'pending' },
   { id: 'crossval',    label: 'MRZ ↔ OCR cross-validation',             status: 'pending' },
   { id: 'semantic',    label: 'Semantic validation (NIF/IBAN/dates)',    status: 'pending' },
@@ -908,10 +910,10 @@ export default function AdmissionsDemoPage() {
                 })()}
               </div>
 
-              {/* Forensics signals — 7-layer analysis */}
+              {/* Forensics signals — 9-layer analysis */}
               <div style={{ background: '#0d0d1a', border: '1px solid #1e1e30', borderRadius: 16, padding: 20 }}>
                 <h3 style={{ fontSize: 12, fontWeight: 700, color: '#555', letterSpacing: 1, textTransform: 'uppercase', margin: '0 0 4px' }}>
-                  7-Layer Forensics
+                  9-Layer Forensics
                 </h3>
                 <p style={{ fontSize: 11, color: '#333', margin: '0 0 16px' }}>
                   Overall manipulation score: <span style={{ fontWeight: 700, color: signalColor(result.forensics.manipulationScore) }}>{result.forensics.manipulationScore}/100</span>
@@ -919,6 +921,8 @@ export default function AdmissionsDemoPage() {
                 {[
                   { name: '🔍 MRZ ↔ OCR Cross-validation', score: result.forensics.crossValidation ?? 0, desc: 'Compares name, doc number, dates between MRZ zone and visual text — strongest forgery signal' },
                   { name: '🖼️ Error Level Analysis (ELA)',   score: result.forensics.elaScore ?? 0,       desc: 'Re-compresses JPEG and compares — edited regions show different error levels' },
+                  { name: '👻 JPEG Ghost Analysis',           score: result.forensics.ghostScore ?? 0, desc: 'Re-compresses at 13 quality levels — detects regions pasted from different JPEG sources' },
+                  { name: '🔤 Word Confidence Anomaly',       score: result.forensics.wordAnomalyScore ?? 0, desc: 'Per-word OCR confidence — edited text shows anomalously lower confidence due to different rendering artifacts' },
                   { name: '📊 Frequency / Spectral',         score: result.forensics.frequencyScore,       desc: 'FFT + Haar wavelet — splice, copy-move, re-compression artifacts' },
                   { name: '🔤 Text Consistency',             score: result.forensics.textConsistency ?? 0, desc: 'Noise, edge sharpness, and contrast uniformity across text regions' },
                   { name: '📋 EXIF / Metadata',              score: result.forensics.exifScore ?? 0,       desc: 'Editing software detection, date gaps, resolution anomalies' },
