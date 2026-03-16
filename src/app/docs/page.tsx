@@ -95,10 +95,10 @@ export default function DocsPage() {
                         <h2 style={{ fontSize: '1.2rem', marginBottom: '16px' }}>Arquitectura</h2>
                         <div style={{ background: 'rgba(255,255,255,0.03)', borderRadius: '12px', padding: '20px', border: '1px solid var(--color-border)', marginBottom: '28px', fontSize: '0.85rem', lineHeight: 1.8, color: 'var(--color-text-muted)' }}>
                             <p style={{ margin: '0 0 10px 0', color: 'var(--color-text)' }}>🖥️ <strong>Dónde corre Deep-Check</strong></p>
-                            <p style={{ margin: '0 0 8px 0' }}>• <strong style={{ color: 'var(--color-text)' }}>Frontend:</strong> React 19 en el navegador del candidato. Toda la biometría (keystroke dynamics, face-api, gaze tracking) se procesa <em>100% en el cliente</em> — ningún audio ni vídeo sale del navegador.</p>
+                            <p style={{ margin: '0 0 8px 0' }}>• <strong style={{ color: 'var(--color-text)' }}>Frontend:</strong> React 19 en el navegador del candidato. Toda la biometría (keystroke dynamics, MediaPipe FaceLandmarker 478pts + iris, gaze tracking) se procesa <em>100% en el cliente</em> — ningún audio ni vídeo sale del navegador.</p>
                             <p style={{ margin: '0 0 8px 0' }}>• <strong style={{ color: 'var(--color-text)' }}>API:</strong> Next.js serverless functions en Vercel (edge network global). Latencia &lt;50ms desde Europa/US.</p>
                             <p style={{ margin: '0 0 8px 0' }}>• <strong style={{ color: 'var(--color-text)' }}>Storage:</strong> JSON file-based (MVP). Migratable a PostgreSQL/Supabase para producción.</p>
-                            <p style={{ margin: 0 }}>• <strong style={{ color: 'var(--color-text)' }}>Modelos ML:</strong> TinyFaceDetector + FaceLandmark68Net — descargados en el navegador del candidato, nunca en el servidor.</p>
+                            <p style={{ margin: 0 }}>• <strong style={{ color: 'var(--color-text)' }}>Modelos ML:</strong> MediaPipe FaceLandmarker (478 landmarks + iris + 52 blendshapes) — ejecutado 100% en GPU del navegador, nunca en el servidor.</p>
                         </div>
 
                         <h2 style={{ fontSize: '1.2rem', marginBottom: '16px' }}>Base URL</h2>
