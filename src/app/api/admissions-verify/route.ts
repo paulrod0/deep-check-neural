@@ -31,6 +31,7 @@ import { runExifAnalysis }              from '@/lib/exifAnalysis'
 import { runTextConsistencyAnalysis }   from '@/lib/textConsistency'
 import { crossValidateMRZvsOCR }        from '@/lib/crossValidation'
 import { runJPEGGhost }                 from '@/lib/jpegGhost'
+import { logVerification, computeImageHash } from '@/lib/verificationLog'
 import type { JPEGGhostResult }        from '@/lib/jpegGhost'
 import type { MRZFields }              from '@/lib/mrzParser'
 import type { OcrResult }              from '@/lib/ocrEngine'
@@ -129,6 +130,7 @@ export interface AdmissionsVerifyResponse {
   alerts:             AdmissionsAlert[]
   processingMs:       number
   backImageProcessed: boolean  // true if imageBack was provided and processed
+  verificationId:     string | null  // ID for submitting feedback (learning)
 }
 
 // ── Document classification keywords ──────────────────────────────────────────
@@ -735,8 +737,8 @@ function computeAuthenticityScore(
   }
 
   // ── JPEG Ghost — strong standalone signal ──────────────────────────
-  if (forensics.ghostScore >= 35) {
-    score = Math.min(score, 78 - Math.round(forensics.ghostScore * 0.3))
+  if (forensics.ghostScore >= 45) {
+    score = Math.min(score, 80 - Math.round(forensics.ghostScore * 0.25))
   }
 
   // ── Word anomaly — edited words have lower OCR confidence ────────
@@ -1189,6 +1191,52 @@ export async function POST(req: NextRequest): Promise<NextResponse<AdmissionsVer
     message: `9-layer forensics: OCR (${ocrResult?.engine ?? 'N/A'}) + MRZ ICAO-9303 + Cross-validation + ELA + EXIF + FFT/Wavelet + Text consistency + JPEG Ghost + Word Anomaly. ${imageBack ? 'Front + back images analyzed.' : isPDF ? 'PDF rendered to PNG.' : 'Direct image analysis.'}`,
   })
 
+  const processingMs = Date.now() - t0
+
+  // ── Log verification for learning (fire and forget) ─────────────────────
+  const criticalAlertCount = (crossValidationResult?.alerts ?? [])
+    .filter(a => a.severity === 'critical').length
+  const imageHash = computeImageHash(image)
+
+  const verificationIdPromise = logVerification({
+    documentType:      docType.type,
+    documentLabel:     docType.label,
+    authenticityScore,
+    verdict,
+    frequencyScore,
+    semanticScore,
+    faceQualityScore,
+    elaScore,
+    exifScore,
+    textConsistency,
+    crossValidation,
+    ghostScore,
+    wordAnomalyScore,
+    manipulationScore,
+    overallRiskScore,
+    ocrConfidence,
+    mrzDetected:       !!mrzAnalysis?.detected,
+    mrzValid:          mrzAnalysis?.valid ?? null,
+    extractedName:     extractedData.fullName ?? extractedData.studentName ?? null,
+    extractedDocNumber: extractedData.docNumber ?? null,
+    alertCount:        alerts.length,
+    criticalAlerts:    criticalAlertCount,
+    processingMs,
+    backImageUsed:     !!backOcrResult,
+    imageHash,
+  })
+
+  // Wait up to 500ms for the ID, then return anyway
+  let verificationId: string | null = null
+  try {
+    verificationId = await Promise.race([
+      verificationIdPromise,
+      new Promise<null>(resolve => setTimeout(() => resolve(null), 500)),
+    ])
+  } catch {
+    // Non-critical — proceed without ID
+  }
+
   return NextResponse.json({
     documentType:      docType,
     extractedData,
@@ -1197,7 +1245,8 @@ export async function POST(req: NextRequest): Promise<NextResponse<AdmissionsVer
     authenticityScore,
     verdict,
     alerts,
-    processingMs:       Date.now() - t0,
+    processingMs,
     backImageProcessed: !!backOcrResult,
+    verificationId,
   })
 }
