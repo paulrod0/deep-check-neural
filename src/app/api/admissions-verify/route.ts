@@ -16,13 +16,14 @@
  * No authentication required — demo endpoint.
  */
 
-import { NextRequest, NextResponse } from 'next/server'
-import { runDocumentForensics }      from '@/lib/documentForensics'
-import { parseMRZ }                  from '@/lib/mrzParser'
-import type { MRZFields }            from '@/lib/mrzParser'
-import type { DocumentClass }        from '@/lib/docForensicsCnn'
-import type { TextractResult }       from '@/lib/textractAnalysis'
-import type { RekognitionResult }    from '@/lib/rekognitionAnalysis'
+import { NextRequest, NextResponse }    from 'next/server'
+import { runDocumentForensics }         from '@/lib/documentForensics'
+import { parseMRZ }                     from '@/lib/mrzParser'
+import { pdfFirstPageToPng, isPdfInput } from '@/lib/pdfToImage'
+import type { MRZFields }               from '@/lib/mrzParser'
+import type { DocumentClass }           from '@/lib/docForensicsCnn'
+import type { TextractResult }          from '@/lib/textractAnalysis'
+import type { RekognitionResult }       from '@/lib/rekognitionAnalysis'
 
 // ── Response types ─────────────────────────────────────────────────────────────
 
@@ -409,25 +410,66 @@ export async function POST(req: NextRequest): Promise<NextResponse<AdmissionsVer
     return NextResponse.json({ error: 'Request body must be JSON with { image: base64String }' }, { status: 400 })
   }
 
-  // ── Detect PDF (AWS Textract supports PDF bytes; CNN/frequency/Rekognition need raster images) ──
-  const isPDF = image.startsWith('data:application/pdf') ||
-    image.startsWith('data:application/x-pdf') ||
-    (() => {
-      // Check raw base64 magic bytes: PDF starts with %PDF → base64 "JVBE"
-      const raw = image.includes(',') ? image.split(',')[1] : image
-      return raw.startsWith('JVBE')
-    })()
+  // ── PDF detection + conversion to raster image ───────────────────────────────
+  // Admissions documents are often scanned and saved as PDF.
+  // Strategy:
+  //   1. Detect if input is PDF (MIME type or base64 magic bytes %PDF → "JVBE")
+  //   2. Convert first page to PNG at 200 DPI using pdfjs-dist + node-canvas
+  //   3. Run ALL forensics on the PNG (CNN + Textract + Rekognition + Frequency)
+  //   4. Also run Textract on original PDF bytes for maximum text quality
+  //   5. If PDF render fails, fall back to Textract-only on the raw PDF
+
+  const isPDF       = isPdfInput(image)
+  let   imageForCnn = image      // raster image used for CNN/Rekognition/frequency
+  let   pdfRendered = false
+
+  if (isPDF) {
+    console.log('[admissions-verify] PDF detected — converting first page to PNG...')
+    const png = await pdfFirstPageToPng(image)
+    if (png) {
+      imageForCnn  = png
+      pdfRendered  = true
+      console.log('[admissions-verify] PDF rendered to PNG successfully')
+    } else {
+      console.warn('[admissions-verify] PDF render failed — Textract-only mode')
+    }
+  }
 
   // ── Run full forensics pipeline ──────────────────────────────────────────────
+  // For PDF: run Textract on original PDF (better text quality for digital PDFs)
+  //          run CNN/Rekognition/Frequency on rendered PNG (full pixel forensics)
   let forensicsResult
   try {
-    forensicsResult = await runDocumentForensics(image, {
-      enableTextract:    true,
-      // Skip pixel-based analyses for PDF — Sharp cannot process PDFs
-      enableCnn:         !isPDF,
-      enableRekognition: !isPDF,
-      enableFrequency:   !isPDF,
-    })
+    const [textractOnly, pixelForensics] = await Promise.allSettled([
+      // Always run Textract on the original input (handles PDF natively)
+      isPDF ? import('@/lib/textractAnalysis').then(m => m.runTextractAnalysis(image)) : Promise.resolve(null),
+      // Run pixel forensics on PNG (rendered from PDF, or original image)
+      runDocumentForensics(imageForCnn, {
+        enableTextract:    !isPDF,      // for images run Textract here; for PDF ran above
+        enableCnn:         true,
+        enableRekognition: pdfRendered || !isPDF,
+        enableFrequency:   pdfRendered || !isPDF,
+      }),
+    ])
+
+    const pixelResult = pixelForensics.status === 'fulfilled'
+      ? pixelForensics.value
+      : null
+
+    // Merge: use PDF Textract result if available, otherwise use pixel result's Textract
+    const textractResult = (isPDF && textractOnly.status === 'fulfilled' && textractOnly.value)
+      ? textractOnly.value
+      : pixelResult?.textractResult ?? null
+
+    // Combine into unified forensicsResult shape
+    forensicsResult = pixelResult
+      ? { ...pixelResult, textractResult: textractResult ?? pixelResult.textractResult }
+      : {
+          documentType: null, semanticScore: 0, cnnScore: 0,
+          rekognitionScore: 0, frequencyScore: 0, semanticAlerts: [],
+          analysisMs: 0, textractResult: textractResult,
+        }
+
   } catch (err) {
     console.error('[admissions-verify] runDocumentForensics failed:', err)
     return NextResponse.json({ error: 'Forensics pipeline failed' }, { status: 500 })
@@ -500,8 +542,10 @@ export async function POST(req: NextRequest): Promise<NextResponse<AdmissionsVer
   if (isPDF) {
     alerts.unshift({
       level:   'info',
-      code:    'PDF_MODE',
-      message: 'PDF document: OCR/text analysis active (AWS Textract). Pixel-level forensics (CNN, frequency, Rekognition) skipped — upload a photo or scan for full analysis.',
+      code:    pdfRendered ? 'PDF_FULL_ANALYSIS' : 'PDF_OCR_ONLY',
+      message: pdfRendered
+        ? 'PDF scanned document: first page rendered to 200 DPI PNG. Full analysis active: CNN + Textract + Rekognition + Frequency forensics.'
+        : 'PDF processed: AWS Textract OCR active. Pixel forensics unavailable (PDF render failed). Upload a JPG/PNG scan for full forensic analysis.',
     })
   }
 
