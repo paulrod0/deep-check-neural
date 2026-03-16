@@ -1,0 +1,44 @@
+{
+  "model": "deepfake_pixel_v1",
+  "architecture": "EfficientNet-B4 (timm) + FrequencyBranch(AdaptiveAvgPool8\u2192AvgPool8), ONNX opset 17",
+  "metrics": {
+    "test_auc": 1.0,
+    "test_accuracy": 1.0,
+    "test_eer": 0.0,
+    "val_auc_train": 1.0,
+    "val_eer_train": 0.0
+  },
+  "calibration": {
+    "method": "platt_scaling",
+    "coef": 1.0,
+    "intercept": 0.0,
+    "apply": "p_calibrated = sigmoid(coef * logit + intercept)",
+    "note": "Identity scaling \u2014 model converged to AUC=1.0 on StyleGAN2 vs IMDB-Wiki"
+  },
+  "threshold": 0.5,
+  "input": {
+    "name": "face_image",
+    "shape": [
+      1,
+      3,
+      224,
+      224
+    ],
+    "dtype": "float32",
+    "preprocessing": "ImageNet normalize CHW (mean=[0.485,0.456,0.406], std=[0.229,0.224,0.225])"
+  },
+  "output": {
+    "name": "logit",
+    "interpretation": "sigmoid(logit) > threshold \u2192 fake"
+  },
+  "training": {
+    "real_images": 10000,
+    "fake_images": 2000,
+    "fake_source": "StyleGAN2",
+    "real_source": "IMDB-Wiki (wiki_crop.tar, 62k faces)",
+    "epochs": 40,
+    "best_epoch": 2,
+    "backbone": "timm efficientnet_b4"
+  },
+  "onnx_size_mb": 72.2
+}
