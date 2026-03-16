@@ -3,12 +3,13 @@
  * ===========================
  * IE University Admissions — Document Authenticity Verification
  *
- * **Self-hosted pipeline — zero AWS dependency.**
+ * **Self-hosted pipeline — zero cloud dependency.**
  *
  * Accepts any document image (DNI, passport, degree, diploma, CV, transcript).
+ * Supports documents in any language (Latin + Arabic scripts auto-detected).
  * Runs the full Deep-Check forensics stack server-side:
- *   1. Tesseract.js OCR      — text extraction (spa+eng, offline)
- *   2. face-api.js           — face detection + quality (offline)
+ *   1. Tesseract.js OCR      — multi-language text extraction (eng/ara auto)
+ *   2. Face detection         — YCbCr skin-color analysis + connected components
  *   3. Frequency analysis     — FFT spectral + wavelet splice detection
  *   4. MRZ parsing            — ICAO 9303 check-digit validation (offline)
  *   5. Semantic validation    — NIF/CIF, IBAN, date, MRZ checksums
@@ -16,6 +17,9 @@
  *
  * No authentication required — demo endpoint.
  */
+
+// Vercel serverless function timeout: 60s (Tesseract.js cold start ~15s)
+export const maxDuration = 60
 
 import { NextRequest, NextResponse }    from 'next/server'
 import { runOCR }                       from '@/lib/ocrEngine'
