@@ -156,9 +156,9 @@ export default function WhitepaperPage() {
         <S title="3. Module 2 — Facial Liveness Detection">
           <h3>3.1 Architecture</h3>
           <p>
-            Liveness detection runs entirely client-side using face-api.js with the
-            TinyFaceDetector (SSD MobileNetV1-derived, ~190KB) and the 68-point
-            FaceLandmark68Net models, both loaded from <code>/public/models/</code>.
+            Liveness detection runs entirely client-side using MediaPipe FaceLandmarker with
+            478 landmarks, iris tracking (10 points), 52 blendshapes, and facial transformation
+            matrices for precise head-pose estimation. The model (~4MB) is loaded via CDN.
             No video data is transmitted to the server.
           </p>
 
