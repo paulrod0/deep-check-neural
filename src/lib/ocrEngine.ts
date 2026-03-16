@@ -39,6 +39,15 @@ export interface SemanticAlert {
   penalty: number   // 0–100 score penalty contribution
 }
 
+export interface WordConfidence {
+  text:       string
+  confidence: number   // 0–100
+  left:       number   // 0–1 normalized bounding box
+  top:        number
+  width:      number
+  height:     number
+}
+
 export interface OcrResult {
   rawText:        string
   tables:         string[][]
@@ -48,6 +57,8 @@ export interface OcrResult {
   analysisMs:     number
   ocrConfidence:  number    // 0–100 average OCR confidence
   engine:         'textract' | 'tesseract' | 'pdfjs'  // which engine produced the text
+  wordConfidences: WordConfidence[]   // per-word confidence + position
+  wordAnomalyScore: number            // 0–100: how anomalous the word confidences are
 }
 
 // ── AWS Textract integration ────────────────────────────────────────────────
@@ -67,7 +78,7 @@ function hasAWSCredentials(): boolean {
  */
 async function runTextractOCR(
   imageBase64: string,
-): Promise<{ text: string; confidence: number; kvPairs: Record<string, string> } | null> {
+): Promise<{ text: string; confidence: number; kvPairs: Record<string, string>; words: WordConfidence[] } | null> {
   try {
     const { TextractClient, AnalyzeDocumentCommand } = await import('@aws-sdk/client-textract')
 
@@ -97,11 +108,25 @@ async function runTextractOCR(
     let totalConfidence = 0
     let lineCount = 0
 
+    // Extract per-WORD confidence and bounding boxes
+    const words: WordConfidence[] = []
+
     for (const block of blocks) {
       if (block.BlockType === 'LINE' && block.Text) {
         lines.push(block.Text)
         totalConfidence += block.Confidence ?? 0
         lineCount++
+      }
+      if (block.BlockType === 'WORD' && block.Text) {
+        const bbox = block.Geometry?.BoundingBox
+        words.push({
+          text:       block.Text,
+          confidence: block.Confidence ?? 0,
+          left:       bbox?.Left ?? 0,
+          top:        bbox?.Top ?? 0,
+          width:      bbox?.Width ?? 0,
+          height:     bbox?.Height ?? 0,
+        })
       }
     }
 
@@ -151,6 +176,7 @@ async function runTextractOCR(
       text:       lines.join('\n'),
       confidence: lineCount > 0 ? totalConfidence / lineCount : 0,
       kvPairs,
+      words,
     }
   } catch (err) {
     console.warn('[ocrEngine] AWS Textract failed:', err instanceof Error ? err.message : err)
@@ -248,6 +274,75 @@ function base64ToBuffer(input: string): Buffer {
   return Buffer.from(b64, 'base64')
 }
 
+// ── Word-level anomaly scoring ──────────────────────────────────────────────
+
+/**
+ * Detect words with anomalously low OCR confidence.
+ * Edited text (Photoshopped, GIMP etc.) shows different JPEG artifacts, font
+ * rendering, and compression around modified words, causing Textract to report
+ * lower per-word confidence for those specific words.
+ *
+ * Algorithm:
+ *   1. Compute mean + stddev of all word confidences
+ *   2. Flag words > 1.5σ below the mean ("anomalous")
+ *   3. Bonus: spatial clustering — if anomalous words are clustered in one
+ *      region (same row ± band), that's a stronger signal of localized editing.
+ *   4. Score 0–100: 0 = uniform confidence, 100 = clear anomaly cluster
+ */
+function computeWordAnomalyScore(words: WordConfidence[]): number {
+  if (words.length < 5) return 0  // need enough words for statistics
+
+  const confidences = words.map(w => w.confidence)
+
+  // Mean and standard deviation
+  const mean = confidences.reduce((s, c) => s + c, 0) / confidences.length
+  const stddev = Math.sqrt(
+    confidences.reduce((s, c) => s + (c - mean) ** 2, 0) / confidences.length,
+  )
+
+  // If all words have uniform confidence (stddev < 1), no anomaly
+  if (stddev < 1) return 0
+
+  // Flag anomalous words: > 1.5σ below mean
+  const threshold = mean - 1.5 * stddev
+  const anomalousWords = words.filter(w => w.confidence < threshold)
+
+  if (anomalousWords.length === 0) return 0
+
+  const anomalyRatio = anomalousWords.length / words.length
+
+  // ── Base score from anomaly ratio ──────────────────────────────────────
+  // 5% anomalous → ~15pts, 15% → ~40pts, 30%+ → ~65pts
+  let score = Math.min(65, Math.round(anomalyRatio * 250))
+
+  // ── Confidence gap bonus ───────────────────────────────────────────────
+  // How much lower are anomalous words vs. the mean?
+  const avgAnomalyConf = anomalousWords.reduce((s, w) => s + w.confidence, 0) / anomalousWords.length
+  const gap = mean - avgAnomalyConf
+  if (gap > 15) {
+    score += Math.min(20, Math.round((gap - 15) * 1.5))
+  }
+
+  // ── Spatial clustering bonus ───────────────────────────────────────────
+  // If anomalous words cluster in a vertical band (same Y region), it's likely
+  // a localized text edit (e.g., name changed on one line of the document)
+  if (anomalousWords.length >= 2) {
+    const yPositions = anomalousWords.map(w => w.top)
+    const yMean = yPositions.reduce((s, y) => s + y, 0) / yPositions.length
+    const ySpread = Math.sqrt(
+      yPositions.reduce((s, y) => s + (y - yMean) ** 2, 0) / yPositions.length,
+    )
+    // If anomalous words are vertically concentrated (spread < 0.1 of image height)
+    if (ySpread < 0.1) {
+      score += Math.min(15, Math.round((0.1 - ySpread) * 200))
+    }
+  }
+
+  console.log(`[ocrEngine] Word anomaly: ${anomalousWords.length}/${words.length} anomalous (threshold=${threshold.toFixed(1)}, mean=${mean.toFixed(1)}, stddev=${stddev.toFixed(1)}, gap=${(mean - (anomalousWords.reduce((s, w) => s + w.confidence, 0) / anomalousWords.length)).toFixed(1)}) → score=${Math.min(100, score)}`)
+
+  return Math.min(100, score)
+}
+
 // ── Main OCR function ───────────────────────────────────────────────────────
 
 export async function runOCR(imageBase64: string): Promise<OcrResult> {
@@ -257,6 +352,7 @@ export async function runOCR(imageBase64: string): Promise<OcrResult> {
   let confidence = 0
   let kvPairs:   Record<string, string> = {}
   let engine:    OcrResult['engine'] = 'tesseract'
+  let textractWords: WordConfidence[] = []  // captured from Textract if available
 
   // ── Check if input is PDF ────────────────────────────────────────────────
   const isPDF = imageBase64.startsWith('data:application/pdf') ||
@@ -295,11 +391,12 @@ export async function runOCR(imageBase64: string): Promise<OcrResult> {
 
     const textractResult = await runTextractOCR(imageForTextract)
     if (textractResult && textractResult.text.length > 10) {
-      rawText    = textractResult.text
-      confidence = textractResult.confidence
-      kvPairs    = textractResult.kvPairs
-      engine     = 'textract'
-      console.log(`[ocrEngine] Textract: ${rawText.length} chars, ${confidence.toFixed(0)}% confidence, ${Object.keys(kvPairs).length} KV pairs`)
+      rawText        = textractResult.text
+      confidence     = textractResult.confidence
+      kvPairs        = textractResult.kvPairs
+      textractWords  = textractResult.words   // capture per-word data
+      engine         = 'textract'
+      console.log(`[ocrEngine] Textract: ${rawText.length} chars, ${confidence.toFixed(0)}% confidence, ${Object.keys(kvPairs).length} KV pairs, ${textractWords.length} words`)
     }
   }
 
@@ -344,6 +441,13 @@ export async function runOCR(imageBase64: string): Promise<OcrResult> {
     kvPairs = extractKeyValuePairsFromText(rawText)
   }
 
+  // ── Word-level anomaly detection ──────────────────────────────────────────
+  // Only available when Textract provides per-word confidence (cloud mode)
+  const wordConfidences = textractWords
+  const wordAnomalyScore = textractWords.length > 0
+    ? computeWordAnomalyScore(textractWords)
+    : 0
+
   return {
     rawText,
     tables:        [],
@@ -353,6 +457,8 @@ export async function runOCR(imageBase64: string): Promise<OcrResult> {
     analysisMs:    Date.now() - t0,
     ocrConfidence: Math.round(confidence),
     engine,
+    wordConfidences,
+    wordAnomalyScore,
   }
 }
 

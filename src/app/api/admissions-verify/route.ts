@@ -30,6 +30,8 @@ import { runELA }                       from '@/lib/elaAnalysis'
 import { runExifAnalysis }              from '@/lib/exifAnalysis'
 import { runTextConsistencyAnalysis }   from '@/lib/textConsistency'
 import { crossValidateMRZvsOCR }        from '@/lib/crossValidation'
+import { runJPEGGhost }                 from '@/lib/jpegGhost'
+import type { JPEGGhostResult }        from '@/lib/jpegGhost'
 import type { MRZFields }              from '@/lib/mrzParser'
 import type { OcrResult }              from '@/lib/ocrEngine'
 import type { FaceDetectionResult }    from '@/lib/faceDetection'
@@ -100,6 +102,8 @@ export interface AdmissionsForensicsSignals {
   exifScore:         number   // 0–100 (EXIF metadata forensics)
   textConsistency:   number   // 0–100 (text/font consistency)
   crossValidation:   number   // 0–100 (MRZ ↔ OCR field mismatch)
+  ghostScore:        number   // 0–100 (JPEG Ghost: multi-source compression)
+  wordAnomalyScore:  number   // 0–100 (per-word OCR confidence anomaly)
   overallRiskScore:  number   // 0–100 weighted combination
   faceDetected:      boolean
   faceCount:         number
@@ -610,6 +614,8 @@ function computeAuthenticityScore(
     exifScore:         number
     textConsistency:   number
     crossValidation:   number
+    ghostScore:        number
+    wordAnomalyScore:  number
   },
   mrz:     AdmissionsMRZAnalysis | null,
   docType: AdmissionsDocTypeResult,
@@ -663,21 +669,25 @@ function computeAuthenticityScore(
   const hasMRZ = !!(mrz?.detected)
   const forensicRisk = hasMRZ
     ? (
-        forensics.frequencyScore   * 0.12 +
-        forensics.semanticScore    * 0.13 +
-        forensics.faceQualityScore * 0.05 +
-        forensics.elaScore         * 0.20 +
-        forensics.exifScore        * 0.10 +
-        forensics.textConsistency  * 0.10 +
-        forensics.crossValidation  * 0.30
+        forensics.frequencyScore    * 0.10 +
+        forensics.semanticScore     * 0.10 +
+        forensics.faceQualityScore  * 0.04 +
+        forensics.elaScore          * 0.15 +
+        forensics.exifScore         * 0.08 +
+        forensics.textConsistency   * 0.08 +
+        forensics.crossValidation   * 0.25 +
+        forensics.ghostScore        * 0.10 +   // JPEG Ghost (multi-source compression)
+        forensics.wordAnomalyScore  * 0.10     // per-word OCR confidence anomaly
       )
     : (
-        forensics.frequencyScore   * 0.15 +
-        forensics.semanticScore    * 0.15 +
-        forensics.faceQualityScore * 0.05 +
-        forensics.elaScore         * 0.25 +
-        forensics.exifScore        * 0.15 +
-        forensics.textConsistency  * 0.25
+        forensics.frequencyScore    * 0.12 +
+        forensics.semanticScore     * 0.12 +
+        forensics.faceQualityScore  * 0.04 +
+        forensics.elaScore          * 0.20 +
+        forensics.exifScore         * 0.12 +
+        forensics.textConsistency   * 0.15 +
+        forensics.ghostScore        * 0.13 +   // JPEG Ghost (stronger weight without MRZ)
+        forensics.wordAnomalyScore  * 0.12     // per-word OCR confidence anomaly
       )
 
   let score = 100 - forensicRisk
@@ -724,6 +734,16 @@ function computeAuthenticityScore(
     score = Math.min(score, 65)
   }
 
+  // ── JPEG Ghost — strong standalone signal ──────────────────────────
+  if (forensics.ghostScore >= 35) {
+    score = Math.min(score, 78 - Math.round(forensics.ghostScore * 0.3))
+  }
+
+  // ── Word anomaly — edited words have lower OCR confidence ────────
+  if (forensics.wordAnomalyScore >= 30) {
+    score = Math.min(score, 82 - Math.round(forensics.wordAnomalyScore * 0.25))
+  }
+
   // ── Compound signals ──────────────────────────────────────────────────
   const moderateSignals = [
     forensics.elaScore,
@@ -731,6 +751,8 @@ function computeAuthenticityScore(
     forensics.frequencyScore,
     forensics.exifScore,
     forensics.semanticScore,
+    forensics.ghostScore,
+    forensics.wordAnomalyScore,
   ].filter(s => s >= 30).length
 
   if (moderateSignals >= 2) {
@@ -838,6 +860,24 @@ function buildAlerts(
     alerts.push({ level: 'warning', code: 'FREQUENCY_ANOMALY', message: 'Spectral frequency anomalies detected. May indicate copy-paste or re-compression artifacts.' })
   }
 
+  // ── JPEG Ghost alerts ─────────────────────────────────────────────────
+  if (forensics.ghostScore >= 30) {
+    alerts.push({
+      level:   forensics.ghostScore >= 50 ? 'error' : 'warning',
+      code:    'JPEG_GHOST_ANOMALY',
+      message: `JPEG Ghost Analysis detected regions with different compression quality origins (score: ${forensics.ghostScore}/100). This suggests parts of the image were pasted from different JPEG sources.`,
+    })
+  }
+
+  // ── Word anomaly alerts ─────────────────────────────────────────────
+  if (forensics.wordAnomalyScore >= 25) {
+    alerts.push({
+      level:   forensics.wordAnomalyScore >= 45 ? 'error' : 'warning',
+      code:    'WORD_CONFIDENCE_ANOMALY',
+      message: `Per-word OCR confidence analysis detected anomalously low-confidence words (score: ${forensics.wordAnomalyScore}/100). Edited text typically shows different rendering artifacts that reduce OCR confidence for modified words.`,
+    })
+  }
+
   // ── Semantic alerts ────────────────────────────────────────────────────
   for (const sa of forensics.semanticAlerts) {
     alerts.push({ level: 'warning', code: sa.type.toUpperCase(), message: `${sa.label}: ${sa.detail}` })
@@ -890,15 +930,16 @@ export async function POST(req: NextRequest): Promise<NextResponse<AdmissionsVer
     }
   }
 
-  // Run ALL analyses in parallel (6 modules)
+  // Run ALL analyses in parallel (7 modules — added JPEG Ghost)
   const canDoPixelAnalysis = imageForPixel !== image || !isPDF
-  const [ocrSettled, faceSettled, frequencySettled, elaSettled, exifSettled, textConsistencySettled] = await Promise.allSettled([
+  const [ocrSettled, faceSettled, frequencySettled, elaSettled, exifSettled, textConsistencySettled, jpegGhostSettled] = await Promise.allSettled([
     runOCR(image),
     canDoPixelAnalysis ? detectFaces(imageForPixel) : Promise.resolve(null),
     canDoPixelAnalysis ? import('@/lib/frequencyAnalysis').then(m => m.runFrequencyAnalysis(imageForPixel)) : Promise.resolve(null),
     canDoPixelAnalysis ? runELA(imageForPixel) : Promise.resolve(null),
     canDoPixelAnalysis ? runExifAnalysis(imageForPixel) : Promise.resolve(null),
     canDoPixelAnalysis ? runTextConsistencyAnalysis(imageForPixel) : Promise.resolve(null),
+    canDoPixelAnalysis ? runJPEGGhost(imageForPixel) : Promise.resolve(null),
   ])
 
   // ── Extract results safely ────────────────────────────────────────────────
@@ -914,6 +955,8 @@ export async function POST(req: NextRequest): Promise<NextResponse<AdmissionsVer
     exifSettled.status === 'fulfilled' ? exifSettled.value : null
   const textConsistencyResult: TextConsistencyResult | null =
     textConsistencySettled.status === 'fulfilled' ? textConsistencySettled.value : null
+  const jpegGhostResult: JPEGGhostResult | null =
+    jpegGhostSettled.status === 'fulfilled' ? jpegGhostSettled.value : null
 
   // Log errors (non-critical — each module is independent)
   if (ocrSettled.status === 'rejected') {
@@ -933,6 +976,9 @@ export async function POST(req: NextRequest): Promise<NextResponse<AdmissionsVer
   }
   if (textConsistencySettled.status === 'rejected') {
     console.error('[admissions-verify] Text consistency error:', textConsistencySettled.reason)
+  }
+  if (jpegGhostSettled.status === 'rejected') {
+    console.error('[admissions-verify] JPEG Ghost error:', jpegGhostSettled.reason)
   }
 
   // ── Process back image OCR if provided (DNI reverse side for MRZ) ──────
@@ -1040,31 +1086,37 @@ export async function POST(req: NextRequest): Promise<NextResponse<AdmissionsVer
     }
   }
 
-  // ── Forensics signals (all 7 modules) ──────────────────────────────────
+  // ── Forensics signals (all 9 modules) ──────────────────────────────────
   const frequencyScore    = frequencyResult?.score ?? 0
   const semanticScore     = ocrResult?.semanticScore ?? 0
   const faceQualityScore  = faceResult?.score ?? 0
   const elaScore          = elaResult?.elaScore ?? 0
   const exifScore         = exifResult?.exifScore ?? 0
   const textConsistency   = textConsistencyResult?.consistencyScore ?? 0
+  const ghostScore        = jpegGhostResult?.ghostScore ?? 0
+  const wordAnomalyScore  = Math.max(ocrResult?.wordAnomalyScore ?? 0, backOcrResult?.wordAnomalyScore ?? 0)
   const crossValidation   = crossValidationResult?.crossScore ?? 0
   const ocrConfidence     = Math.max(ocrResult?.ocrConfidence ?? 0, backOcrResult?.ocrConfidence ?? 0)
 
-  // Weighted overall risk score — all signals contribute
+  // Weighted overall risk score — all 9 signals contribute
   const overallRiskScore = Math.round(
-    frequencyScore   * 0.15 +   // FFT/wavelet
-    semanticScore    * 0.15 +   // NIF/IBAN/date validation
-    faceQualityScore * 0.05 +   // Face quality
-    elaScore         * 0.20 +   // Error Level Analysis (strong)
-    exifScore        * 0.10 +   // EXIF metadata
-    textConsistency  * 0.10 +   // Text/font consistency
-    crossValidation  * 0.25     // MRZ ↔ OCR cross-validation (strongest)
+    frequencyScore    * 0.10 +   // FFT/wavelet
+    semanticScore     * 0.10 +   // NIF/IBAN/date validation
+    faceQualityScore  * 0.04 +   // Face quality
+    elaScore          * 0.16 +   // Error Level Analysis (strong)
+    exifScore         * 0.08 +   // EXIF metadata
+    textConsistency   * 0.08 +   // Text/font consistency
+    crossValidation   * 0.22 +   // MRZ ↔ OCR cross-validation (strongest)
+    ghostScore        * 0.12 +   // JPEG Ghost (multi-source compression)
+    wordAnomalyScore  * 0.10     // Per-word OCR confidence anomaly
   )
 
   // Manipulation score: best single proxy = max of the strongest signals
   const manipulationScore = Math.max(
     crossValidation,           // MRZ ↔ OCR mismatch (strongest signal)
     elaScore,                  // JPEG re-compression artifacts
+    ghostScore,                // JPEG Ghost (multi-source compression)
+    wordAnomalyScore,          // Per-word OCR confidence anomaly
     Math.round(frequencyScore * 0.7 + textConsistency * 0.3),  // frequency + text
   )
 
@@ -1077,6 +1129,8 @@ export async function POST(req: NextRequest): Promise<NextResponse<AdmissionsVer
     exifScore,
     textConsistency,
     crossValidation,
+    ghostScore,
+    wordAnomalyScore,
     overallRiskScore,
     faceDetected:   (faceResult?.faceCount ?? 0) > 0,
     faceCount:      faceResult?.faceCount ?? 0,
@@ -1111,6 +1165,8 @@ export async function POST(req: NextRequest): Promise<NextResponse<AdmissionsVer
       exifScore,
       textConsistency,
       crossValidation,
+      ghostScore,
+      wordAnomalyScore,
     },
     mrzAnalysis,
     docType,
@@ -1130,7 +1186,7 @@ export async function POST(req: NextRequest): Promise<NextResponse<AdmissionsVer
   alerts.unshift({
     level:   'info',
     code:    'PIPELINE_INFO',
-    message: `7-layer forensics: OCR (${ocrResult?.engine ?? 'N/A'}) + MRZ ICAO-9303 + Cross-validation + ELA + EXIF + FFT/Wavelet + Text consistency. ${imageBack ? 'Front + back images analyzed.' : isPDF ? 'PDF rendered to PNG.' : 'Direct image analysis.'}`,
+    message: `9-layer forensics: OCR (${ocrResult?.engine ?? 'N/A'}) + MRZ ICAO-9303 + Cross-validation + ELA + EXIF + FFT/Wavelet + Text consistency + JPEG Ghost + Word Anomaly. ${imageBack ? 'Front + back images analyzed.' : isPDF ? 'PDF rendered to PNG.' : 'Direct image analysis.'}`,
   })
 
   return NextResponse.json({
