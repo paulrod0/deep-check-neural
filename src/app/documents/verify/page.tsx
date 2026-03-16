@@ -6,7 +6,7 @@
  * 4-step guided verification:
  *   0 — Select document type
  *   1 — Capture document photo
- *   2 — Capture live selfie
+ *   2 — Capture live selfie  (with active liveness challenge)
  *   3 — Analysis results + certificate
  *
  * Face match is done entirely client-side (MediaPipe) — no biometric
@@ -45,6 +45,11 @@ interface VerifyAPIResponse {
   onPremise:       boolean
 }
 
+// ── Liveness challenge types ───────────────────────────────────────────────
+
+type LivenessChallenge = 'BLINK' | 'TURN_LEFT' | 'TURN_RIGHT'
+type LivenessState = 'idle' | 'detecting' | 'passed' | 'timeout'
+
 // ── Step 0: Document type selection ──────────────────────────────────────────
 
 const DOC_TYPES: { id: DocType; icon: string; label: string; desc: string; mrzFormat?: string }[] = [
@@ -64,6 +69,43 @@ const VERDICT_CONFIG = {
   tampered:   { color: '#ff4d4d',              icon: '❌', label: 'Tampered',   bg: 'rgba(255,77,77,0.08)' },
 }
 
+// ── Liveness challenge config ─────────────────────────────────────────────────
+
+const CHALLENGE_LABELS: Record<LivenessChallenge, string> = {
+  BLINK:      'BLINK your eyes',
+  TURN_LEFT:  'TURN HEAD LEFT',
+  TURN_RIGHT: 'TURN HEAD RIGHT',
+}
+
+const CHALLENGE_ICONS: Record<LivenessChallenge, string> = {
+  BLINK:      '👁',
+  TURN_LEFT:  '↩',
+  TURN_RIGHT: '↪',
+}
+
+const MP_WASM_CDN     = 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.32/wasm'
+const MP_MODEL_URL    = 'https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task'
+const LIVENESS_TIMEOUT_S = 8
+
+// Eye landmark indices for EAR computation (matches VerificationCamera.tsx)
+const LEFT_EYE_IDX  = { p1: 33,  p2: 160, p3: 158, p4: 133, p5: 153, p6: 145 }
+const RIGHT_EYE_IDX = { p1: 263, p2: 385, p3: 387, p4: 362, p5: 373, p6: 380 }
+
+function dist2D(a: { x: number; y: number }, b: { x: number; y: number }) {
+  const dx = a.x - b.x
+  const dy = a.y - b.y
+  return Math.sqrt(dx * dx + dy * dy)
+}
+
+function eyeAspectRatio(
+  lm: { x: number; y: number }[],
+  idx: { p1: number; p2: number; p3: number; p4: number; p5: number; p6: number },
+) {
+  const p1 = lm[idx.p1], p2 = lm[idx.p2], p3 = lm[idx.p3]
+  const p4 = lm[idx.p4], p5 = lm[idx.p5], p6 = lm[idx.p6]
+  return (dist2D(p2, p6) + dist2D(p3, p5)) / (2 * dist2D(p1, p4))
+}
+
 // ── Component ─────────────────────────────────────────────────────────────────
 
 export default function VerifyPage() {
@@ -77,9 +119,19 @@ export default function VerifyPage() {
   const [apiResult, setApiResult]     = useState<VerifyAPIResponse | null>(null)
   const [error, setError]             = useState<string | null>(null)
 
-  const videoRef = useRef<HTMLVideoElement>(null)
-  const streamRef = useRef<MediaStream | null>(null)
+  // ── Liveness state ──────────────────────────────────────────────────────────
+  const [livenessChallenge,  setLivenessChallenge]  = useState<LivenessChallenge | null>(null)
+  const [livenessState,      setLivenessState]      = useState<LivenessState>('idle')
+  const [livenessCountdown,  setLivenessCountdown]  = useState(LIVENESS_TIMEOUT_S)
+
+  const videoRef    = useRef<HTMLVideoElement>(null)
+  const streamRef   = useRef<MediaStream | null>(null)
   const capturedRef = useRef(false)
+
+  // Liveness refs
+  const livenessRafRef       = useRef<number>(0)
+  const livenessLandmarkerRef = useRef<import('@mediapipe/tasks-vision').FaceLandmarker | null>(null)
+  const blinkStartRef        = useRef<number | null>(null)   // timestamp when eyes went closed
 
   // Pre-warm face match model on mount
   useEffect(() => { warmupFaceMatch() }, [])
@@ -89,12 +141,18 @@ export default function VerifyPage() {
     return () => { streamRef.current?.getTracks().forEach(t => t.stop()) }
   }, [])
 
-  // ── Step 2: selfie camera ───────────────────────────────────────────────────
+  // ── Step 2: selfie camera + liveness challenge init ─────────────────────────
 
   useEffect(() => {
     if (step !== 2) return
     let mounted = true
     capturedRef.current = false
+
+    // Pick a random liveness challenge
+    const challenges: LivenessChallenge[] = ['BLINK', 'TURN_LEFT', 'TURN_RIGHT']
+    setLivenessChallenge(challenges[Math.floor(Math.random() * challenges.length)])
+    setLivenessState('idle')
+    setLivenessCountdown(LIVENESS_TIMEOUT_S)
 
     const start = async () => {
       try {
@@ -107,6 +165,7 @@ export default function VerifyPage() {
           videoRef.current.srcObject = stream
           await videoRef.current.play()
         }
+        if (mounted) setLivenessState('detecting')
       } catch (err) {
         if (mounted) setError(`Camera error: ${(err as Error).message}`)
       }
@@ -118,7 +177,153 @@ export default function VerifyPage() {
     }
   }, [step])
 
-  const captureSelfie = useCallback(() => {
+  // ── Liveness detection loop ─────────────────────────────────────────────────
+
+  useEffect(() => {
+    if (step !== 2 || livenessState === 'passed' || livenessState === 'timeout' || !livenessChallenge) return
+
+    let cancelled = false
+    let countdownInterval: ReturnType<typeof setInterval> | null = null
+    let timeoutId: ReturnType<typeof setTimeout> | null = null
+
+    const initAndRun = async () => {
+      // Initialize FaceLandmarker if not already done
+      if (!livenessLandmarkerRef.current) {
+        try {
+          const { FaceLandmarker, FilesetResolver } = await import('@mediapipe/tasks-vision')
+          const vision = await FilesetResolver.forVisionTasks(MP_WASM_CDN)
+          const landmarker = await FaceLandmarker.createFromOptions(vision, {
+            baseOptions: {
+              modelAssetPath: MP_MODEL_URL,
+              delegate: 'GPU',
+            },
+            runningMode: 'VIDEO',
+            numFaces: 1,
+            outputFaceBlendshapes: false,
+          })
+          if (cancelled) { landmarker.close(); return }
+          livenessLandmarkerRef.current = landmarker
+        } catch (err) {
+          console.warn('[liveness] FaceLandmarker init failed:', err)
+          return
+        }
+      }
+
+      // Start countdown
+      let remaining = LIVENESS_TIMEOUT_S
+      setLivenessCountdown(remaining)
+
+      countdownInterval = setInterval(() => {
+        remaining -= 1
+        setLivenessCountdown(remaining)
+        if (remaining <= 0 && countdownInterval) {
+          clearInterval(countdownInterval)
+        }
+      }, 1000)
+
+      // Auto-timeout
+      timeoutId = setTimeout(() => {
+        if (!cancelled) {
+          setLivenessState('timeout')
+        }
+      }, LIVENESS_TIMEOUT_S * 1000)
+
+      // Detection loop
+      const detect = () => {
+        if (cancelled) return
+        const video = videoRef.current
+        const landmarker = livenessLandmarkerRef.current
+        if (!video || !landmarker || video.readyState < 2) {
+          livenessRafRef.current = requestAnimationFrame(detect)
+          return
+        }
+
+        try {
+          const result = landmarker.detectForVideo(video, performance.now())
+          if (result.faceLandmarks && result.faceLandmarks.length > 0) {
+            const lm = result.faceLandmarks[0]
+
+            // Compute face bounding box for head-turn checks
+            let minX = Infinity, maxX = -Infinity
+            for (const pt of lm) {
+              if (pt.x < minX) minX = pt.x
+              if (pt.x > maxX) maxX = pt.x
+            }
+            const faceBboxCenterX = (minX + maxX) / 2
+            const noseTipX = lm[1].x  // landmark 1 = nose tip
+
+            if (livenessChallenge === 'BLINK') {
+              const leftEAR  = eyeAspectRatio(lm, LEFT_EYE_IDX)
+              const rightEAR = eyeAspectRatio(lm, RIGHT_EYE_IDX)
+              const avgEAR   = (leftEAR + rightEAR) / 2
+
+              if (avgEAR < 0.15) {
+                // Eyes are closed — start timer if not started
+                if (blinkStartRef.current === null) {
+                  blinkStartRef.current = performance.now()
+                } else if (performance.now() - blinkStartRef.current > 200) {
+                  // Blink held for >200ms — challenge passed
+                  if (!cancelled) {
+                    handleChallengePassed()
+                    return
+                  }
+                }
+              } else {
+                blinkStartRef.current = null
+              }
+            } else if (livenessChallenge === 'TURN_LEFT') {
+              if (noseTipX < faceBboxCenterX - 0.08) {
+                if (!cancelled) {
+                  handleChallengePassed()
+                  return
+                }
+              }
+            } else if (livenessChallenge === 'TURN_RIGHT') {
+              if (noseTipX > faceBboxCenterX + 0.08) {
+                if (!cancelled) {
+                  handleChallengePassed()
+                  return
+                }
+              }
+            }
+          }
+        } catch {
+          // Silent fail — keep trying
+        }
+
+        livenessRafRef.current = requestAnimationFrame(detect)
+      }
+
+      livenessRafRef.current = requestAnimationFrame(detect)
+    }
+
+    const handleChallengePassed = () => {
+      cancelled = true
+      if (countdownInterval) clearInterval(countdownInterval)
+      if (timeoutId) clearTimeout(timeoutId)
+      cancelAnimationFrame(livenessRafRef.current)
+      setLivenessState('passed')
+      // Auto-capture after brief green flash
+      setTimeout(() => {
+        captureSelfieInternal()
+      }, 400)
+    }
+
+    initAndRun()
+
+    return () => {
+      cancelled = true
+      if (countdownInterval) clearInterval(countdownInterval)
+      if (timeoutId) clearTimeout(timeoutId)
+      cancelAnimationFrame(livenessRafRef.current)
+      blinkStartRef.current = null
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [step, livenessState, livenessChallenge])
+
+  // ── Capture selfie (internal, called after liveness pass) ──────────────────
+
+  const captureSelfieInternal = useCallback(() => {
     if (capturedRef.current) return
     const video = videoRef.current
     if (!video) return
@@ -134,8 +339,35 @@ export default function VerifyPage() {
     const dataUrl = canvas.toDataURL('image/jpeg', 0.92)
     setSelfieImage(dataUrl)
     streamRef.current?.getTracks().forEach(t => t.stop())
+    // Close landmarker to free resources
+    livenessLandmarkerRef.current?.close()
+    livenessLandmarkerRef.current = null
     setStep(3)
   }, [])
+
+  // ── captureSelfie (public — only works when liveness has passed) ─────────────
+
+  const captureSelfie = useCallback(() => {
+    // Block manual capture if liveness challenge is active and not yet passed
+    if (livenessChallenge !== null && livenessState !== 'passed') return
+    captureSelfieInternal()
+  }, [livenessState, livenessChallenge, captureSelfieInternal])
+
+  // ── Retry liveness with a new challenge ─────────────────────────────────────
+
+  const retryLiveness = useCallback(() => {
+    const challenges: LivenessChallenge[] = ['BLINK', 'TURN_LEFT', 'TURN_RIGHT']
+    // Pick a different challenge from the current one
+    const others = livenessChallenge
+      ? challenges.filter(c => c !== livenessChallenge)
+      : challenges
+    const next = others[Math.floor(Math.random() * others.length)]
+    capturedRef.current = false
+    blinkStartRef.current = null
+    setLivenessChallenge(next)
+    setLivenessCountdown(LIVENESS_TIMEOUT_S)
+    setLivenessState('detecting')
+  }, [livenessChallenge])
 
   // ── Step 3: run analysis ────────────────────────────────────────────────────
 
@@ -147,9 +379,37 @@ export default function VerifyPage() {
 
     const run = async () => {
       try {
-        // Run face match + forensics in parallel (both client-side)
+        // Run face match + forensics in parallel
+        // Face match: try neural server-side first, fall back to geometric client-side
+        const faceMatchPromise = (async () => {
+          try {
+            const resp = await fetch('/api/face-match', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ docImage, selfieImage }),
+            })
+            const r = await resp.json()
+            if (r.method !== 'unavailable') {
+              return {
+                match: r.match,
+                similarityScore: Math.round(r.similarity * 100) / 100,
+                confidence: r.confidence,
+                documentFaceFound: r.docFaceFound,
+                selfieFaceFound: r.selfieFaceFound,
+                processingMs: r.processingMs,
+                message: r.match
+                  ? `Neural match (${Math.round(r.similarity * 100)}%)`
+                  : 'Neural: no match',
+              }
+            }
+          } catch {
+            // Fall through to client-side
+          }
+          return compareFaces(docImage, selfieImage)
+        })()
+
         const [faceResult, forensicsResult] = await Promise.all([
-          compareFaces(docImage, selfieImage),
+          faceMatchPromise,
           (async () => {
             try {
               // Convert data URL to File for analyzeImage
@@ -317,44 +577,145 @@ export default function VerifyPage() {
           </div>
         )}
 
-        {/* Step 2 — Selfie */}
+        {/* Step 2 — Selfie + Liveness Challenge */}
         {step === 2 && (
           <div className="glass-panel" style={{ padding: '2rem' }}>
             <h2 style={{ marginBottom: '0.5rem', fontSize: '1.15rem' }}>Take a Live Selfie</h2>
             <p style={{ color: 'var(--color-text-muted)', fontSize: '0.85rem', marginBottom: '1.5rem' }}>
-              Face the camera directly. Ensure good lighting. This photo will be compared to your document.
+              Face the camera directly. Complete the liveness check below to confirm you are physically present.
             </p>
 
+            {/* Liveness challenge overlay + video container */}
             <div style={{ position: 'relative', borderRadius: 12, overflow: 'hidden', background: '#000' }}>
+
+              {/* Video feed */}
               <video
                 ref={videoRef}
                 muted
                 playsInline
                 style={{ display: 'block', width: '100%', maxHeight: 360, objectFit: 'cover' }}
               />
+
               {/* Face oval guide */}
               <div style={{
                 position: 'absolute', top: '50%', left: '50%',
                 transform: 'translate(-50%, -50%)',
                 width: 160, height: 200,
                 borderRadius: '50%',
-                border: '3px solid var(--color-primary)',
-                boxShadow: '0 0 12px var(--color-primary)',
+                border: `3px solid ${livenessState === 'passed' ? '#22c55e' : 'var(--color-primary)'}`,
+                boxShadow: `0 0 12px ${livenessState === 'passed' ? '#22c55e' : 'var(--color-primary)'}`,
                 pointerEvents: 'none',
+                transition: 'border-color 0.3s, box-shadow 0.3s',
               }} />
+
+              {/* Liveness challenge instruction overlay */}
+              {livenessChallenge && livenessState !== 'passed' && livenessState !== 'timeout' && (
+                <div style={{
+                  position: 'absolute', top: 0, left: 0, right: 0,
+                  background: 'rgba(0,0,0,0.72)',
+                  padding: '0.75rem 1rem',
+                  borderBottom: '1px solid rgba(255,255,255,0.08)',
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.4rem' }}>
+                    <span style={{
+                      display: 'inline-block', width: 8, height: 8, borderRadius: '50%',
+                      background: '#ef4444',
+                      boxShadow: '0 0 6px #ef4444',
+                    }} />
+                    <span style={{ color: '#fff', fontWeight: 700, fontSize: '0.8rem', letterSpacing: '0.05em' }}>
+                      LIVENESS CHECK
+                    </span>
+                  </div>
+                  <div style={{ color: '#fff', fontSize: '0.95rem', fontWeight: 600, marginBottom: '0.5rem' }}>
+                    {CHALLENGE_ICONS[livenessChallenge]} Please {CHALLENGE_LABELS[livenessChallenge]}
+                  </div>
+                  {/* Countdown bar */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    <div style={{
+                      flex: 1, height: 6, borderRadius: 3,
+                      background: 'rgba(255,255,255,0.15)',
+                      overflow: 'hidden',
+                    }}>
+                      <div style={{
+                        height: '100%',
+                        width: `${(livenessCountdown / LIVENESS_TIMEOUT_S) * 100}%`,
+                        background: livenessCountdown <= 2 ? '#ef4444' : livenessCountdown <= 4 ? '#fbbf24' : 'var(--color-primary)',
+                        borderRadius: 3,
+                        transition: 'width 1s linear, background 0.3s',
+                      }} />
+                    </div>
+                    <span style={{ color: 'rgba(255,255,255,0.7)', fontSize: '0.75rem', minWidth: 40 }}>
+                      {livenessCountdown}s
+                    </span>
+                  </div>
+                </div>
+              )}
+
+              {/* Passed flash overlay */}
+              {livenessState === 'passed' && (
+                <div style={{
+                  position: 'absolute', inset: 0,
+                  background: 'rgba(34,197,94,0.25)',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  flexDirection: 'column', gap: '0.5rem',
+                }}>
+                  <span style={{ fontSize: '3rem' }}>✅</span>
+                  <span style={{ color: '#22c55e', fontWeight: 700, fontSize: '1rem' }}>
+                    Liveness Confirmed
+                  </span>
+                </div>
+              )}
+
+              {/* Timeout overlay */}
+              {livenessState === 'timeout' && (
+                <div style={{
+                  position: 'absolute', inset: 0,
+                  background: 'rgba(0,0,0,0.7)',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  flexDirection: 'column', gap: '0.75rem',
+                  padding: '1rem',
+                }}>
+                  <span style={{ fontSize: '2rem' }}>⏱</span>
+                  <span style={{ color: '#fbbf24', fontWeight: 700, fontSize: '1rem', textAlign: 'center' }}>
+                    Challenge timed out
+                  </span>
+                  <p style={{ color: 'rgba(255,255,255,0.7)', fontSize: '0.82rem', textAlign: 'center', margin: 0 }}>
+                    You will be given a different challenge to try again.
+                  </p>
+                  <button
+                    className="btn btn-primary"
+                    style={{ marginTop: '0.25rem', padding: '0.5rem 1.5rem' }}
+                    onClick={retryLiveness}
+                  >
+                    Try Again →
+                  </button>
+                </div>
+              )}
             </div>
 
             <p style={{ color: 'var(--color-text-muted)', fontSize: '0.8rem', textAlign: 'center', margin: '0.75rem 0' }}>
-              Center your face in the oval
+              {livenessState === 'passed'
+                ? 'Selfie captured — proceeding to analysis…'
+                : livenessState === 'timeout'
+                ? 'Please retry the liveness check above.'
+                : 'Center your face in the oval and complete the challenge'}
             </p>
 
-            <button
-              className="btn btn-primary"
-              style={{ width: '100%', marginTop: '0.5rem' }}
-              onClick={captureSelfie}
-            >
-              📸 Capture Selfie
-            </button>
+            {/* Manual capture button — disabled until liveness passes (auto-capture fires first) */}
+            {livenessState !== 'passed' && (
+              <button
+                className="btn btn-primary"
+                style={{
+                  width: '100%', marginTop: '0.5rem',
+                  opacity: 0.4,
+                  cursor: 'not-allowed',
+                }}
+                disabled
+                onClick={captureSelfie}
+              >
+                📸 Capture Selfie
+              </button>
+            )}
           </div>
         )}
 
@@ -562,6 +923,9 @@ export default function VerifyPage() {
                   setStep(0); setDocImage(null); setSelfieImage(null)
                   setFaceMatch(null); setForensics(null); setApiResult(null)
                   setError(null)
+                  setLivenessChallenge(null)
+                  setLivenessState('idle')
+                  setLivenessCountdown(LIVENESS_TIMEOUT_S)
                 }}
               >
                 ↺ Verify Another Document
