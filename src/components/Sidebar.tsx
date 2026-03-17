@@ -22,6 +22,7 @@ export default function Sidebar() {
         { label: 'Settings & Billing', href: '/dashboard/settings' },
         { label: '──────────', href: '#2', disabled: true },
         { label: 'KYC Verification', href: '/documents/verify' },
+        { label: 'Verification History', href: '/dashboard/verifications' },
         { label: 'Document Forensics', href: '/documents' },
         { label: 'Live Interview', href: '/interview' },
         { label: '──────────', href: '#3', disabled: true },

@@ -17,6 +17,8 @@
 
 'use client'
 
+import { drawQRCode } from './qrCode'
+
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 interface CertificateData {
@@ -238,10 +240,14 @@ export async function downloadCertificatePDF(data: CertificateData): Promise<voi
 
   y += 170
 
-  // ── Verify URL ──────────────────────────────────────────────────────────────
+  // ── QR Code + Verify URL ────────────────────────────────────────────────────
   const verifyUrl = `https://deep-check.io/verify/${data.certificateId}`
-  drawText(ctx, 'Verify this certificate:', A4_W / 2, y + 30, { font: '30px sans-serif', color: TEXT_MUTED, align: 'center' })
-  drawText(ctx, verifyUrl, A4_W / 2, y + 75, { font: 'bold 30px monospace', color: BRAND_CYAN, align: 'center' })
+  const qrSize = 280
+  const qrX = A4_W / 2 - qrSize / 2
+  drawQRCode(ctx, verifyUrl, qrX, y, qrSize, '#00E5FF', '#0A0F14')
+  y += qrSize + 20
+  drawText(ctx, 'Scan to verify this certificate', A4_W / 2, y, { font: '28px sans-serif', color: TEXT_MUTED, align: 'center' })
+  drawText(ctx, verifyUrl, A4_W / 2, y + 40, { font: 'bold 26px monospace', color: BRAND_CYAN, align: 'center' })
 
   // ── Footer ──────────────────────────────────────────────────────────────────
   const footerY = A4_H - 120
