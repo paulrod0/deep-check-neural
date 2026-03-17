@@ -21,6 +21,7 @@ import { compareFaces, warmupFaceMatch, type FaceMatchResult } from '@/lib/faceM
 import MLFeedbackWidget from '@/components/MLFeedbackWidget'
 import { analyzeImage, type ForensicsReport } from '@/lib/imageForensics'
 import { detectDocumentType, type DocumentDetectionResult } from '@/lib/documentDetector'
+import { downloadCertificatePDF } from '@/lib/certificatePDF'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -1095,12 +1096,43 @@ export default function VerifyPage() {
                 ↺ Verify Another Document
               </button>
               {apiResult?.certificateId && (
-                <Link
-                  href={`/documents/${apiResult.certificateId}`}
-                  className="btn btn-outline"
-                >
-                  View Full Report →
-                </Link>
+                <>
+                  <button
+                    className="btn btn-outline"
+                    onClick={() => {
+                      downloadCertificatePDF({
+                        certificateId: apiResult.certificateId,
+                        verdict: finalVerdict,
+                        documentType: docType,
+                        holderName: apiResult.ocr?.mrzFields
+                          ? `${apiResult.ocr.mrzFields.givenNames} ${apiResult.ocr.mrzFields.surname}`
+                          : undefined,
+                        nationality: apiResult.ocr?.mrzFields?.nationality,
+                        docNumber: apiResult.ocr?.mrzFields?.docNumber,
+                        dateOfBirth: apiResult.ocr?.mrzFields?.dobFormatted,
+                        expiryDate: apiResult.ocr?.mrzFields?.expiryFormatted,
+                        isExpired: apiResult.ocr?.mrzFields?.isExpired,
+                        faceMatch: faceMatch ? {
+                          match: faceMatch.match,
+                          similarity: faceMatch.similarityScore,
+                        } : undefined,
+                        forensicsRisk: forensics?.riskScore,
+                        mrzValid: apiResult.ocr?.mrzValid,
+                        checksumsPassed: apiResult.ocr?.checksumsPassed,
+                        checksumsFailed: apiResult.ocr?.checksumsFailed,
+                        countryName: apiResult.countryInfo?.name,
+                      })
+                    }}
+                  >
+                    📄 Download Certificate PDF
+                  </button>
+                  <Link
+                    href={`/documents/${apiResult.certificateId}`}
+                    className="btn btn-outline"
+                  >
+                    View Full Report →
+                  </Link>
+                </>
               )}
             </div>
           </div>
