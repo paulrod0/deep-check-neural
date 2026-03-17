@@ -182,8 +182,8 @@ async function processExportRequest(orgId: string, requestId: string): Promise<v
     const exportJson = JSON.stringify(exportData, null, 2)
     const exportBlob = Buffer.from(exportJson)
 
-    // For now, store as a base64 data URL (in production, use S3 presigned URL)
-    const dataUrl = `data:application/json;base64,${exportBlob.toString('base64').slice(0, 100)}...`
+    // Store full export as base64 data URL (in production, use S3 presigned URL)
+    const dataUrl = `data:application/json;base64,${exportBlob.toString('base64')}`
 
     // Mark as completed
     await supabase

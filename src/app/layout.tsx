@@ -52,8 +52,7 @@ export const viewport: Viewport = {
   ],
   width: 'device-width',
   initialScale: 1,
-  maximumScale: 1,   // prevent zoom-out during document capture
-  userScalable: false,
+  maximumScale: 5,   // allow pinch-to-zoom for accessibility (WCAG 1.4.4)
   viewportFit: 'cover',  // handle iPhone notch / dynamic island
 }
 

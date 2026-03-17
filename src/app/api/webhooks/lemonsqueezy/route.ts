@@ -12,14 +12,19 @@ const supabase = createClient(
 function verifySignature(payload: string, signature: string): boolean {
   const secret = process.env.LEMONSQUEEZY_WEBHOOK_SECRET
   if (!secret) {
-    console.warn('[ls-webhook] LEMONSQUEEZY_WEBHOOK_SECRET not set — skipping verification')
-    return true
+    console.error('[ls-webhook] LEMONSQUEEZY_WEBHOOK_SECRET not set — rejecting request')
+    return false
   }
+  if (!signature) return false
   const hmac = crypto
     .createHmac('sha256', secret)
     .update(payload)
     .digest('hex')
-  return crypto.timingSafeEqual(Buffer.from(hmac), Buffer.from(signature))
+  // Ensure both buffers are same length before timingSafeEqual
+  const hmacBuf = Buffer.from(hmac, 'utf8')
+  const sigBuf  = Buffer.from(signature, 'utf8')
+  if (hmacBuf.length !== sigBuf.length) return false
+  return crypto.timingSafeEqual(hmacBuf, sigBuf)
 }
 
 // ─── Plan mapping (variant IDs → plan name) ───────────────────────────────────

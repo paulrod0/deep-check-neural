@@ -125,6 +125,7 @@ async function verifyDocument(doc: VerifyDocumentRequest): Promise<VerifyDocumen
 
   // 2. Face quality (cloud only)
   let faceQuality: VerifyDocumentResult['faceQuality'] = null
+  let faceSuspicious = false
   if (HAS_AWS) {
     try {
       const { runRekognitionAnalysis } = await import('@/lib/rekognitionAnalysis')
@@ -134,6 +135,7 @@ async function verifyDocument(doc: VerifyDocumentRequest): Promise<VerifyDocumen
         faceCount: rek.faceCount,
         qualityScore: rek.faceQualityScore,
       }
+      faceSuspicious = rek.hasSuspiciousQuality
     } catch {
       // Non-fatal
     }
@@ -160,7 +162,7 @@ async function verifyDocument(doc: VerifyDocumentRequest): Promise<VerifyDocumen
   let verdict: 'authentic' | 'suspicious' | 'tampered' = 'authentic'
   if (mrzResult.checksumsFailed > 0) verdict = 'suspicious'
   if (mrzResult.checksumsFailed >= 2) verdict = 'tampered'
-  if (faceQuality && faceQuality.qualityScore >= 40) verdict = 'suspicious'
+  if (faceSuspicious) verdict = 'suspicious'
 
   // 4. Save to database
   let certificateId = `cert_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`

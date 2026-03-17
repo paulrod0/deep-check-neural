@@ -43,6 +43,10 @@ const VERDICT_CONFIGS_LIGHT: Record<string, VerdictConfig> = {
   tampered:   { color: '#cc0000', bg: '#fff0f0', textColor: '#1a1a1a', icon: '✗', label: 'TAMPERED' },
 }
 
+function escapeXml(str: string): string {
+  return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;')
+}
+
 function generateSVGBadge(
   verdict: string,
   certId: string,
@@ -94,21 +98,21 @@ function generateSVGBadge(
     Certificate ID
   </text>
   <text x="${d.padding}" y="${d.padding + d.titleSize + 32}" font-family="monospace" font-size="${d.fontSize}" font-weight="600" fill="${vc.color}">
-    ${certId.length > 24 ? certId.slice(0, 24) + '...' : certId}
+    ${escapeXml(certId.length > 24 ? certId.slice(0, 24) + '...' : certId)}
   </text>
 
   ${holderName ? `
   <text x="${d.padding}" y="${d.padding + d.titleSize + 48}" font-family="system-ui, sans-serif" font-size="${d.fontSize - 1}" fill="${vc.textColor}" opacity="0.5">
-    ${holderName}
+    ${escapeXml(holderName)}
   </text>` : ''}
 
   <!-- Footer -->
   <text x="${d.padding}" y="${d.h - d.padding + 2}" font-family="system-ui, sans-serif" font-size="${Math.max(8, d.fontSize - 3)}" fill="${vc.textColor}" opacity="0.35">
-    Verified ${issuedDate} · ${baseUrl.replace('https://', '')}
+    Verified ${escapeXml(issuedDate)} · ${escapeXml(baseUrl.replace('https://', ''))}
   </text>
 
   <!-- Clickable link overlay -->
-  <a href="${baseUrl}/verify/${certId}" target="_blank">
+  <a href="${escapeXml(baseUrl)}/verify/${escapeXml(certId)}" target="_blank">
     <rect width="${d.w}" height="${d.h}" fill="transparent" cursor="pointer"/>
   </a>
 </svg>`
@@ -152,7 +156,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
       const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="350" height="110">
         <rect width="350" height="110" rx="8" fill="#1a0a0a" stroke="#333"/>
         <text x="175" y="50" font-family="system-ui" font-size="14" fill="#ff4d4d" text-anchor="middle" font-weight="700">Certificate Not Found</text>
-        <text x="175" y="72" font-family="monospace" font-size="10" fill="#666" text-anchor="middle">${id}</text>
+        <text x="175" y="72" font-family="monospace" font-size="10" fill="#666" text-anchor="middle">${escapeXml(id)}</text>
       </svg>`
       return new NextResponse(svg, {
         headers: { 'Content-Type': 'image/svg+xml', 'Cache-Control': 'public, max-age=60' },
