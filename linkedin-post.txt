@@ -1,0 +1,78 @@
+🚨 Remote hiring fraud costs companies $30,000+ per bad hire.
+
+97% increase in identity fraud in remote interviews (2024).
+
+We built the solution. Meet Deep-Check — the first continuous identity verification platform.
+
+🔍 El problema es real / The problem is real:
+
+→ Candidates use AI to fake live interviews
+→ Deepfakes pass basic liveness checks
+→ Stolen identities slip through one-time KYC
+→ Forged degrees, manipulated transcripts go undetected
+
+🛡️ Deep-Check verifies who someone is — not once, but continuously throughout the entire session.
+
+Here's what's under the hood:
+
+𝟔-𝐋𝐚𝐲𝐞𝐫 𝐋𝐢𝐯𝐞𝐧𝐞𝐬𝐬 𝐃𝐞𝐭𝐞𝐜𝐭𝐢𝐨𝐧
+• Heartbeat signal via rPPG
+• Facial biomechanics analysis
+• CNN deepfake classifier
+• Micro-saccade tracking
+• Blink physics modeling
+• Lighting reflex validation
+
+𝐁𝐞𝐡𝐚𝐯𝐢𝐨𝐫𝐚𝐥 𝐁𝐢𝐨𝐦𝐞𝐭𝐫𝐢𝐜𝐬
+• Keystroke DNA — flight times, hold times, rhythm
+• Your typing pattern is as unique as a fingerprint
+• Impossible to fake in real-time
+
+𝐃𝐨𝐜𝐮𝐦𝐞𝐧𝐭 𝐅𝐨𝐫𝐞𝐧𝐬𝐢𝐜𝐬 (195 countries)
+• Error Level Analysis (ELA)
+• EXIF metadata detection (Photoshop, GIMP, Canva)
+• AI-generated image detection (Midjourney, DALL-E, Stable Diffusion)
+• MRZ validation with ICAO 9303 check digits
+• 22 algorithmic document number validators
+
+𝐇𝐨𝐰 𝐰𝐞 𝐜𝐨𝐦𝐩𝐚𝐫𝐞 𝐭𝐨 𝐎𝐧𝐟𝐢𝐝𝐨 (see carousel 👇):
+
+✅ Continuous session monitoring → Onfido: one-time only
+✅ 6-layer deepfake detection → Onfido: basic liveness
+✅ Heartbeat signal (rPPG) → Onfido: not available
+✅ Behavioral biometrics → Onfido: not available
+✅ AI code detection → Onfido: N/A
+✅ On-premise deployment → Onfido: cloud only
+✅ Client-side processing → Onfido: sends to servers
+✅ Free tier available → Onfido: €1,500+/month
+✅ GDPR + EU AI Act compliant → Onfido: partial
+
+🏗️ Built for:
+🏢 Enterprise — SOC2, on-premise Docker/K8s, SSO/LDAP
+🚀 Startups — REST API, webhooks, free tier
+🎓 Universities — admissions verification, proctoring
+🏦 Fintech — KYC/AML compliance, 195-country coverage
+
+💰 Pricing that makes sense:
+• Free: 0€ (10 sessions/month)
+• Starter: 29€/month
+• Pro: 79€/month (unlimited)
+• Enterprise: Custom (on-premise + source code)
+
+Privacy-first architecture:
+🔒 All biometric processing runs locally in your browser
+🔒 No video, audio, or raw keystrokes are stored
+🔒 Only derived numerical vectors are sent for scoring
+🔒 GDPR Art. 6(1)(a) + Art. 9(2)(a) compliant
+
+🌐 Try it → https://deep-check-two.vercel.app
+
+---
+
+Construimos Deep-Check porque creemos que la verificación de identidad no debería terminar en el login.
+
+El fraude remoto es un problema de $30B. Y las soluciones actuales solo verifican quién eres una vez.
+
+Nosotros verificamos quién eres, continuamente.
+
+#KYC #IdentityVerification #DeepCheck #RemoteFraud #Deepfake #BiometricSecurity #Liveness #DocumentForensics #GDPR #EUAIAct #Fintech #Proctoring #StartupLife #CyberSecurity #B2BSaaS #OnPremise #PrivacyByDesign
