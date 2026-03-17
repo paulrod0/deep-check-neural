@@ -20,6 +20,7 @@ import DocumentCapture from '@/components/DocumentCapture'
 import { compareFaces, warmupFaceMatch, type FaceMatchResult } from '@/lib/faceMatch'
 import MLFeedbackWidget from '@/components/MLFeedbackWidget'
 import { analyzeImage, type ForensicsReport } from '@/lib/imageForensics'
+import { detectDocumentType, type DocumentDetectionResult } from '@/lib/documentDetector'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -138,6 +139,7 @@ export default function VerifyPage() {
   const [forensics, setForensics]     = useState<ForensicsReport | null>(null)
   const [apiResult, setApiResult]     = useState<VerifyAPIResponse | null>(null)
   const [error, setError]             = useState<string | null>(null)
+  const [docDetection, setDocDetection] = useState<DocumentDetectionResult | null>(null)
 
   // ── Liveness state ──────────────────────────────────────────────────────────
   const [livenessChallenge,  setLivenessChallenge]  = useState<LivenessChallenge | null>(null)
@@ -589,8 +591,27 @@ export default function VerifyPage() {
             </p>
             <DocumentCapture
               documentType={docType}
-              onCapture={(dataUrl) => {
+              onCapture={async (dataUrl) => {
                 setDocImage(dataUrl)
+                // Run document type auto-detection in background
+                try {
+                  const detection = await detectDocumentType(dataUrl)
+                  setDocDetection(detection)
+                  // Auto-suggest document type if high confidence
+                  if (detection.confidence >= 70) {
+                    const typeMap: Record<string, DocType> = {
+                      passport: 'passport',
+                      id_card: 'dni',
+                      driving_license: 'driving_license',
+                    }
+                    const suggested = typeMap[detection.detectedType]
+                    if (suggested && suggested !== docType) {
+                      setDocType(suggested)
+                    }
+                  }
+                } catch {
+                  // Non-fatal — detection is optional
+                }
                 setStep(2)
               }}
             />
@@ -898,6 +919,46 @@ export default function VerifyPage() {
               </div>
             )}
 
+            {/* Document Detection / Image Quality */}
+            {docDetection && (
+              <div className="glass-panel" style={{ padding: '1.5rem' }}>
+                <h3 style={{ marginBottom: '1rem', fontSize: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  📷 Image Analysis
+                  <span style={{
+                    padding: '2px 10px', borderRadius: 20, fontSize: '0.78rem',
+                    background: docDetection.qualityScore >= 70 ? 'rgba(0,229,255,0.15)' : docDetection.qualityScore >= 40 ? 'rgba(255,215,0,0.15)' : 'rgba(255,77,77,0.15)',
+                    color: docDetection.qualityScore >= 70 ? 'var(--color-primary)' : docDetection.qualityScore >= 40 ? '#ffd700' : '#ff4d4d',
+                    fontWeight: 600,
+                  }}>
+                    Quality: {docDetection.qualityScore}/100
+                  </span>
+                </h3>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))', gap: '0.75rem' }}>
+                  {[
+                    ['Detected Type', docDetection.detectedType.replace('_', ' ')],
+                    ['Confidence', `${docDetection.confidence}%`],
+                    ['Aspect Ratio', `${docDetection.aspectRatio} (${docDetection.aspectCategory.toUpperCase()})`],
+                    ['MRZ Zone', docDetection.mrzZoneDetected ? '✓ Detected' : '✗ Not found'],
+                    ['Processing', `${docDetection.processingMs.toFixed(0)}ms`],
+                  ].map(([label, value]) => (
+                    <div key={label} style={{ background: 'rgba(255,255,255,0.03)', borderRadius: 8, padding: '0.6rem 0.75rem' }}>
+                      <p style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)', marginBottom: '0.2rem' }}>{label}</p>
+                      <p style={{ fontSize: '0.85rem', fontWeight: 600 }}>{value}</p>
+                    </div>
+                  ))}
+                </div>
+                {docDetection.qualityIssues.length > 0 && (
+                  <div style={{ marginTop: '0.75rem' }}>
+                    {docDetection.qualityIssues.map((issue, i) => (
+                      <p key={i} style={{ color: '#ffd700', fontSize: '0.8rem', marginTop: '0.35rem' }}>
+                        ⚠️ {issue}
+                      </p>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
             {/* Country-Specific Validation */}
             {apiResult?.countryValidation && (
               <div className="glass-panel" style={{ padding: '1.5rem' }}>
@@ -1025,7 +1086,7 @@ export default function VerifyPage() {
                 onClick={() => {
                   setStep(0); setDocImage(null); setSelfieImage(null)
                   setFaceMatch(null); setForensics(null); setApiResult(null)
-                  setError(null)
+                  setError(null); setDocDetection(null)
                   setLivenessChallenge(null)
                   setLivenessState('idle')
                   setLivenessCountdown(LIVENESS_TIMEOUT_S)
