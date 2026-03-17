@@ -167,6 +167,44 @@ export default function DashboardPage() {
                     </div>
                 )}
 
+                {/* Quick links */}
+                <div style={{
+                    display: 'flex', gap: '0.75rem', marginBottom: '1.5rem', flexWrap: 'wrap',
+                }}>
+                    <Link href="/documents/verify" style={{
+                        display: 'flex', alignItems: 'center', gap: '0.5rem',
+                        padding: '0.5rem 1rem', borderRadius: 8,
+                        background: 'rgba(0,229,255,0.06)', border: '1px solid rgba(0,229,255,0.2)',
+                        color: 'var(--color-primary)', textDecoration: 'none', fontSize: '0.82rem', fontWeight: 600,
+                    }}>
+                        🪪 KYC Verification
+                    </Link>
+                    <Link href="/documents" style={{
+                        display: 'flex', alignItems: 'center', gap: '0.5rem',
+                        padding: '0.5rem 1rem', borderRadius: 8,
+                        background: 'rgba(255,255,255,0.03)', border: '1px solid var(--color-border)',
+                        color: 'var(--color-text)', textDecoration: 'none', fontSize: '0.82rem', fontWeight: 600,
+                    }}>
+                        🔬 Document Forensics
+                    </Link>
+                    <Link href="/dashboard/ml" style={{
+                        display: 'flex', alignItems: 'center', gap: '0.5rem',
+                        padding: '0.5rem 1rem', borderRadius: 8,
+                        background: 'rgba(255,255,255,0.03)', border: '1px solid var(--color-border)',
+                        color: 'var(--color-text)', textDecoration: 'none', fontSize: '0.82rem', fontWeight: 600,
+                    }}>
+                        🧠 ML Model Dashboard
+                    </Link>
+                    <Link href="/interview" style={{
+                        display: 'flex', alignItems: 'center', gap: '0.5rem',
+                        padding: '0.5rem 1rem', borderRadius: 8,
+                        background: 'rgba(255,255,255,0.03)', border: '1px solid var(--color-border)',
+                        color: 'var(--color-text)', textDecoration: 'none', fontSize: '0.82rem', fontWeight: 600,
+                    }}>
+                        🎙 Live Interview
+                    </Link>
+                </div>
+
                 {/* Stats Grid */}
                 <div className={styles.statsGrid}>
                     <div className={styles.statCard}>

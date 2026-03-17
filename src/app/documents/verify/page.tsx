@@ -18,6 +18,7 @@ import { useState, useRef, useCallback, useEffect } from 'react'
 import Link from 'next/link'
 import DocumentCapture from '@/components/DocumentCapture'
 import { compareFaces, warmupFaceMatch, type FaceMatchResult } from '@/lib/faceMatch'
+import MLFeedbackWidget from '@/components/MLFeedbackWidget'
 import { analyzeImage, type ForensicsReport } from '@/lib/imageForensics'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -906,6 +907,16 @@ export default function VerifyPage() {
                   </div>
                 )}
               </div>
+            )}
+
+            {/* ML Feedback Widget — Continuous Learning */}
+            {apiResult?.certificateId && (
+              <MLFeedbackWidget
+                analysisId={apiResult.certificateId}
+                predictedLabel={finalVerdict === 'authentic' ? 'genuine' : finalVerdict}
+                predictedScore={forensics?.riskScore ?? 0}
+                documentType={docType}
+              />
             )}
 
             {/* Privacy note */}
