@@ -203,6 +203,14 @@ export default function DashboardPage() {
                     }}>
                         🎙 Live Interview
                     </Link>
+                    <Link href="/dashboard/audit" style={{
+                        display: 'flex', alignItems: 'center', gap: '0.5rem',
+                        padding: '0.5rem 1rem', borderRadius: 8,
+                        background: 'rgba(255,255,255,0.03)', border: '1px solid var(--color-border)',
+                        color: 'var(--color-text)', textDecoration: 'none', fontSize: '0.82rem', fontWeight: 600,
+                    }}>
+                        🔗 Audit Trail
+                    </Link>
                 </div>
 
                 {/* Stats Grid */}

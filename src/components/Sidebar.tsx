@@ -17,6 +17,7 @@ export default function Sidebar() {
         { label: 'Global Benchmarks', href: '/dashboard/benchmarks' },
         { label: '──────────', href: '#', disabled: true },
         { label: 'Team Members', href: '/dashboard/team' },
+        { label: 'Audit Trail', href: '/dashboard/audit' },
         { label: 'Settings & Billing', href: '/dashboard/settings' },
         { label: '──────────', href: '#2', disabled: true },
         { label: 'KYC Verification', href: '/documents/verify' },
