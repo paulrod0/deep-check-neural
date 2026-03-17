@@ -5,7 +5,7 @@ import Link from 'next/link'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-type Tab = 'overview' | 'sessions' | 'enrollment' | 'verify' | 'certificates' | 'ml' | 'webhooks' | 'keys'
+type Tab = 'overview' | 'sessions' | 'enrollment' | 'verify' | 'certificates' | 'ml' | 'webhooks' | 'keys' | 'audit' | 'gdpr' | 'team'
 
 const BASE_URL = 'https://deep-check-two.vercel.app'
 
@@ -53,6 +53,9 @@ export default function DocsPage() {
         { id: 'ml',            label: 'ML / Training' },
         { id: 'sessions',      label: 'Sessions API' },
         { id: 'enrollment',    label: 'Enrollment API' },
+        { id: 'audit',         label: 'Audit Trail' },
+        { id: 'gdpr',          label: 'GDPR' },
+        { id: 'team',          label: 'Team / Org' },
         { id: 'webhooks',      label: 'Webhooks' },
         { id: 'keys',          label: 'API Keys' },
     ]
@@ -511,6 +514,185 @@ const { data: session } = await sessionRes.json();
 if (session.identityMatchScore < 65) {
   // Identidad no coincide con el perfil registrado
   flagForReview(session.id, 'Identity mismatch vs enrollment');
+}`}</Code>
+                    </>
+                )}
+
+                {tab === 'audit' && (
+                    <>
+                        <h1 style={{ fontSize: '2rem', marginBottom: '24px' }}>Audit Trail</h1>
+                        <p style={{ color: 'var(--color-text-muted)', marginBottom: '28px', lineHeight: 1.7, fontSize: '0.88rem' }}>
+                            Deep-Check provides a tamper-evident audit trail using SHA-256 hash chains. Every action is logged with a cryptographic link to the previous entry,
+                            making it impossible to modify or delete entries without detection. This meets ENS op.exp.7, op.exp.8, and ISO 27001 A.12.4 requirements.
+                        </p>
+
+                        <h2 style={{ fontSize: '1.2rem', marginBottom: '12px' }}>GET /api/audit</h2>
+                        <p style={{ color: 'var(--color-text-muted)', marginBottom: '12px', fontSize: '0.85rem' }}>Query your organization&apos;s audit trail with optional filters.</p>
+                        <Code lang="bash">{`curl "${BASE_URL}/api/audit?action=document.analyze&limit=10" \\
+  -H "Cookie: sb-access-token=YOUR_TOKEN"`}</Code>
+                        <Code>{`{
+  "success": true,
+  "data": [
+    {
+      "id": 142,
+      "action": "document.analyze",
+      "actorEmail": "admin@company.com",
+      "resourceType": "document",
+      "resourceId": "doc_abc123",
+      "details": { "verdict": "authentic", "riskScore": 12 },
+      "ipAddress": "192.168.1.***",
+      "createdAt": "2026-03-17T10:00:00.000Z"
+    }
+  ],
+  "pagination": { "total": 142, "limit": 10, "offset": 0 }
+}`}</Code>
+
+                        <h2 style={{ fontSize: '1.2rem', marginBottom: '12px', marginTop: '28px' }}>Verify Chain Integrity</h2>
+                        <p style={{ color: 'var(--color-text-muted)', marginBottom: '12px', fontSize: '0.85rem' }}>
+                            Verify that the audit log has not been tampered with. Each entry contains the SHA-256 hash of the previous entry.
+                        </p>
+                        <Code lang="bash">{`curl "${BASE_URL}/api/audit?verify=true" \\
+  -H "Cookie: sb-access-token=YOUR_TOKEN"`}</Code>
+                        <Code>{`{
+  "success": true,
+  "verification": {
+    "valid": true,
+    "entriesChecked": 142,
+    "message": "All 142 audit entries verified — chain integrity confirmed"
+  }
+}`}</Code>
+
+                        <h2 style={{ fontSize: '1.2rem', marginBottom: '12px', marginTop: '28px' }}>Available Actions</h2>
+                        <Code>{`document.analyze     // Document forensic analysis performed
+document.verify      // KYC identity verification
+session.create       // Interview session started
+session.flag         // Session flagged as suspicious
+auth.login           // User logged in
+auth.logout          // User signed out
+member.invite        // Team member invited
+member.remove        // Team member removed
+api_key.create       // API key generated
+ml.feedback          // ML model feedback submitted
+ml.retrain_trigger   // ML retraining initiated
+certificate.generate // Verification certificate created
+gdpr.export_request  // GDPR data export requested
+gdpr.deletion_request // GDPR data deletion requested`}</Code>
+                    </>
+                )}
+
+                {tab === 'gdpr' && (
+                    <>
+                        <h1 style={{ fontSize: '2rem', marginBottom: '24px' }}>GDPR Compliance</h1>
+                        <p style={{ color: 'var(--color-text-muted)', marginBottom: '28px', lineHeight: 1.7, fontSize: '0.88rem' }}>
+                            Deep-Check supports GDPR Article 15 (Right of Access) and Article 17 (Right to Erasure).
+                            Data subjects can request exports of all their data or request complete deletion.
+                        </p>
+
+                        <h2 style={{ fontSize: '1.2rem', marginBottom: '12px' }}>POST /api/gdpr — Request Data Export</h2>
+                        <Code lang="bash">{`curl -X POST "${BASE_URL}/api/gdpr" \\
+  -H "Cookie: sb-access-token=YOUR_TOKEN" \\
+  -H "Content-Type: application/json" \\
+  -d '{ "type": "export" }'`}</Code>
+                        <Code>{`{
+  "success": true,
+  "message": "Data export request submitted. You will be notified when ready.",
+  "requestId": "req_abc123",
+  "status": "processing"
+}`}</Code>
+
+                        <h2 style={{ fontSize: '1.2rem', marginBottom: '12px', marginTop: '28px' }}>POST /api/gdpr — Request Data Deletion</h2>
+                        <Code lang="bash">{`curl -X POST "${BASE_URL}/api/gdpr" \\
+  -H "Cookie: sb-access-token=YOUR_TOKEN" \\
+  -H "Content-Type: application/json" \\
+  -d '{ "type": "deletion" }'`}</Code>
+                        <Code>{`{
+  "success": true,
+  "message": "Deletion request submitted. Will be processed within 30 days per GDPR.",
+  "requestId": "req_def456",
+  "status": "pending"
+}`}</Code>
+
+                        <h2 style={{ fontSize: '1.2rem', marginBottom: '12px', marginTop: '28px' }}>GET /api/gdpr — List Requests</h2>
+                        <Code lang="bash">{`curl "${BASE_URL}/api/gdpr" \\
+  -H "Cookie: sb-access-token=YOUR_TOKEN"`}</Code>
+                        <Code>{`{
+  "success": true,
+  "data": [
+    {
+      "id": "req_abc123",
+      "type": "export",
+      "status": "completed",
+      "requesterEmail": "user@company.com",
+      "dataUrl": "...",
+      "createdAt": "2026-03-17T10:00:00.000Z",
+      "completedAt": "2026-03-17T10:02:00.000Z",
+      "expiresAt": "2026-03-24T10:02:00.000Z"
+    }
+  ]
+}`}</Code>
+
+                        <div style={{ background: 'rgba(0,212,127,0.08)', border: '1px solid rgba(0,212,127,0.25)', borderRadius: '10px', padding: '16px', fontSize: '0.85rem', color: 'var(--color-text-muted)', lineHeight: 1.6, marginTop: '20px' }}>
+                            Data export links expire after 7 days. Deletion requests are processed within the GDPR-mandated 30-day window.
+                            All GDPR actions are logged in the tamper-evident audit trail.
+                        </div>
+                    </>
+                )}
+
+                {tab === 'team' && (
+                    <>
+                        <h1 style={{ fontSize: '2rem', marginBottom: '24px' }}>Team & Organization</h1>
+                        <p style={{ color: 'var(--color-text-muted)', marginBottom: '28px', lineHeight: 1.7, fontSize: '0.88rem' }}>
+                            Manage team members programmatically. Available on Pro and Enterprise plans.
+                            Roles: <code style={{ background: 'rgba(255,255,255,0.08)', padding: '2px 6px', borderRadius: '4px' }}>owner</code>,
+                            <code style={{ background: 'rgba(255,255,255,0.08)', padding: '2px 6px', borderRadius: '4px' }}>member</code>,
+                            <code style={{ background: 'rgba(255,255,255,0.08)', padding: '2px 6px', borderRadius: '4px' }}>viewer</code>.
+                        </p>
+
+                        <h2 style={{ fontSize: '1.2rem', marginBottom: '12px' }}>GET /api/org/members</h2>
+                        <Code lang="bash">{`curl "${BASE_URL}/api/org/members" \\
+  -H "Cookie: sb-access-token=YOUR_TOKEN"`}</Code>
+                        <Code>{`{
+  "success": true,
+  "data": {
+    "orgId": "org_abc123",
+    "orgName": "Acme Corp",
+    "plan": "pro",
+    "members": [
+      { "id": "m1", "email": "owner@acme.com", "role": "owner", "joinedAt": "2026-01-15" },
+      { "id": "m2", "email": "analyst@acme.com", "role": "member", "joinedAt": "2026-02-20" }
+    ]
+  }
+}`}</Code>
+
+                        <h2 style={{ fontSize: '1.2rem', marginBottom: '12px', marginTop: '28px' }}>POST /api/org/members — Invite Member</h2>
+                        <Code lang="bash">{`curl -X POST "${BASE_URL}/api/org/members" \\
+  -H "Cookie: sb-access-token=YOUR_TOKEN" \\
+  -H "Content-Type: application/json" \\
+  -d '{ "email": "new@acme.com", "role": "member" }'`}</Code>
+                        <Code>{`{
+  "success": true,
+  "message": "new@acme.com added as member",
+  "member": { "userId": "uuid", "email": "new@acme.com", "role": "member" }
+}`}</Code>
+
+                        <h2 style={{ fontSize: '1.2rem', marginBottom: '12px', marginTop: '28px' }}>DELETE /api/org/members — Remove Member</h2>
+                        <Code lang="bash">{`curl -X DELETE "${BASE_URL}/api/org/members?id=MEMBER_ID" \\
+  -H "Cookie: sb-access-token=YOUR_TOKEN"`}</Code>
+
+                        <h2 style={{ fontSize: '1.2rem', marginBottom: '12px', marginTop: '28px' }}>GET /api/org/billing — Billing Info</h2>
+                        <Code lang="bash">{`curl "${BASE_URL}/api/org/billing" \\
+  -H "Cookie: sb-access-token=YOUR_TOKEN"`}</Code>
+                        <Code>{`{
+  "success": true,
+  "data": {
+    "org": { "plan": "pro", "planLabel": "Pro", "planStatus": "active" },
+    "usage": { "sessionsUsed": 23, "sessionsLimit": -1, "docsUsed": 8, "docsLimit": -1 },
+    "billing": {
+      "hasSubscription": true,
+      "billingPortalUrl": "https://app.lemonsqueezy.com/my-orders",
+      "manageSubscriptionUrl": "https://app.lemonsqueezy.com/my-orders"
+    }
+  }
 }`}</Code>
                     </>
                 )}
