@@ -22,7 +22,10 @@ import crypto from 'crypto'
 
 // ── Config ──────────────────────────────────────────────────────────────────────
 
-const CERTIFICATE_SECRET = process.env.CERTIFICATE_SIGNING_SECRET || process.env.PGRST_JWT_SECRET || 'deep-check-cert-signing-key'
+const CERTIFICATE_SECRET = process.env.CERTIFICATE_SIGNING_SECRET || process.env.PGRST_JWT_SECRET || (() => {
+  console.warn('[certificates] No CERTIFICATE_SIGNING_SECRET or PGRST_JWT_SECRET set — using random ephemeral key')
+  return crypto.randomBytes(32).toString('hex')
+})()
 const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL || 'https://deep-check.io'
 
 function getClient() {

@@ -77,7 +77,7 @@ export async function GET(req: NextRequest) {
         hashMatch = assessment.sessionHash.toLowerCase() === expectedHash.toLowerCase()
     }
 
-    const isValid = assessment.status !== undefined
+    const isValid = !!assessment.status && ['passed', 'review', 'flagged'].includes(assessment.status)
     const isPassed = assessment.status === 'passed'
     const isFlagged = assessment.status === 'flagged'
 

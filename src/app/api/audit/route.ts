@@ -40,8 +40,8 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     actorId: params.get('actor') ?? undefined,
     startDate: params.get('start') ?? undefined,
     endDate: params.get('end') ?? undefined,
-    limit: params.has('limit') ? parseInt(params.get('limit')!) : 50,
-    offset: params.has('offset') ? parseInt(params.get('offset')!) : 0,
+    limit: Math.min(Math.max(1, parseInt(params.get('limit') ?? '50') || 50), 500),
+    offset: Math.max(0, parseInt(params.get('offset') ?? '0') || 0),
   })
 
   return NextResponse.json({

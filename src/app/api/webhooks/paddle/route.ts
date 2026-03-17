@@ -24,8 +24,8 @@ const supabase = createClient(
 function verifySignature(body: string, signatureHeader: string): boolean {
   const secret = process.env.PADDLE_WEBHOOK_SECRET
   if (!secret) {
-    console.warn('[paddle-webhook] PADDLE_WEBHOOK_SECRET not set — skipping verification')
-    return true
+    console.error('[paddle-webhook] PADDLE_WEBHOOK_SECRET not set — rejecting request')
+    return false
   }
 
   // Header format: "ts=1671552000;h1=abcdef..."

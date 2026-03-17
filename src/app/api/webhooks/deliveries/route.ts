@@ -36,7 +36,8 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
 export async function POST(req: NextRequest): Promise<NextResponse> {
   // Process retry queue — can be triggered by cron or admin
   const secret = req.headers.get('x-cron-secret')
-  if (secret !== (process.env.CRON_SECRET ?? 'dc-cron-secret') && secret !== process.env.RETRAIN_SECRET) {
+  const cronSecret = process.env.CRON_SECRET
+  if ((!cronSecret || secret !== cronSecret) && secret !== process.env.RETRAIN_SECRET) {
     // Also check admin auth
     const org = await getOrgFromSession(req)
     if (!org) {

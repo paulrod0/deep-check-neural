@@ -34,7 +34,6 @@
     "@types/react-dom": "^19",
     "eslint": "^9",
     "eslint-config-next": "16.1.6",
-    "pdfkit": "^0.17.2",
     "typescript": "^5"
   }
 }
