@@ -47,9 +47,11 @@ export interface AuditEntry {
 }
 
 function hashIP(ip: string): string {
+    const salt = process.env.AUDIT_SALT ?? process.env.AUDIT_IP_SALT ?? ''
+    if (!salt) console.warn('[auditLog] AUDIT_SALT not set — IP hashes are weak')
     return crypto
         .createHash('sha256')
-        .update(ip + (process.env.AUDIT_SALT ?? 'dc-audit-salt-2026'))
+        .update(ip + salt)
         .digest('hex')
         .slice(0, 16)
 }
