@@ -4,10 +4,17 @@ import type { Organization } from './planLimits'
 
 // ─── Server-side Supabase client (uses service role if available) ─────────────
 
+let _warnedNoServiceRole = false
+
 export function createServerClient() {
+  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+  if (!serviceKey && !_warnedNoServiceRole) {
+    _warnedNoServiceRole = true
+    console.warn('[auth] SUPABASE_SERVICE_ROLE_KEY not set — falling back to anon key (reduced permissions)')
+  }
   return createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY ?? process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+    serviceKey ?? process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
   )
 }
 

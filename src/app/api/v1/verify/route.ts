@@ -209,7 +209,9 @@ async function verifyDocument(doc: VerifyDocumentRequest): Promise<VerifyDocumen
     }
   }
 
-  const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'https://deep-check.io'
+  const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || (
+    process.env.NODE_ENV === 'production' ? 'https://deep-check.io' : 'http://localhost:3000'
+  )
 
   return {
     certificateId,

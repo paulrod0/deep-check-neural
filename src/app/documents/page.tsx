@@ -381,7 +381,7 @@ export default function DocumentsPage() {
         fetch('/api/documents?limit=12')
             .then(r => r.json())
             .then(d => setRecent(d.items ?? []))
-            .catch(() => { /* ignore */ })
+            .catch(err => console.error('[documents] Failed to load recent analyses:', err))
     }, [])
 
     const handleFile = useCallback(async (f: File) => {

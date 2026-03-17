@@ -15,6 +15,18 @@ import { NextRequest, NextResponse } from 'next/server'
 // Limits: 100 req/min general, 20 req/min for auth/sensitive endpoints
 
 const rateLimitMap = new Map<string, { count: number; resetAt: number }>()
+const CLEANUP_INTERVAL = 5 * 60_000 // 5 minutes
+let lastCleanup = Date.now()
+
+/** Purge expired entries to prevent unbounded Map growth in long-lived serverless instances */
+function cleanupStaleEntries() {
+    const now = Date.now()
+    if (now - lastCleanup < CLEANUP_INTERVAL) return
+    lastCleanup = now
+    for (const [key, entry] of rateLimitMap) {
+        if (now > entry.resetAt) rateLimitMap.delete(key)
+    }
+}
 
 const LIMITS: Record<string, number> = {
     '/api/ml-score':           20,  // ML inference — expensive
@@ -118,6 +130,7 @@ export function middleware(req: NextRequest) {
     }
 
     // ── 2. Rate limiting ──────────────────────────────────────────────────────
+    cleanupStaleEntries()
     if (pathname.startsWith('/api/')) {
         if (!checkRateLimit(ip, pathname)) {
             logRequest(req, 429, 'rate_limited')

@@ -57,7 +57,9 @@ function generateSVGBadge(
 ): string {
   const configs = theme === 'light' ? VERDICT_CONFIGS_LIGHT : VERDICT_CONFIGS
   const vc = configs[verdict] || configs.suspicious
-  const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'https://deep-check.io'
+  const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || (
+    process.env.NODE_ENV === 'production' ? 'https://deep-check.io' : 'http://localhost:3000'
+  )
 
   const dims = {
     sm: { w: 240, h: 80, fontSize: 10, titleSize: 12, padding: 12 },
