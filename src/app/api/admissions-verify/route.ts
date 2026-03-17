@@ -31,8 +31,10 @@ import { runExifAnalysis }              from '@/lib/exifAnalysis'
 import { runTextConsistencyAnalysis }   from '@/lib/textConsistency'
 import { crossValidateMRZvsOCR }        from '@/lib/crossValidation'
 import { runJPEGGhost }                 from '@/lib/jpegGhost'
+import { runDocFraudClassifier }        from '@/lib/docFraudClassifier'
 import { logVerification, computeImageHash } from '@/lib/verificationLog'
 import type { JPEGGhostResult }        from '@/lib/jpegGhost'
+import type { DocFraudResult }         from '@/lib/docFraudClassifier'
 import type { MRZFields }              from '@/lib/mrzParser'
 import type { OcrResult }              from '@/lib/ocrEngine'
 import type { FaceDetectionResult }    from '@/lib/faceDetection'
@@ -105,6 +107,8 @@ export interface AdmissionsForensicsSignals {
   crossValidation:   number   // 0–100 (MRZ ↔ OCR field mismatch)
   ghostScore:        number   // 0–100 (JPEG Ghost: multi-source compression)
   wordAnomalyScore:  number   // 0–100 (per-word OCR confidence anomaly)
+  mlFraudScore:      number   // 0–100 (ML EfficientNet-B4 trained on IDNet-2025)
+  mlModelAvailable:  boolean  // true if ONNX model was loaded for inference
   overallRiskScore:  number   // 0–100 weighted combination
   faceDetected:      boolean
   faceCount:         number
@@ -618,6 +622,8 @@ function computeAuthenticityScore(
     crossValidation:   number
     ghostScore:        number
     wordAnomalyScore:  number
+    mlFraudScore:      number
+    mlModelAvailable:  boolean
   },
   mrz:     AdmissionsMRZAnalysis | null,
   docType: AdmissionsDocTypeResult,
@@ -669,28 +675,56 @@ function computeAuthenticityScore(
   // TIER 2 — Standard weighted scoring (no definitive tampering signal)
   // ═══════════════════════════════════════════════════════════════════════════
   const hasMRZ = !!(mrz?.detected)
+  const hasML  = forensics.mlModelAvailable
+
+  // When ML model is available, redistribute weights to give it 0.12-0.15
   const forensicRisk = hasMRZ
-    ? (
-        forensics.frequencyScore    * 0.10 +
-        forensics.semanticScore     * 0.10 +
-        forensics.faceQualityScore  * 0.04 +
-        forensics.elaScore          * 0.15 +
-        forensics.exifScore         * 0.08 +
-        forensics.textConsistency   * 0.08 +
-        forensics.crossValidation   * 0.25 +
-        forensics.ghostScore        * 0.10 +   // JPEG Ghost (multi-source compression)
-        forensics.wordAnomalyScore  * 0.10     // per-word OCR confidence anomaly
-      )
-    : (
-        forensics.frequencyScore    * 0.12 +
-        forensics.semanticScore     * 0.12 +
-        forensics.faceQualityScore  * 0.04 +
-        forensics.elaScore          * 0.20 +
-        forensics.exifScore         * 0.12 +
-        forensics.textConsistency   * 0.15 +
-        forensics.ghostScore        * 0.13 +   // JPEG Ghost (stronger weight without MRZ)
-        forensics.wordAnomalyScore  * 0.12     // per-word OCR confidence anomaly
-      )
+    ? hasML
+      ? (
+          forensics.frequencyScore    * 0.08 +
+          forensics.semanticScore     * 0.08 +
+          forensics.faceQualityScore  * 0.03 +
+          forensics.elaScore          * 0.12 +
+          forensics.exifScore         * 0.06 +
+          forensics.textConsistency   * 0.07 +
+          forensics.crossValidation   * 0.22 +
+          forensics.ghostScore        * 0.08 +
+          forensics.wordAnomalyScore  * 0.08 +
+          forensics.mlFraudScore      * 0.18     // ML strongest signal after cross-val
+        )
+      : (
+          forensics.frequencyScore    * 0.10 +
+          forensics.semanticScore     * 0.10 +
+          forensics.faceQualityScore  * 0.04 +
+          forensics.elaScore          * 0.15 +
+          forensics.exifScore         * 0.08 +
+          forensics.textConsistency   * 0.08 +
+          forensics.crossValidation   * 0.25 +
+          forensics.ghostScore        * 0.10 +
+          forensics.wordAnomalyScore  * 0.10
+        )
+    : hasML
+      ? (
+          forensics.frequencyScore    * 0.10 +
+          forensics.semanticScore     * 0.10 +
+          forensics.faceQualityScore  * 0.03 +
+          forensics.elaScore          * 0.16 +
+          forensics.exifScore         * 0.10 +
+          forensics.textConsistency   * 0.12 +
+          forensics.ghostScore        * 0.10 +
+          forensics.wordAnomalyScore  * 0.09 +
+          forensics.mlFraudScore      * 0.20     // ML strongest when no MRZ
+        )
+      : (
+          forensics.frequencyScore    * 0.12 +
+          forensics.semanticScore     * 0.12 +
+          forensics.faceQualityScore  * 0.04 +
+          forensics.elaScore          * 0.20 +
+          forensics.exifScore         * 0.12 +
+          forensics.textConsistency   * 0.15 +
+          forensics.ghostScore        * 0.13 +
+          forensics.wordAnomalyScore  * 0.12
+        )
 
   let score = 100 - forensicRisk
 
@@ -746,6 +780,14 @@ function computeAuthenticityScore(
     score = Math.min(score, 82 - Math.round(forensics.wordAnomalyScore * 0.25))
   }
 
+  // ── ML Fraud Classifier — EfficientNet-B4 trained on 837K+ docs ────
+  if (forensics.mlModelAvailable && forensics.mlFraudScore >= 60) {
+    // High ML fraud score is a strong standalone signal
+    score = Math.min(score, 70 - Math.round((forensics.mlFraudScore - 60) * 0.5))
+  } else if (forensics.mlModelAvailable && forensics.mlFraudScore >= 40) {
+    score = Math.min(score, 80 - Math.round((forensics.mlFraudScore - 40) * 0.3))
+  }
+
   // ── Compound signals ──────────────────────────────────────────────────
   const moderateSignals = [
     forensics.elaScore,
@@ -755,6 +797,7 @@ function computeAuthenticityScore(
     forensics.semanticScore,
     forensics.ghostScore,
     forensics.wordAnomalyScore,
+    ...(forensics.mlModelAvailable ? [forensics.mlFraudScore] : []),
   ].filter(s => s >= 30).length
 
   if (moderateSignals >= 2) {
@@ -880,6 +923,15 @@ function buildAlerts(
     })
   }
 
+  // ── ML Fraud Classifier alerts ────────────────────────────────────────
+  if (forensics.mlModelAvailable && forensics.mlFraudScore >= 40) {
+    alerts.push({
+      level:   forensics.mlFraudScore >= 65 ? 'error' : 'warning',
+      code:    'ML_FRAUD_DETECTED',
+      message: `ML classifier (EfficientNet-B4, trained on 837K+ documents from 20 countries) flagged this document as ${forensics.mlFraudScore >= 65 ? 'likely tampered' : 'suspicious'} (score: ${forensics.mlFraudScore}/100).`,
+    })
+  }
+
   // ── Semantic alerts ────────────────────────────────────────────────────
   for (const sa of forensics.semanticAlerts) {
     alerts.push({ level: 'warning', code: sa.type.toUpperCase(), message: `${sa.label}: ${sa.detail}` })
@@ -932,9 +984,9 @@ export async function POST(req: NextRequest): Promise<NextResponse<AdmissionsVer
     }
   }
 
-  // Run ALL analyses in parallel (7 modules — added JPEG Ghost)
+  // Run ALL analyses in parallel (8 modules — 7 heuristic + 1 ML)
   const canDoPixelAnalysis = imageForPixel !== image || !isPDF
-  const [ocrSettled, faceSettled, frequencySettled, elaSettled, exifSettled, textConsistencySettled, jpegGhostSettled] = await Promise.allSettled([
+  const [ocrSettled, faceSettled, frequencySettled, elaSettled, exifSettled, textConsistencySettled, jpegGhostSettled, mlFraudSettled] = await Promise.allSettled([
     runOCR(image),
     canDoPixelAnalysis ? detectFaces(imageForPixel) : Promise.resolve(null),
     canDoPixelAnalysis ? import('@/lib/frequencyAnalysis').then(m => m.runFrequencyAnalysis(imageForPixel)) : Promise.resolve(null),
@@ -942,6 +994,7 @@ export async function POST(req: NextRequest): Promise<NextResponse<AdmissionsVer
     canDoPixelAnalysis ? runExifAnalysis(imageForPixel) : Promise.resolve(null),
     canDoPixelAnalysis ? runTextConsistencyAnalysis(imageForPixel) : Promise.resolve(null),
     canDoPixelAnalysis ? runJPEGGhost(imageForPixel) : Promise.resolve(null),
+    canDoPixelAnalysis ? runDocFraudClassifier(imageForPixel) : Promise.resolve(null),
   ])
 
   // ── Extract results safely ────────────────────────────────────────────────
@@ -959,6 +1012,8 @@ export async function POST(req: NextRequest): Promise<NextResponse<AdmissionsVer
     textConsistencySettled.status === 'fulfilled' ? textConsistencySettled.value : null
   const jpegGhostResult: JPEGGhostResult | null =
     jpegGhostSettled.status === 'fulfilled' ? jpegGhostSettled.value : null
+  const mlFraudResult: DocFraudResult | null =
+    mlFraudSettled.status === 'fulfilled' ? mlFraudSettled.value : null
 
   // Log errors (non-critical — each module is independent)
   if (ocrSettled.status === 'rejected') {
@@ -981,6 +1036,9 @@ export async function POST(req: NextRequest): Promise<NextResponse<AdmissionsVer
   }
   if (jpegGhostSettled.status === 'rejected') {
     console.error('[admissions-verify] JPEG Ghost error:', jpegGhostSettled.reason)
+  }
+  if (mlFraudSettled.status === 'rejected') {
+    console.error('[admissions-verify] ML Fraud Classifier error:', mlFraudSettled.reason)
   }
 
   // ── Process back image OCR if provided (DNI reverse side for MRZ) ──────
@@ -1097,21 +1155,37 @@ export async function POST(req: NextRequest): Promise<NextResponse<AdmissionsVer
   const textConsistency   = textConsistencyResult?.consistencyScore ?? 0
   const ghostScore        = jpegGhostResult?.ghostScore ?? 0
   const wordAnomalyScore  = Math.max(ocrResult?.wordAnomalyScore ?? 0, backOcrResult?.wordAnomalyScore ?? 0)
+  const mlFraudScore      = mlFraudResult?.fraudScore ?? 0
+  const mlModelAvailable  = mlFraudResult?.modelAvailable ?? false
   const crossValidation   = crossValidationResult?.crossScore ?? 0
   const ocrConfidence     = Math.max(ocrResult?.ocrConfidence ?? 0, backOcrResult?.ocrConfidence ?? 0)
 
-  // Weighted overall risk score — all 9 signals contribute
-  const overallRiskScore = Math.round(
-    frequencyScore    * 0.10 +   // FFT/wavelet
-    semanticScore     * 0.10 +   // NIF/IBAN/date validation
-    faceQualityScore  * 0.04 +   // Face quality
-    elaScore          * 0.16 +   // Error Level Analysis (strong)
-    exifScore         * 0.08 +   // EXIF metadata
-    textConsistency   * 0.08 +   // Text/font consistency
-    crossValidation   * 0.22 +   // MRZ ↔ OCR cross-validation (strongest)
-    ghostScore        * 0.12 +   // JPEG Ghost (multi-source compression)
-    wordAnomalyScore  * 0.10     // Per-word OCR confidence anomaly
-  )
+  // Weighted overall risk score — 9 heuristic signals + ML when available
+  // When ML model is available, it gets 0.15 weight (redistributed from others)
+  const overallRiskScore = mlModelAvailable
+    ? Math.round(
+        frequencyScore    * 0.08 +   // FFT/wavelet
+        semanticScore     * 0.08 +   // NIF/IBAN/date validation
+        faceQualityScore  * 0.03 +   // Face quality
+        elaScore          * 0.13 +   // Error Level Analysis (strong)
+        exifScore         * 0.06 +   // EXIF metadata
+        textConsistency   * 0.07 +   // Text/font consistency
+        crossValidation   * 0.20 +   // MRZ ↔ OCR cross-validation (strongest)
+        ghostScore        * 0.10 +   // JPEG Ghost (multi-source compression)
+        wordAnomalyScore  * 0.10 +   // Per-word OCR confidence anomaly
+        mlFraudScore      * 0.15     // ML EfficientNet-B4 (IDNet-2025 trained)
+      )
+    : Math.round(
+        frequencyScore    * 0.10 +
+        semanticScore     * 0.10 +
+        faceQualityScore  * 0.04 +
+        elaScore          * 0.16 +
+        exifScore         * 0.08 +
+        textConsistency   * 0.08 +
+        crossValidation   * 0.22 +
+        ghostScore        * 0.12 +
+        wordAnomalyScore  * 0.10
+      )
 
   // Manipulation score: best single proxy = max of the strongest signals
   const manipulationScore = Math.max(
@@ -1119,6 +1193,7 @@ export async function POST(req: NextRequest): Promise<NextResponse<AdmissionsVer
     elaScore,                  // JPEG re-compression artifacts
     ghostScore,                // JPEG Ghost (multi-source compression)
     wordAnomalyScore,          // Per-word OCR confidence anomaly
+    mlModelAvailable ? mlFraudScore : 0,  // ML classifier (when available)
     Math.round(frequencyScore * 0.7 + textConsistency * 0.3),  // frequency + text
   )
 
@@ -1133,6 +1208,8 @@ export async function POST(req: NextRequest): Promise<NextResponse<AdmissionsVer
     crossValidation,
     ghostScore,
     wordAnomalyScore,
+    mlFraudScore,
+    mlModelAvailable,
     overallRiskScore,
     faceDetected:   (faceResult?.faceCount ?? 0) > 0,
     faceCount:      faceResult?.faceCount ?? 0,
@@ -1169,6 +1246,8 @@ export async function POST(req: NextRequest): Promise<NextResponse<AdmissionsVer
       crossValidation,
       ghostScore,
       wordAnomalyScore,
+      mlFraudScore,
+      mlModelAvailable,
     },
     mrzAnalysis,
     docType,
@@ -1188,7 +1267,7 @@ export async function POST(req: NextRequest): Promise<NextResponse<AdmissionsVer
   alerts.unshift({
     level:   'info',
     code:    'PIPELINE_INFO',
-    message: `9-layer forensics: OCR (${ocrResult?.engine ?? 'N/A'}) + MRZ ICAO-9303 + Cross-validation + ELA + EXIF + FFT/Wavelet + Text consistency + JPEG Ghost + Word Anomaly. ${imageBack ? 'Front + back images analyzed.' : isPDF ? 'PDF rendered to PNG.' : 'Direct image analysis.'}`,
+    message: `${mlModelAvailable ? '10' : '9'}-layer forensics: OCR (${ocrResult?.engine ?? 'N/A'}) + MRZ ICAO-9303 + Cross-validation + ELA + EXIF + FFT/Wavelet + Text consistency + JPEG Ghost + Word Anomaly${mlModelAvailable ? ' + ML Classifier (EfficientNet-B4, 837K docs)' : ''}. ${imageBack ? 'Front + back images analyzed.' : isPDF ? 'PDF rendered to PNG.' : 'Direct image analysis.'}`,
   })
 
   const processingMs = Date.now() - t0
