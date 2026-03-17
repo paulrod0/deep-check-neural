@@ -15,6 +15,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { validateAdminSession } from '@/lib/adminAuth'
 
 function getClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL!
@@ -23,6 +24,10 @@ function getClient() {
 }
 
 export async function GET(req: NextRequest): Promise<NextResponse> {
+  if (!await validateAdminSession(req)) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+
   const sp = req.nextUrl.searchParams
 
   const limit   = Math.min(Number(sp.get('limit'))  || 50, 200)

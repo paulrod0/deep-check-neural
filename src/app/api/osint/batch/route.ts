@@ -45,6 +45,31 @@ async function resolveAuth(req: NextRequest) {
   return null
 }
 
+// ─── SSRF protection — block private/internal URLs ──────────────────────────
+
+function isUrlSafe(urlStr: string): boolean {
+  try {
+    const u = new URL(urlStr)
+    // Only allow http/https
+    if (u.protocol !== 'http:' && u.protocol !== 'https:') return false
+    const host = u.hostname.toLowerCase()
+    // Block localhost, link-local, metadata endpoints
+    if (host === 'localhost' || host === '127.0.0.1' || host === '::1' || host === '[::1]') return false
+    if (host === '0.0.0.0' || host === '169.254.169.254' || host === 'metadata.google.internal') return false
+    if (host.endsWith('.internal') || host.endsWith('.local')) return false
+    // Block private RFC1918 ranges
+    const parts = host.split('.').map(Number)
+    if (parts.length === 4 && !parts.some(isNaN)) {
+      if (parts[0] === 10) return false                                        // 10.0.0.0/8
+      if (parts[0] === 172 && parts[1] >= 16 && parts[1] <= 31) return false  // 172.16.0.0/12
+      if (parts[0] === 192 && parts[1] === 168) return false                  // 192.168.0.0/16
+    }
+    return true
+  } catch {
+    return false
+  }
+}
+
 // ─── Forensic analysis engine (heuristic, no GPU required) ───────────────────
 
 function analyzePixelVariance(buffer: Buffer): number {
@@ -122,8 +147,12 @@ async function runForensicAnalysis(item: BatchItem): Promise<ForensicResult> {
     let buffer: Buffer
 
     if (item.url) {
+      if (!isUrlSafe(item.url)) {
+        throw new Error('URL blocked: private/internal addresses are not allowed')
+      }
       const resp = await fetch(item.url, {
         signal: AbortSignal.timeout(10_000),
+        redirect: 'error', // Prevent open-redirect SSRF bypasses
         headers: { 'User-Agent': 'Deep-Check-OSINT/2.0' },
       })
       if (!resp.ok) throw new Error(`HTTP ${resp.status} fetching URL`)
@@ -174,7 +203,12 @@ async function runForensicAnalysis(item: BatchItem): Promise<ForensicResult> {
 async function deliverCallback(callbackUrl: string, payload: unknown): Promise<void> {
   try {
     const body = JSON.stringify(payload)
-    const sig  = createHmac('sha256', process.env.OSINT_WEBHOOK_SECRET ?? 'deepcheck-batch-secret')
+    const secret = process.env.OSINT_WEBHOOK_SECRET
+    if (!secret) {
+      console.warn('[osint/batch] OSINT_WEBHOOK_SECRET not set — skipping callback delivery')
+      return
+    }
+    const sig  = createHmac('sha256', secret)
       .update(body)
       .digest('hex')
 
@@ -200,10 +234,11 @@ export async function POST(req: NextRequest) {
   const ip  = extractIP(req.headers)
 
   try {
-    // Auth: session or API key
+    // Auth: session or API key — REQUIRED
     const org = await resolveAuth(req)
-    // Allow unauthenticated for now (caller already passed API key check above),
-    // but note it for audit.
+    if (!org) {
+      return NextResponse.json({ error: 'Unauthorized — session or X-API-Key required' }, { status: 401 })
+    }
 
     const body = await req.json()
     const { items, callbackUrl } = body as {
@@ -260,8 +295,8 @@ export async function POST(req: NextRequest) {
 
     const response = { batchId, results, processedAt }
 
-    // Fire-and-forget callback if provided
-    if (callbackUrl) {
+    // Fire-and-forget callback if provided (SSRF-safe)
+    if (callbackUrl && isUrlSafe(callbackUrl)) {
       void deliverCallback(callbackUrl, response)
     }
 

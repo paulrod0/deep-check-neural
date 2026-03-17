@@ -16,10 +16,27 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { deployModel } from '@/lib/continuousLearning'
 import { createClient } from '@supabase/supabase-js'
+import crypto from 'crypto'
 
 // ── Config ──────────────────────────────────────────────────────────────────────
 
 const WEBHOOK_SECRET = process.env.ML_WEBHOOK_SECRET || process.env.SAGEMAKER_WEBHOOK_SECRET || ''
+
+function verifyWebhookSecret(provided: string | null): boolean {
+  if (!WEBHOOK_SECRET) {
+    console.error('[ml/webhook] ML_WEBHOOK_SECRET / SAGEMAKER_WEBHOOK_SECRET not set — rejecting')
+    return false
+  }
+  if (!provided) return false
+
+  // Strip "Bearer " prefix if present
+  const secret = provided.startsWith('Bearer ') ? provided.slice(7) : provided
+
+  const expectedBuf = Buffer.from(WEBHOOK_SECRET, 'utf8')
+  const providedBuf = Buffer.from(secret, 'utf8')
+  if (expectedBuf.length !== providedBuf.length) return false
+  return crypto.timingSafeEqual(expectedBuf, providedBuf)
+}
 
 function getSupabase() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL || ''
@@ -53,9 +70,9 @@ interface SageMakerEvent {
 // ── Route Handler ───────────────────────────────────────────────────────────────
 
 export async function POST(req: NextRequest): Promise<NextResponse> {
-  // Verify webhook secret
+  // Verify webhook secret (constant-time comparison, rejects when secret unset)
   const authHeader = req.headers.get('x-webhook-secret') || req.headers.get('authorization')
-  if (WEBHOOK_SECRET && authHeader !== WEBHOOK_SECRET && authHeader !== `Bearer ${WEBHOOK_SECRET}`) {
+  if (!verifyWebhookSecret(authHeader)) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 

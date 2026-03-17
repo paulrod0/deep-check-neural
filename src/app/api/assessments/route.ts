@@ -24,8 +24,13 @@ export async function POST(req: NextRequest) {
     const t0 = Date.now()
     const ip = extractIP(req.headers)
 
-    // ── Plan gating: check session limit for org users ──
+    // Auth required — admin session or org session
     const org = await getOrgFromSession(req)
+    if (!org && !await validateAdminSession(req)) {
+        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
+    // ── Plan gating: check session limit for org users ──
     if (org) {
         const { allowed, used, limit } = await checkSessionLimit(org.id)
         if (!allowed) {

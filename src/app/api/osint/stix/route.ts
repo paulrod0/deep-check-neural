@@ -9,6 +9,17 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { writeAuditLog, extractIP } from '@/lib/auditLog'
 import { getOrgFromSession } from '@/lib/auth'
+import { getOrgByApiKey } from '@/lib/planLimits'
+
+// ─── Auth helper — session OR X-API-Key ──────────────────────────────────────
+
+async function resolveAuth(req: NextRequest) {
+  const sessionOrg = await getOrgFromSession(req)
+  if (sessionOrg) return sessionOrg
+  const apiKey = req.headers.get('x-api-key')
+  if (apiKey) return await getOrgByApiKey(apiKey)
+  return null
+}
 
 // ─── Supabase client ──────────────────────────────────────────────────────────
 
@@ -214,6 +225,13 @@ function buildBundleFromRaw(analysis: Record<string, unknown>): StixBundle {
 export async function GET(req: NextRequest) {
   const t0  = Date.now()
   const ip  = extractIP(req.headers)
+
+  // Auth required — STIX exports contain forensic data
+  const org = await resolveAuth(req)
+  if (!org) {
+    return NextResponse.json({ error: 'Unauthorized — session or X-API-Key required' }, { status: 401 })
+  }
+
   const { searchParams } = new URL(req.url)
 
   const analysisId = searchParams.get('analysisId')
@@ -298,7 +316,11 @@ export async function POST(req: NextRequest) {
   const ip = extractIP(req.headers)
 
   try {
-    await getOrgFromSession(req) // Auth optional — no hard gate for STIX conversion
+    // Auth required for STIX conversion
+    const org = await resolveAuth(req)
+    if (!org) {
+      return NextResponse.json({ error: 'Unauthorized — session or X-API-Key required' }, { status: 401 })
+    }
 
     const body = await req.json()
 

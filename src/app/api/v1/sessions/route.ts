@@ -80,12 +80,23 @@ export async function POST(req: NextRequest) {
 
     try {
         const body = await req.json()
+        // Whitelist accepted fields — prevent prototype pollution / unexpected fields
         const assessment = {
-            ...body,
             id: body.id ?? Math.random().toString(36).substr(2, 9),
+            candidateName: body.candidateName ?? '',
+            role: body.role ?? '',
             date: body.date ?? new Date().toISOString().split('T')[0],
-            alerts: body.alerts ?? [],
-            evidence: body.evidence ?? [],
+            score: typeof body.score === 'number' ? body.score : 0,
+            status: body.status ?? 'review',
+            alerts: Array.isArray(body.alerts) ? body.alerts : [],
+            evidence: Array.isArray(body.evidence) ? body.evidence : [],
+            keystrokeCount: typeof body.keystrokeCount === 'number' ? body.keystrokeCount : 0,
+            aiRisk: typeof body.aiRisk === 'number' ? body.aiRisk : 0,
+            tabSwitchCount: typeof body.tabSwitchCount === 'number' ? body.tabSwitchCount : 0,
+            gazeEventCount: typeof body.gazeEventCount === 'number' ? body.gazeEventCount : 0,
+            livenessScore: typeof body.livenessScore === 'number' ? body.livenessScore : null,
+            identityMatchScore: typeof body.identityMatchScore === 'number' ? body.identityMatchScore : null,
+            externalRef: typeof body.externalRef === 'string' ? body.externalRef : undefined,
             lastEvent: body.lastEvent ?? 'Created via API',
         }
         await saveAssessment(assessment)

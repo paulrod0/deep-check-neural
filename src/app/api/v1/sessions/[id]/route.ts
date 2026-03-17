@@ -66,9 +66,13 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     }
 
     if (status) assessment.status = status
-    if (externalRef) assessment.externalRef = externalRef
-    if (reviewNote) {
-        const note = `[API Review ${new Date().toLocaleTimeString()}] ${reviewNote}`
+    if (externalRef && typeof externalRef === 'string') {
+        assessment.externalRef = externalRef.slice(0, 255)
+    }
+    if (reviewNote && typeof reviewNote === 'string') {
+        // Cap review note length to prevent abuse (max 2000 chars)
+        const truncated = reviewNote.slice(0, 2000)
+        const note = `[API Review ${new Date().toLocaleTimeString()}] ${truncated}`
         assessment.alerts = [note, ...(Array.isArray(assessment.alerts) ? assessment.alerts : [])]
     }
 
