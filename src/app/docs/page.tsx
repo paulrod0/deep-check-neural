@@ -5,7 +5,7 @@ import Link from 'next/link'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-type Tab = 'overview' | 'sessions' | 'enrollment' | 'webhooks' | 'keys'
+type Tab = 'overview' | 'sessions' | 'enrollment' | 'verify' | 'certificates' | 'ml' | 'webhooks' | 'keys'
 
 const BASE_URL = 'https://deep-check-two.vercel.app'
 
@@ -47,11 +47,14 @@ export default function DocsPage() {
     const [tab, setTab] = useState<Tab>('overview')
 
     const tabs: { id: Tab; label: string }[] = [
-        { id: 'overview',   label: 'Overview' },
-        { id: 'sessions',   label: 'Sessions API' },
-        { id: 'enrollment', label: 'Enrollment API' },
-        { id: 'webhooks',   label: 'Webhooks' },
-        { id: 'keys',       label: 'API Keys' },
+        { id: 'overview',      label: 'Overview' },
+        { id: 'verify',        label: 'Verify API' },
+        { id: 'certificates',  label: 'Certificates' },
+        { id: 'ml',            label: 'ML / Training' },
+        { id: 'sessions',      label: 'Sessions API' },
+        { id: 'enrollment',    label: 'Enrollment API' },
+        { id: 'webhooks',      label: 'Webhooks' },
+        { id: 'keys',          label: 'API Keys' },
     ]
 
     return (
@@ -141,6 +144,19 @@ export default function DocsPage() {
                         </div>
 
                         <h2 style={{ fontSize: '1.2rem', marginBottom: '16px' }}>Endpoints disponibles</h2>
+                        <h3 style={{ fontSize: '0.95rem', marginBottom: '8px', marginTop: '20px', color: 'var(--color-primary)' }}>Document Verification</h3>
+                        <Endpoint method="POST"  path="/api/v1/verify"          desc="Verify a single document or batch (up to 10)" />
+                        <Endpoint method="GET"   path="/api/certificates?id=..."  desc="Retrieve a signed verification certificate" />
+                        <Endpoint method="POST"  path="/api/certificates"       desc="Generate a verification certificate from analysis ID" />
+
+                        <h3 style={{ fontSize: '0.95rem', marginBottom: '8px', marginTop: '20px', color: 'var(--color-primary)' }}>ML / Continuous Learning</h3>
+                        <Endpoint method="POST"  path="/api/ml/feedback"        desc="Submit user feedback for model improvement" />
+                        <Endpoint method="GET"   path="/api/ml/feedback"        desc="Get retraining status and model history" />
+                        <Endpoint method="GET"   path="/api/ml/status"          desc="Get comprehensive ML system metrics" />
+                        <Endpoint method="POST"  path="/api/ml/retrain"         desc="Trigger model retraining" />
+                        <Endpoint method="POST"  path="/api/ml/webhook"         desc="SageMaker training completion webhook" />
+
+                        <h3 style={{ fontSize: '0.95rem', marginBottom: '8px', marginTop: '20px', color: 'var(--color-primary)' }}>Sessions & Enrollment</h3>
                         <Endpoint method="GET"   path="/api/v1/sessions"        desc="Listar sesiones (paginado, filtrable por status/external_ref)" />
                         <Endpoint method="POST"  path="/api/v1/sessions"        desc="Crear sesión desde plataforma externa" />
                         <Endpoint method="GET"   path="/api/v1/sessions/:id"    desc="Obtener sesión por ID" />
@@ -149,6 +165,208 @@ export default function DocsPage() {
                         <Endpoint method="POST"  path="/api/v1/enroll"          desc="Guardar perfil biométrico de enrollment" />
                         <Endpoint method="GET"   path="/api/v1/keys"            desc="Listar API keys (requiere X-Admin-Secret)" />
                         <Endpoint method="POST"  path="/api/v1/keys"            desc="Crear nueva API key (requiere X-Admin-Secret)" />
+                    </>
+                )}
+
+                {tab === 'verify' && (
+                    <>
+                        <h1 style={{ fontSize: '2rem', marginBottom: '8px' }}>Document Verification API</h1>
+                        <p style={{ color: 'var(--color-text-muted)', marginBottom: '32px', lineHeight: 1.7 }}>
+                            Programmatic KYC document verification. Supports single and batch (up to 10) documents.
+                            Each verification returns a signed certificate that can be shared with third parties.
+                        </p>
+
+                        <h2 style={{ fontSize: '1.2rem', marginBottom: '12px' }}>POST /api/v1/verify — Single Document</h2>
+                        <Code lang="bash">{`curl -X POST ${BASE_URL}/api/v1/verify \\
+  -H "Authorization: Bearer dc_live_xxx" \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "documentFront": "data:image/jpeg;base64,/9j/4AAQ...",
+    "documentType": "passport",
+    "externalRef": "APP-2026-001",
+    "webhookUrl": "https://your-server.com/webhook"
+  }'`}</Code>
+
+                        <h3 style={{ fontSize: '0.95rem', marginBottom: '8px', color: 'var(--color-text-muted)' }}>Response</h3>
+                        <Code>{`{
+  "success": true,
+  "data": {
+    "certificateId": "a1b2c3d4-...",
+    "verdict": "authentic",
+    "documentType": "passport",
+    "mrz": {
+      "valid": true,
+      "documentType": "TD3",
+      "fields": {
+        "surname": "SMITH",
+        "givenNames": "JOHN WILLIAM",
+        "nationality": "GBR",
+        "docNumber": "123456789",
+        "dobFormatted": "15/03/1990",
+        "expiryFormatted": "01/01/2030",
+        "isExpired": false
+      },
+      "checksumsPassed": 4,
+      "checksumsFailed": 0,
+      "alerts": []
+    },
+    "forensics": { "riskScore": 5, "riskLevel": "clean" },
+    "faceQuality": { "faceFound": true, "faceCount": 1, "qualityScore": 12 },
+    "verifyUrl": "https://deep-check.io/verify/a1b2c3d4-...",
+    "processingMs": 1245
+  }
+}`}</Code>
+
+                        <h2 style={{ fontSize: '1.2rem', marginBottom: '12px' }}>POST /api/v1/verify — Batch (up to 10)</h2>
+                        <Code lang="bash">{`curl -X POST ${BASE_URL}/api/v1/verify \\
+  -H "Authorization: Bearer dc_live_xxx" \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "documents": [
+      { "documentFront": "data:image/jpeg;base64,...", "documentType": "passport" },
+      { "documentFront": "data:image/jpeg;base64,...", "documentType": "dni" }
+    ]
+  }'`}</Code>
+
+                        <h3 style={{ fontSize: '0.95rem', marginBottom: '8px', color: 'var(--color-text-muted)' }}>Batch Response</h3>
+                        <Code>{`{
+  "success": true,
+  "data": {
+    "results": [ ... ],
+    "totalDocuments": 2,
+    "verdicts": { "authentic": 1, "suspicious": 1, "tampered": 0 }
+  }
+}`}</Code>
+
+                        <h2 style={{ fontSize: '1.2rem', marginBottom: '8px', marginTop: '2rem' }}>Supported Document Types</h2>
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '24px' }}>
+                            {[
+                                ['passport', 'Passport (MRZ TD3, 2×44)'],
+                                ['dni', 'National ID / DNI (MRZ TD1, 3×30)'],
+                                ['driving_license', 'Driving Licence (EU format)'],
+                                ['residence_permit', 'Residence Permit (TIE/NIE)'],
+                                ['eu_id_card', 'EU ID Card older format (TD2)'],
+                                ['visa', 'Visa (MRV-B, 2×36)'],
+                            ].map(([type, desc]) => (
+                                <div key={type} style={{ background: 'rgba(255,255,255,0.03)', padding: '8px 12px', borderRadius: 8, fontSize: '0.82rem' }}>
+                                    <code style={{ color: 'var(--color-primary)' }}>{type}</code>
+                                    <span style={{ color: 'var(--color-text-muted)', marginLeft: '8px' }}>{desc}</span>
+                                </div>
+                            ))}
+                        </div>
+                    </>
+                )}
+
+                {tab === 'certificates' && (
+                    <>
+                        <h1 style={{ fontSize: '2rem', marginBottom: '8px' }}>Verification Certificates</h1>
+                        <p style={{ color: 'var(--color-text-muted)', marginBottom: '32px', lineHeight: 1.7 }}>
+                            Generate cryptographically signed certificates for verified documents.
+                            Certificates can be shared with employers, universities, or government agencies.
+                            Third parties verify authenticity at the certificate URL.
+                        </p>
+
+                        <h2 style={{ fontSize: '1.2rem', marginBottom: '12px' }}>GET /api/certificates?id=&lt;certificateId&gt;</h2>
+                        <Code lang="bash">{`curl "${BASE_URL}/api/certificates?id=a1b2c3d4-..."
+
+# Response:
+{
+  "valid": true,
+  "expired": false,
+  "certificate": {
+    "id": "a1b2c3d4-...",
+    "version": "1.0",
+    "issuedAt": "2026-03-17T14:30:00Z",
+    "expiresAt": "2027-03-17T14:30:00Z",
+    "verification": {
+      "verdict": "authentic",
+      "documentType": "passport",
+      "mrzSummary": { "nationality": "ESP", "checksumsPassed": 4 },
+      "forensicsSummary": { "riskScore": 5, "riskLevel": "clean" },
+      "faceMatchPerformed": true,
+      "livenessCheckPerformed": true
+    },
+    "verifyUrl": "https://deep-check.io/verify/a1b2c3d4-...",
+    "signature": "a3f8b2c1d4e5..."
+  }
+}`}</Code>
+
+                        <div style={{ background: 'rgba(0,229,255,0.06)', border: '1px solid rgba(0,229,255,0.2)', borderRadius: 10, padding: '1rem', marginBottom: '1.5rem' }}>
+                            <p style={{ fontSize: '0.85rem', color: 'var(--color-text-muted)' }}>
+                                <strong style={{ color: 'var(--color-primary)' }}>Tamper-Proof:</strong> Each certificate includes a SHA-256 HMAC signature.
+                                Any modification to the certificate data invalidates the signature.
+                                Third parties can verify authenticity by checking the <code>verifyUrl</code>.
+                            </p>
+                        </div>
+                    </>
+                )}
+
+                {tab === 'ml' && (
+                    <>
+                        <h1 style={{ fontSize: '2rem', marginBottom: '8px' }}>ML / Continuous Learning API</h1>
+                        <p style={{ color: 'var(--color-text-muted)', marginBottom: '32px', lineHeight: 1.7 }}>
+                            The continuous learning system improves the model with every verification.
+                            Users submit feedback on model predictions, which accumulates until the
+                            retraining threshold is met. New models are auto-deployed only if they
+                            exceed the current model&apos;s AUC.
+                        </p>
+
+                        <h2 style={{ fontSize: '1.2rem', marginBottom: '12px' }}>POST /api/ml/feedback — Submit Correction</h2>
+                        <Code lang="bash">{`curl -X POST ${BASE_URL}/api/ml/feedback \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "analysis_id": "cert_171...",
+    "predicted_label": "genuine",
+    "predicted_score": 85,
+    "actual_label": "tampered",
+    "document_type": "passport",
+    "notes": "Visible editing on expiry date"
+  }'`}</Code>
+
+                        <h2 style={{ fontSize: '1.2rem', marginBottom: '12px' }}>GET /api/ml/status — System Metrics</h2>
+                        <Code>{`{
+  "deployedModel": {
+    "version": 3,
+    "auc": 0.8535,
+    "accuracy": 0.842,
+    "f1": 0.8987,
+    "training_samples": 1960,
+    "deployed": true
+  },
+  "retrainStatus": {
+    "canRetrain": false,
+    "pendingSamples": 42,
+    "threshold": 100,
+    "feedbackCount": 142
+  },
+  "feedbackStats": {
+    "total": 142,
+    "used": 100,
+    "corrections": 18
+  },
+  "deployMode": "cloud",
+  "sagemakerConfigured": true
+}`}</Code>
+
+                        <h2 style={{ fontSize: '1.2rem', marginBottom: '12px' }}>POST /api/ml/retrain — Trigger Retraining</h2>
+                        <Code lang="bash">{`curl -X POST ${BASE_URL}/api/ml/retrain \\
+  -H "X-Retrain-Secret: your-secret" \\
+  -d '{ "orgId": "global", "force": false }'
+
+# Response:
+{
+  "success": true,
+  "jobName": "deep-check-retrain-global-1710...",
+  "message": "Retraining triggered with 105 new samples",
+  "estimatedDurationMinutes": 30
+}`}</Code>
+
+                        <div style={{ background: 'rgba(0,229,255,0.06)', border: '1px solid rgba(0,229,255,0.2)', borderRadius: 10, padding: '1rem' }}>
+                            <p style={{ fontSize: '0.85rem', color: 'var(--color-text-muted)' }}>
+                                <strong style={{ color: 'var(--color-primary)' }}>Architecture:</strong> Feedback → Accumulate → SageMaker Training → Auto-deploy with AUC rollback protection.
+                                On-premise deployments use local ONNX models instead of SageMaker.
+                            </p>
+                        </div>
                     </>
                 )}
 
