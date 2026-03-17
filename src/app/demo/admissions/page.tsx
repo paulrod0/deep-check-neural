@@ -1066,6 +1066,93 @@ export default function AdmissionsDemoPage() {
               </div>
             )}
 
+            {/* Country Validation (195 countries) */}
+            {result.countryInfo && (
+              <div style={{ background: '#0d0d1a', border: '1px solid #00E5FF33', borderRadius: 16, padding: 20, marginBottom: 20 }}>
+                <h3 style={{ fontSize: 12, fontWeight: 700, color: '#00E5FF', letterSpacing: 1, textTransform: 'uppercase', margin: '0 0 14px', display: 'flex', alignItems: 'center', gap: 8 }}>
+                  🌍 Country Validation
+                  {result.countryValidation && (
+                    <span style={{
+                      padding: '2px 10px', borderRadius: 20, fontSize: 11,
+                      background: result.countryValidation.valid ? 'rgba(0,255,157,0.12)' : 'rgba(255,77,77,0.12)',
+                      color: result.countryValidation.valid ? '#00ff9d' : '#ff4d4d',
+                    }}>
+                      {result.countryValidation.valid ? 'VALID' : 'INVALID'}
+                    </span>
+                  )}
+                </h3>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 10 }}>
+                  <div style={{ padding: '8px 12px', background: '#11112a', borderRadius: 8, border: '1px solid #1e1e30' }}>
+                    <div style={{ fontSize: 10, color: '#555', textTransform: 'uppercase', letterSpacing: 1 }}>Country</div>
+                    <div style={{ fontSize: 14, fontWeight: 700, color: '#eee', marginTop: 4 }}>{result.countryInfo.name}</div>
+                  </div>
+                  <div style={{ padding: '8px 12px', background: '#11112a', borderRadius: 8, border: '1px solid #1e1e30' }}>
+                    <div style={{ fontSize: 10, color: '#555', textTransform: 'uppercase', letterSpacing: 1 }}>Region</div>
+                    <div style={{ fontSize: 14, fontWeight: 700, color: '#eee', marginTop: 4 }}>{result.countryInfo.region}</div>
+                  </div>
+                  <div style={{ padding: '8px 12px', background: '#11112a', borderRadius: 8, border: '1px solid #1e1e30' }}>
+                    <div style={{ fontSize: 10, color: '#555', textTransform: 'uppercase', letterSpacing: 1 }}>NFC</div>
+                    <div style={{ fontSize: 14, fontWeight: 700, color: result.countryInfo.hasNFC ? '#00ff9d' : '#555', marginTop: 4 }}>{result.countryInfo.hasNFC ? 'Supported' : 'No NFC'}</div>
+                  </div>
+                  <div style={{ padding: '8px 12px', background: '#11112a', borderRadius: 8, border: '1px solid #1e1e30' }}>
+                    <div style={{ fontSize: 10, color: '#555', textTransform: 'uppercase', letterSpacing: 1 }}>ID Types</div>
+                    <div style={{ fontSize: 12, fontWeight: 600, color: '#aaa', marginTop: 4 }}>{result.countryInfo.idTypes.join(', ')}</div>
+                  </div>
+                </div>
+                {result.countryValidation && (
+                  <div style={{ marginTop: 12, padding: '10px 14px', background: result.countryValidation.valid ? 'rgba(0,255,157,0.06)' : 'rgba(255,77,77,0.06)', borderRadius: 8, border: `1px solid ${result.countryValidation.valid ? '#00ff9d22' : '#ff4d4d22'}` }}>
+                    <span style={{ fontSize: 12, color: result.countryValidation.valid ? '#00ff9d' : '#ff4d4d', fontWeight: 700 }}>
+                      {result.countryValidation.documentType}
+                    </span>
+                    {result.countryValidation.formattedNumber && (
+                      <span style={{ fontSize: 12, color: '#aaa', marginLeft: 12 }}>
+                        {result.countryValidation.formattedNumber}
+                      </span>
+                    )}
+                    {result.countryValidation.details && (
+                      <span style={{ fontSize: 11, color: '#777', marginLeft: 12 }}>
+                        {result.countryValidation.details}
+                      </span>
+                    )}
+                  </div>
+                )}
+                {result.coverage && (
+                  <div style={{ marginTop: 10, fontSize: 11, color: '#555' }}>
+                    Coverage: {result.coverage.totalCountries} countries · {result.coverage.tier1Countries} tier-1 · {result.coverage.nfcCountries} NFC-enabled
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Name Transliteration (ICAO 9303 multi-script) */}
+            {result.nameTransliteration && (
+              <div style={{ background: '#0d0d1a', border: '1px solid #7ab3ff33', borderRadius: 16, padding: 20, marginBottom: 20 }}>
+                <h3 style={{ fontSize: 12, fontWeight: 700, color: '#7ab3ff', letterSpacing: 1, textTransform: 'uppercase', margin: '0 0 14px' }}>
+                  🔤 Name Transliteration (ICAO 9303)
+                </h3>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                  <div style={{ padding: '10px 14px', background: '#11112a', borderRadius: 8, border: '1px solid #1e1e30' }}>
+                    <div style={{ fontSize: 10, color: '#555', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 6 }}>Surname</div>
+                    <div style={{ fontSize: 14, fontWeight: 700, color: '#eee' }}>{result.nameTransliteration.surname.mrzForm || '—'}</div>
+                    {result.nameTransliteration.surname.script !== 'latin' && result.nameTransliteration.surname.script !== 'unknown' && (
+                      <div style={{ fontSize: 11, color: '#7ab3ff', marginTop: 4 }}>
+                        Script: {result.nameTransliteration.surname.script} · Original: {result.nameTransliteration.surname.original}
+                      </div>
+                    )}
+                  </div>
+                  <div style={{ padding: '10px 14px', background: '#11112a', borderRadius: 8, border: '1px solid #1e1e30' }}>
+                    <div style={{ fontSize: 10, color: '#555', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 6 }}>Given Names</div>
+                    <div style={{ fontSize: 14, fontWeight: 700, color: '#eee' }}>{result.nameTransliteration.givenNames.mrzForm || '—'}</div>
+                    {result.nameTransliteration.givenNames.script !== 'latin' && result.nameTransliteration.givenNames.script !== 'unknown' && (
+                      <div style={{ fontSize: 11, color: '#7ab3ff', marginTop: 4 }}>
+                        Script: {result.nameTransliteration.givenNames.script} · Original: {result.nameTransliteration.givenNames.original}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
+
             {/* Alerts */}
             {result.alerts.length > 0 && (
               <div style={{ background: '#0d0d1a', border: '1px solid #1e1e30', borderRadius: 16, padding: 20, marginBottom: 20 }}>
