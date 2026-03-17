@@ -1,29 +1,46 @@
 'use client'
 
-import React from 'react'
+import React, { useState } from 'react'
 import Link from 'next/link'
-import { usePathname } from 'next/navigation'
+import { usePathname, useRouter } from 'next/navigation'
 import styles from './Sidebar.module.css'
 
 export default function Sidebar() {
     const pathname = usePathname()
+    const router = useRouter()
+    const [signingOut, setSigningOut] = useState(false)
 
     const navItems: Array<{ label: string; href: string; disabled?: boolean }> = [
         { label: 'Overview', href: '/dashboard' },
         { label: 'Assessments', href: '/dashboard/assessments' },
+        { label: 'ML Dashboard', href: '/dashboard/ml' },
         { label: 'Global Benchmarks', href: '/dashboard/benchmarks' },
-        { label: 'Account Settings', href: '/dashboard/settings' },
         { label: '──────────', href: '#', disabled: true },
-        { label: '⬡ Forensia Documental', href: '/documents' },
+        { label: 'Team Members', href: '/dashboard/team' },
+        { label: 'Settings & Billing', href: '/dashboard/settings' },
         { label: '──────────', href: '#2', disabled: true },
-        { label: '⬡ Enrollment', href: '/enroll' },
-        { label: '⬡ Verificar Cert.', href: '/verify' },
-        { label: '⬡ API Docs', href: '/docs' },
+        { label: 'KYC Verification', href: '/documents/verify' },
+        { label: 'Document Forensics', href: '/documents' },
+        { label: 'Live Interview', href: '/interview' },
         { label: '──────────', href: '#3', disabled: true },
-        { label: '⬡ ENS Básico', href: '/ens' },
-        { label: '⬡ ISO 27001 SoA', href: '/iso27001' },
-        { label: '⬡ DPIA', href: '/dpia' },
+        { label: 'Enrollment', href: '/enroll' },
+        { label: 'Verify Certificate', href: '/verify' },
+        { label: 'API Docs', href: '/docs' },
+        { label: '──────────', href: '#4', disabled: true },
+        { label: 'ENS Compliance', href: '/ens' },
+        { label: 'ISO 27001 SoA', href: '/iso27001' },
+        { label: 'DPIA', href: '/dpia' },
     ]
+
+    async function handleSignOut() {
+        setSigningOut(true)
+        try {
+            await fetch('/api/auth/logout', { method: 'POST' })
+            router.push('/auth/login')
+        } catch {
+            setSigningOut(false)
+        }
+    }
 
     return (
         <nav className={styles.sidebar}>
@@ -54,8 +71,25 @@ export default function Sidebar() {
                 })}
             </ul>
             <div className={styles.footer}>
+                <button
+                    onClick={handleSignOut}
+                    disabled={signingOut}
+                    style={{
+                        background: 'rgba(255,77,77,0.08)',
+                        border: '1px solid rgba(255,77,77,0.2)',
+                        borderRadius: '6px',
+                        padding: '6px 12px',
+                        fontSize: '0.78rem',
+                        color: '#ff4d4d',
+                        cursor: signingOut ? 'wait' : 'pointer',
+                        width: '100%',
+                        marginBottom: '8px',
+                    }}
+                >
+                    {signingOut ? 'Signing out...' : 'Sign Out'}
+                </button>
                 <div className={styles.status}>System Active</div>
-                <div className={styles.version}>v2.6.4-prod</div>
+                <div className={styles.version}>v2.7.0-prod</div>
             </div>
         </nav>
     )
