@@ -20,6 +20,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { parseMRZ } from '@/lib/mrzParser'
+import { autoValidateDocument, getCountryByCode, getCoverageStats, type ValidationResult } from '@/lib/countryValidators'
 import type { ForensicsReport } from '@/lib/imageForensics'
 
 function getClient() {
@@ -104,6 +105,26 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   // MRZ parse (works on any OCR text, including empty → returns no MRZ alert)
   const mrzResult = parseMRZ(ocrRawText)
 
+  // ── 1b. Country-specific document validation ─────────────────────────────
+  let countryValidation: ValidationResult | null = null
+  let countryInfo: { name: string; region: string; idTypes: string[]; hasNFC: boolean } | null = null
+
+  if (mrzResult.fields.nationality || mrzResult.fields.issuingCountry) {
+    const natCode = mrzResult.fields.nationality || mrzResult.fields.issuingCountry
+    const country = getCountryByCode(natCode)
+    if (country) {
+      countryInfo = {
+        name:    country.name,
+        region:  country.region,
+        idTypes: country.idTypes,
+        hasNFC:  country.hasNFC,
+      }
+    }
+    if (mrzResult.fields.docNumber) {
+      countryValidation = autoValidateDocument(natCode, mrzResult.fields.docNumber)
+    }
+  }
+
   // ── 2. Face quality via Rekognition (cloud only) ───────────────────────────
   let faceQualityScore = 0
   let faceCount        = 0
@@ -168,6 +189,12 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
           faceSuspicious,
           ocrMode,
           onPremise:       IS_ONPREMISE,
+          countryInfo,
+          countryValidation: countryValidation ? {
+            valid:   countryValidation.valid,
+            docType: countryValidation.documentType,
+            details: countryValidation.details,
+          } : null,
         },
         case_ref:          'identity_verification',
         submitted_by:      'kyc_wizard',
@@ -181,6 +208,8 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   }
 
   // ── Response ──────────────────────────────────────────────────────────────
+  const coverage = getCoverageStats()
+
   return NextResponse.json({
     ocr: {
       rawTextSnippet:  ocrRawText.slice(0, 400),
@@ -198,6 +227,20 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       faceCount,
       qualityScore:  faceQualityScore,
       suspicious:    faceSuspicious,
+    },
+    countryValidation: countryValidation ? {
+      valid:           countryValidation.valid,
+      country:         countryValidation.country,
+      countryCode:     countryValidation.countryCode,
+      documentType:    countryValidation.documentType,
+      formattedNumber: countryValidation.formattedNumber,
+      details:         countryValidation.details,
+    } : null,
+    countryInfo,
+    coverage: {
+      totalCountries:  coverage.totalCountries,
+      tier1Countries:  coverage.tier1Countries,
+      nfcCountries:    coverage.nfcCountries,
     },
     verdict,
     certificateId,

@@ -149,6 +149,8 @@ export default function DocsPage() {
                         <h2 style={{ fontSize: '1.2rem', marginBottom: '16px' }}>Endpoints disponibles</h2>
                         <h3 style={{ fontSize: '0.95rem', marginBottom: '8px', marginTop: '20px', color: 'var(--color-primary)' }}>Document Verification</h3>
                         <Endpoint method="POST"  path="/api/v1/verify"          desc="Verify a single document or batch (up to 10)" />
+                        <Endpoint method="POST"  path="/api/documents/validate" desc="Standalone document number validation (195 countries)" />
+                        <Endpoint method="GET"   path="/api/documents/coverage" desc="Country coverage statistics and supported document types" />
                         <Endpoint method="GET"   path="/api/certificates?id=..."  desc="Retrieve a signed verification certificate" />
                         <Endpoint method="POST"  path="/api/certificates"       desc="Generate a verification certificate from analysis ID" />
 
@@ -256,6 +258,80 @@ export default function DocsPage() {
                                     <span style={{ color: 'var(--color-text-muted)', marginLeft: '8px' }}>{desc}</span>
                                 </div>
                             ))}
+                        </div>
+
+                        <h2 style={{ fontSize: '1.2rem', marginBottom: '12px', marginTop: '2rem' }}>POST /api/documents/validate — Standalone Document Number Validation</h2>
+                        <p style={{ color: 'var(--color-text-muted)', fontSize: '0.88rem', marginBottom: '12px', lineHeight: 1.6 }}>
+                            Validate national ID numbers, passport numbers, IBANs, and tax codes without image upload.
+                            Supports 195 countries with tiered validation (22 algorithmic, 40+ format, rest basic).
+                        </p>
+                        <Code lang="bash">{`curl -X POST ${BASE_URL}/api/documents/validate \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "documentNumber": "12345678Z",
+    "countryCode": "ESP",
+    "documentType": "nif"
+  }'`}</Code>
+
+                        <h3 style={{ fontSize: '0.95rem', marginBottom: '8px', color: 'var(--color-text-muted)' }}>Response</h3>
+                        <Code>{`{
+  "valid": true,
+  "country": "Spain",
+  "countryCode": "ESP",
+  "documentType": "NIF",
+  "formattedNumber": "12345678-Z",
+  "details": "Check letter valid",
+  "countryInfo": {
+    "name": "Spain",
+    "region": "Europe",
+    "idTypes": ["DNI", "NIE", "TIE"],
+    "hasNFC": true
+  }
+}`}</Code>
+
+                        <h3 style={{ fontSize: '0.95rem', marginBottom: '8px', color: 'var(--color-text-muted)' }}>Supported Document Types (by name)</h3>
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '6px', marginBottom: '24px' }}>
+                            {[
+                                'nif', 'nie', 'codice_fiscale', 'cpf', 'run', 'rut', 'curp',
+                                'tc_kimlik', 'aadhaar', 'sa_id', 'personalausweis', 'nric',
+                                'fin', 'rrn', 'my_number', 'pesel', 'cnp', 'rodne_cislo',
+                                'bsn', 'nn', 'china_id', 'cedula_ec', 'iban', 'passport',
+                            ].map(t => (
+                                <div key={t} style={{ background: 'rgba(255,255,255,0.03)', padding: '4px 8px', borderRadius: 6, fontSize: '0.76rem', fontFamily: 'monospace', color: 'var(--color-primary)' }}>
+                                    {t}
+                                </div>
+                            ))}
+                        </div>
+
+                        <h2 style={{ fontSize: '1.2rem', marginBottom: '12px', marginTop: '2rem' }}>GET /api/documents/coverage — Country Coverage Stats</h2>
+                        <p style={{ color: 'var(--color-text-muted)', fontSize: '0.88rem', marginBottom: '12px', lineHeight: 1.6 }}>
+                            Returns full coverage statistics: countries by region, validation tiers, MRZ format support, and NFC ePassport compatibility.
+                        </p>
+                        <Code lang="bash">{`curl ${BASE_URL}/api/documents/coverage`}</Code>
+
+                        <h3 style={{ fontSize: '0.95rem', marginBottom: '8px', color: 'var(--color-text-muted)' }}>Response (summarized)</h3>
+                        <Code>{`{
+  "totalCountries": 155,
+  "tier1Countries": 22,
+  "tier2Countries": 43,
+  "tier3Countries": 90,
+  "nfcCountries": 120,
+  "mrzSupport": { "TD1": 52, "TD2": 1, "TD3": 155, "MRV-B": 0 },
+  "regions": [
+    { "region": "Europe", "count": 44, "countries": [...] },
+    { "region": "Americas", "count": 29, "countries": [...] },
+    { "region": "Asia-Pacific", "count": 33, "countries": [...] },
+    ...
+  ],
+  "supportedCodes": ["ESP", "DEU", "FRA", ...]
+}`}</Code>
+
+                        <div style={{ background: 'rgba(0,229,255,0.06)', border: '1px solid rgba(0,229,255,0.2)', borderRadius: 10, padding: '1rem', marginBottom: '1.5rem' }}>
+                            <p style={{ fontSize: '0.85rem', color: 'var(--color-text-muted)' }}>
+                                <strong style={{ color: 'var(--color-primary)' }}>195 Countries:</strong> All ICAO 9303 member states are supported via universal MRZ passport verification.
+                                22 countries have full algorithmic check-digit validation for national IDs.
+                                The /validate endpoint auto-detects the appropriate validator from the country code.
+                            </p>
                         </div>
                     </>
                 )}

@@ -124,6 +124,8 @@ export default function Home() {
                   ['Behavioral Biometrics',          '✅ Keystroke DNA',   '❌ Not available'],
                   ['AI-Generated Code Detection',    '✅ For interviews',  '❌ N/A'],
                   ['Document Forensics (ELA/EXIF)',  '✅ Built-in',       '⚠️ Add-on'],
+                  ['Country Coverage (KYC)',         '✅ 195 countries',   '✅ 195 countries'],
+                  ['Document Number Validators',     '✅ 22 algorithmic', '⚠️ Limited'],
                   ['On-Premise Deployment',          '✅ Enterprise plan', '❌ Cloud only'],
                   ['Privacy — No Biometric Storage', '✅ Client-side',    '❌ Sends to servers'],
                   ['Starting Price',                 '✅ Free tier',      '❌ €1,500+/month'],
