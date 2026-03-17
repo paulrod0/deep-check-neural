@@ -33,6 +33,8 @@ import { crossValidateMRZvsOCR }        from '@/lib/crossValidation'
 import { runJPEGGhost }                 from '@/lib/jpegGhost'
 import { runDocFraudClassifier }        from '@/lib/docFraudClassifier'
 import { logVerification, computeImageHash } from '@/lib/verificationLog'
+import { transliterateName } from '@/lib/mrzTransliteration'
+import { autoValidateDocument, getCountryByCode, getCoverageStats, type ValidationResult } from '@/lib/countryValidators'
 import type { JPEGGhostResult }        from '@/lib/jpegGhost'
 import type { DocFraudResult }         from '@/lib/docFraudClassifier'
 import type { MRZFields }              from '@/lib/mrzParser'
@@ -124,17 +126,43 @@ export interface AdmissionsAlert {
   message: string
 }
 
+export interface AdmissionsNameTransliteration {
+  surname:    { original: string; mrzForm: string; script: string }
+  givenNames: { original: string; mrzForm: string; script: string }
+}
+
+export interface AdmissionsCountryValidation {
+  valid:           boolean
+  country:         string
+  countryCode:     string
+  documentType:    string
+  formattedNumber?: string
+  details?:        string
+}
+
+export interface AdmissionsCountryInfo {
+  name:    string
+  region:  string
+  idTypes: string[]
+  hasNFC:  boolean
+}
+
 export interface AdmissionsVerifyResponse {
-  documentType:       AdmissionsDocTypeResult
-  extractedData:      AdmissionsExtractedFields
-  mrzAnalysis:        AdmissionsMRZAnalysis | null
-  forensics:          AdmissionsForensicsSignals
-  authenticityScore:  number   // 0–100 (higher = more authentic)
-  verdict:            'authentic' | 'suspicious' | 'tampered'
-  alerts:             AdmissionsAlert[]
-  processingMs:       number
-  backImageProcessed: boolean  // true if imageBack was provided and processed
-  verificationId:     string | null  // ID for submitting feedback (learning)
+  documentType:         AdmissionsDocTypeResult
+  extractedData:        AdmissionsExtractedFields
+  mrzAnalysis:          AdmissionsMRZAnalysis | null
+  forensics:            AdmissionsForensicsSignals
+  authenticityScore:    number   // 0–100 (higher = more authentic)
+  verdict:              'authentic' | 'suspicious' | 'tampered'
+  alerts:               AdmissionsAlert[]
+  processingMs:         number
+  backImageProcessed:   boolean  // true if imageBack was provided and processed
+  verificationId:       string | null  // ID for submitting feedback (learning)
+  // New enrichment fields
+  nameTransliteration:  AdmissionsNameTransliteration | null
+  countryValidation:    AdmissionsCountryValidation | null
+  countryInfo:          AdmissionsCountryInfo | null
+  coverage:             { totalCountries: number; tier1Countries: number; nfcCountries: number } | null
 }
 
 // ── Document classification keywords ──────────────────────────────────────────
@@ -1146,6 +1174,45 @@ export async function POST(req: NextRequest): Promise<NextResponse<AdmissionsVer
     }
   }
 
+  // ── Name transliteration (ICAO 9303 multi-script) ────────────────────────
+  let nameTransliteration: AdmissionsNameTransliteration | null = null
+  if (mrzAnalysis?.fields?.surname || mrzAnalysis?.fields?.givenNames) {
+    const surnameRes = mrzAnalysis.fields?.surname ? transliterateName(mrzAnalysis.fields.surname) : null
+    const givenRes   = mrzAnalysis.fields?.givenNames ? transliterateName(mrzAnalysis.fields.givenNames) : null
+    nameTransliteration = {
+      surname:    surnameRes ? { original: surnameRes.original, mrzForm: surnameRes.mrzForm, script: surnameRes.sourceScript } : { original: '', mrzForm: '', script: 'unknown' },
+      givenNames: givenRes   ? { original: givenRes.original,   mrzForm: givenRes.mrzForm,   script: givenRes.sourceScript } : { original: '', mrzForm: '', script: 'unknown' },
+    }
+  }
+
+  // ── Country validation (195 countries) ──────────────────────────────────
+  let countryValidation: AdmissionsCountryValidation | null = null
+  let countryInfo: AdmissionsCountryInfo | null = null
+  let coverage: { totalCountries: number; tier1Countries: number; nfcCountries: number } | null = null
+
+  if (mrzAnalysis?.fields?.nationality || mrzAnalysis?.fields?.issuingCountry) {
+    const natCode = mrzAnalysis.fields?.nationality || mrzAnalysis.fields?.issuingCountry || ''
+    const country = getCountryByCode(natCode)
+    if (country) {
+      countryInfo = { name: country.name, region: country.region, idTypes: country.idTypes, hasNFC: country.hasNFC }
+    }
+    if (mrzAnalysis.fields?.docNumber) {
+      const valResult = autoValidateDocument(natCode, mrzAnalysis.fields.docNumber)
+      if (valResult) {
+        countryValidation = {
+          valid:           valResult.valid,
+          country:         valResult.country,
+          countryCode:     valResult.countryCode,
+          documentType:    valResult.documentType,
+          formattedNumber: valResult.formattedNumber,
+          details:         valResult.details,
+        }
+      }
+    }
+    const stats = getCoverageStats()
+    coverage = { totalCountries: stats.totalCountries, tier1Countries: stats.tier1Countries, nfcCountries: stats.nfcCountries }
+  }
+
   // ── Forensics signals (all 9 modules) ──────────────────────────────────
   const frequencyScore    = frequencyResult?.score ?? 0
   const semanticScore     = ocrResult?.semanticScore ?? 0
@@ -1327,5 +1394,9 @@ export async function POST(req: NextRequest): Promise<NextResponse<AdmissionsVer
     processingMs,
     backImageProcessed: !!backOcrResult,
     verificationId,
+    nameTransliteration,
+    countryValidation,
+    countryInfo,
+    coverage,
   })
 }
