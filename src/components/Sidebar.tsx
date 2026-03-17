@@ -23,6 +23,7 @@ export default function Sidebar() {
         { label: '──────────', href: '#2', disabled: true },
         { label: 'KYC Verification', href: '/documents/verify' },
         { label: 'Verification History', href: '/dashboard/verifications' },
+        { label: 'Analytics', href: '/dashboard/analytics' },
         { label: 'Document Forensics', href: '/documents' },
         { label: 'Live Interview', href: '/interview' },
         { label: '──────────', href: '#3', disabled: true },
