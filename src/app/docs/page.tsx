@@ -149,6 +149,9 @@ export default function DocsPage() {
                         <h2 style={{ fontSize: '1.2rem', marginBottom: '16px' }}>Endpoints disponibles</h2>
                         <h3 style={{ fontSize: '0.95rem', marginBottom: '8px', marginTop: '20px', color: 'var(--color-primary)' }}>Document Verification</h3>
                         <Endpoint method="POST"  path="/api/v1/verify"          desc="Verify a single document or batch (up to 10)" />
+                        <Endpoint method="POST"  path="/api/v1/batch"           desc="Async batch verification (up to 100 documents, with progress polling)" />
+                        <Endpoint method="GET"   path="/api/v1/batch?jobId=..." desc="Poll batch job status and retrieve results" />
+                        <Endpoint method="GET"   path="/api/verifications"      desc="List KYC verification history with filtering and pagination" />
                         <Endpoint method="POST"  path="/api/documents/validate" desc="Standalone document number validation (195 countries)" />
                         <Endpoint method="GET"   path="/api/documents/coverage" desc="Country coverage statistics and supported document types" />
                         <Endpoint method="GET"   path="/api/certificates?id=..."  desc="Retrieve a signed verification certificate" />

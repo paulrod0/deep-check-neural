@@ -21,6 +21,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { parseMRZ } from '@/lib/mrzParser'
 import { autoValidateDocument, getCountryByCode, getCoverageStats, type ValidationResult } from '@/lib/countryValidators'
+import { transliterateName } from '@/lib/mrzTransliteration'
 import type { ForensicsReport } from '@/lib/imageForensics'
 
 function getClient() {
@@ -125,6 +126,17 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     }
   }
 
+  // ── 1c. Name transliteration (MRZ → multi-script match) ─────────────────
+  let nameTransliteration: { surname: { original: string; mrzForm: string; script: string }; givenNames: { original: string; mrzForm: string; script: string } } | null = null
+  if (mrzResult.fields.surname || mrzResult.fields.givenNames) {
+    const surnameResult = mrzResult.fields.surname ? transliterateName(mrzResult.fields.surname) : null
+    const givenResult = mrzResult.fields.givenNames ? transliterateName(mrzResult.fields.givenNames) : null
+    nameTransliteration = {
+      surname: surnameResult ? { original: surnameResult.original, mrzForm: surnameResult.mrzForm, script: surnameResult.sourceScript } : { original: '', mrzForm: '', script: 'unknown' },
+      givenNames: givenResult ? { original: givenResult.original, mrzForm: givenResult.mrzForm, script: givenResult.sourceScript } : { original: '', mrzForm: '', script: 'unknown' },
+    }
+  }
+
   // ── 2. Face quality via Rekognition (cloud only) ───────────────────────────
   let faceQualityScore = 0
   let faceCount        = 0
@@ -195,6 +207,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
             docType: countryValidation.documentType,
             details: countryValidation.details,
           } : null,
+          nameTransliteration,
         },
         case_ref:          'identity_verification',
         submitted_by:      'kyc_wizard',
@@ -242,6 +255,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       tier1Countries:  coverage.tier1Countries,
       nfcCountries:    coverage.nfcCountries,
     },
+    nameTransliteration,
     verdict,
     certificateId,
     onPremise: IS_ONPREMISE,
