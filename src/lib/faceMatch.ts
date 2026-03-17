@@ -49,7 +49,8 @@ interface Landmark {
 // ── Constants ─────────────────────────────────────────────────────────────────
 
 const MATCH_THRESHOLD   = 0.82
-const MODEL_ASSET_PATH  = '/'
+const MP_MODEL_URL      = 'https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task'
+const MP_WASM_CDN       = 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.32/wasm'
 
 // MediaPipe landmark indices
 const NOSE_TIP          = 1
@@ -68,13 +69,12 @@ async function ensureLandmarker(): Promise<void> {
   loadPromise = (async () => {
     const { FaceLandmarker, FilesetResolver } = await import('@mediapipe/tasks-vision')
 
-    const filesetResolver = await FilesetResolver.forVisionTasks(
-      'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.32/wasm'
-    )
+    const filesetResolver = await FilesetResolver.forVisionTasks(MP_WASM_CDN)
 
+    // Use CPU delegate for IMAGE mode (more reliable across devices)
     faceLandmarker = await FaceLandmarker.createFromOptions(filesetResolver, {
       baseOptions: {
-        modelAssetPath: `${MODEL_ASSET_PATH}models/face_landmarker.task`,
+        modelAssetPath: MP_MODEL_URL,
         delegate: 'CPU',
       },
       runningMode:             'IMAGE',

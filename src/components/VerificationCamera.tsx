@@ -655,6 +655,7 @@ const VerificationCamera = forwardRef<VerificationCameraHandle, VerificationCame
         // rAF control
         const rafIdRef = useRef<number>(0)
         const lastDetectTimeRef = useRef<number>(0)
+        const detectErrorCountRef = useRef<number>(0)
 
         const [isModelLoaded,      setIsModelLoaded]      = useState(false)
         const [modelLoadError,     setModelLoadError]     = useState<string | null>(null)
@@ -680,22 +681,42 @@ const VerificationCamera = forwardRef<VerificationCameraHandle, VerificationCame
         // ── Init timing ──────────────────────────────────────────────────────
         useEffect(() => { sessionStartRef.current = performance.now() }, [])
 
-        // ── Load MediaPipe FaceLandmarker ────────────────────────────────────
+        // ── Load MediaPipe FaceLandmarker (GPU → CPU fallback) ─────────────
         useEffect(() => {
             let cancelled = false
+
+            const createLandmarker = async (
+                vision: Awaited<ReturnType<typeof FilesetResolver.forVisionTasks>>,
+                delegate: 'GPU' | 'CPU'
+            ) => {
+                return FaceLandmarker.createFromOptions(vision, {
+                    baseOptions: {
+                        modelAssetPath: MP_MODEL_URL,
+                        delegate,
+                    },
+                    outputFaceBlendshapes: true,
+                    outputFacialTransformationMatrixes: true,
+                    runningMode: 'VIDEO',
+                    numFaces: 2,  // need to detect >1 for "Multiple faces" check
+                })
+            }
+
             const init = async () => {
                 try {
                     const vision = await FilesetResolver.forVisionTasks(MP_WASM_CDN)
-                    const landmarker = await FaceLandmarker.createFromOptions(vision, {
-                        baseOptions: {
-                            modelAssetPath: MP_MODEL_URL,
-                            delegate: 'GPU',
-                        },
-                        outputFaceBlendshapes: true,
-                        outputFacialTransformationMatrixes: true,
-                        runningMode: 'VIDEO',
-                        numFaces: 2,  // need to detect >1 for "Multiple faces" check
-                    })
+
+                    let landmarker: FaceLandmarker
+                    try {
+                        // Try GPU first for best performance
+                        landmarker = await createLandmarker(vision, 'GPU')
+                        console.info('[VerificationCamera] FaceLandmarker loaded with GPU delegate')
+                    } catch (gpuErr) {
+                        // GPU failed (no WebGL2, driver issue, etc.) — fallback to CPU
+                        console.warn('[VerificationCamera] GPU delegate failed, falling back to CPU:', gpuErr)
+                        landmarker = await createLandmarker(vision, 'CPU')
+                        console.info('[VerificationCamera] FaceLandmarker loaded with CPU delegate')
+                    }
+
                     if (!cancelled) {
                         landmarkerRef.current = landmarker
                         setIsModelLoaded(true)
@@ -705,8 +726,8 @@ const VerificationCamera = forwardRef<VerificationCameraHandle, VerificationCame
                         warmupDeepfakeModel().catch(() => {/* ignore — model may not exist yet */})
                     }
                 } catch (e) {
-                    console.error('MediaPipe FaceLandmarker load error:', e)
-                    if (!cancelled) setModelLoadError('AI models failed to load. Please refresh.')
+                    console.error('[VerificationCamera] FaceLandmarker load error (both GPU and CPU failed):', e)
+                    if (!cancelled) setModelLoadError('AI models failed to load. Please refresh the page.')
                 }
             }
             init()
@@ -736,9 +757,17 @@ const VerificationCamera = forwardRef<VerificationCameraHandle, VerificationCame
                 let result
                 try {
                     result = landmarker.detectForVideo(video, timestamp)
-                } catch {
-                    return // skip frame on error
+                } catch (detectErr) {
+                    // Count consecutive detection errors — if persistent, log once
+                    if (!detectErrorCountRef.current) detectErrorCountRef.current = 0
+                    detectErrorCountRef.current++
+                    if (detectErrorCountRef.current === 1 || detectErrorCountRef.current % 100 === 0) {
+                        console.warn(`[VerificationCamera] detectForVideo error (count: ${detectErrorCountRef.current}):`, detectErr)
+                    }
+                    return // skip this frame
                 }
+                // Reset error counter on successful detection
+                detectErrorCountRef.current = 0
 
                 // ── Draw ─────────────────────────────────────────────────────
                 if (canvasRef.current) {
