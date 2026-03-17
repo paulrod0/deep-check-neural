@@ -41,6 +41,25 @@ interface VerifyAPIResponse {
     ocrMode:         string
   }
   faceQuality: { faceFound: boolean; faceCount: number; qualityScore: number; suspicious: boolean }
+  countryValidation?: {
+    valid:           boolean
+    country:         string
+    countryCode:     string
+    documentType:    string
+    formattedNumber?: string
+    details?:        string
+  } | null
+  countryInfo?: {
+    name:    string
+    region:  string
+    idTypes: string[]
+    hasNFC:  boolean
+  } | null
+  coverage?: {
+    totalCountries: number
+    tier1Countries: number
+    nfcCountries:   number
+  }
   verdict:         'authentic' | 'suspicious' | 'tampered'
   certificateId:   string
   onPremise:       boolean
@@ -876,6 +895,79 @@ export default function VerifyPage() {
                     ))}
                   </div>
                 )}
+              </div>
+            )}
+
+            {/* Country-Specific Validation */}
+            {apiResult?.countryValidation && (
+              <div className="glass-panel" style={{ padding: '1.5rem' }}>
+                <h3 style={{ marginBottom: '1rem', fontSize: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  🌍 Country-Specific Validation
+                  <span style={{
+                    padding: '2px 10px', borderRadius: 20, fontSize: '0.78rem',
+                    background: apiResult.countryValidation.valid ? 'rgba(0,229,255,0.15)' : 'rgba(255,77,77,0.15)',
+                    color: apiResult.countryValidation.valid ? 'var(--color-primary)' : '#ff4d4d',
+                    fontWeight: 600,
+                  }}>
+                    {apiResult.countryValidation.valid ? 'VALID' : 'INVALID'}
+                  </span>
+                </h3>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: '0.75rem' }}>
+                  {[
+                    ['Country',         apiResult.countryValidation.country],
+                    ['Document Type',   apiResult.countryValidation.documentType],
+                    ['Formatted No.',   apiResult.countryValidation.formattedNumber],
+                    ['Validation',      apiResult.countryValidation.details],
+                  ].filter(([, v]) => v).map(([label, value]) => (
+                    <div key={label as string} style={{ background: 'rgba(255,255,255,0.03)', borderRadius: 8, padding: '0.6rem 0.75rem' }}>
+                      <p style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)', marginBottom: '0.2rem' }}>{label as string}</p>
+                      <p style={{ fontSize: '0.88rem', fontWeight: 600, wordBreak: 'break-all' }}>{value as string || '—'}</p>
+                    </div>
+                  ))}
+                </div>
+                {apiResult.countryInfo && (
+                  <div style={{
+                    marginTop: '0.75rem', padding: '0.6rem 0.75rem',
+                    background: 'rgba(0,229,255,0.04)', borderRadius: 8,
+                    border: '1px solid rgba(0,229,255,0.1)',
+                  }}>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', alignItems: 'center' }}>
+                      <span style={{ fontSize: '0.78rem', color: 'var(--color-text-muted)' }}>
+                        Region: <strong style={{ color: 'var(--color-text)' }}>{apiResult.countryInfo.region}</strong>
+                      </span>
+                      <span style={{ fontSize: '0.78rem', color: 'var(--color-text-muted)' }}>
+                        {apiResult.countryInfo.hasNFC ? '📶 ePassport NFC' : '📄 No NFC'}
+                      </span>
+                      <span style={{ fontSize: '0.78rem', color: 'var(--color-text-muted)' }}>
+                        ID types: {apiResult.countryInfo.idTypes.join(', ')}
+                      </span>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Coverage badge */}
+            {apiResult?.coverage && (
+              <div style={{
+                display: 'flex', gap: '0.75rem', flexWrap: 'wrap',
+                padding: '0.5rem 0',
+              }}>
+                {[
+                  [`🌐 ${apiResult.coverage.totalCountries} countries`, 'Documents supported'],
+                  [`🔐 ${apiResult.coverage.tier1Countries} tier-1`, 'Algorithmic check-digit'],
+                  [`📶 ${apiResult.coverage.nfcCountries} NFC`, 'ePassport chip countries'],
+                ].map(([value, label]) => (
+                  <div key={label} style={{
+                    flex: '1 1 120px',
+                    background: 'rgba(0,229,255,0.04)',
+                    border: '1px solid rgba(0,229,255,0.1)',
+                    borderRadius: 8, padding: '0.5rem 0.75rem', textAlign: 'center',
+                  }}>
+                    <p style={{ fontSize: '0.88rem', fontWeight: 700, color: 'var(--color-primary)' }}>{value}</p>
+                    <p style={{ fontSize: '0.68rem', color: 'var(--color-text-muted)' }}>{label}</p>
+                  </div>
+                ))}
               </div>
             )}
 

@@ -188,6 +188,64 @@ export default function OnPremisePage() {
         </div>
       </section>
 
+      {/* Global Coverage */}
+      <section className={styles.features}>
+        <div className="container">
+          <h2 className="section-title" style={{ textAlign: 'center', marginBottom: '0.75rem' }}>
+            <span className="text-gradient">195 Countries</span> · Universal Coverage
+          </h2>
+          <p style={{ textAlign: 'center', color: 'var(--color-text-muted)', marginBottom: '2.5rem', maxWidth: 620, margin: '0 auto 2.5rem' }}>
+            ICAO 9303 MRZ verification for every passport-issuing nation.
+            Country-specific document validators with algorithmic check-digit validation.
+          </p>
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: '1rem', marginBottom: '2rem' }}>
+            {[
+              ['🌐', '195', 'Countries'],
+              ['🔐', '22', 'Tier 1 (check-digit)'],
+              ['📋', '40+', 'Tier 2 (format)'],
+              ['📶', '120+', 'ePassport NFC'],
+              ['🪪', 'TD1/TD2/TD3', 'MRZ formats'],
+              ['⚡', 'Offline', 'No cloud required'],
+            ].map(([icon, num, label]) => (
+              <div key={label} className="glass-panel" style={{ padding: '1rem', textAlign: 'center' }}>
+                <div style={{ fontSize: '1.5rem', marginBottom: '0.25rem' }}>{icon}</div>
+                <div style={{ fontSize: '1.15rem', fontWeight: 800, color: 'var(--color-primary)' }}>{num}</div>
+                <div style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)', marginTop: '0.2rem' }}>{label}</div>
+              </div>
+            ))}
+          </div>
+
+          <div className="glass-panel" style={{ padding: '1.5rem' }}>
+            <h3 style={{ fontSize: '0.95rem', marginBottom: '1rem', color: 'var(--color-text)' }}>
+              Tier 1 Countries — Full Algorithmic Validation
+            </h3>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
+              {[
+                '🇪🇸 Spain (NIF/NIE)', '🇮🇹 Italy (Codice Fiscale)', '🇧🇷 Brazil (CPF)',
+                '🇨🇱 Chile (RUN)', '🇲🇽 Mexico (CURP)', '🇹🇷 Turkey (TC Kimlik)',
+                '🇮🇳 India (Aadhaar)', '🇿🇦 South Africa (ID)', '🇦🇷 Argentina (DNI)',
+                '🇨🇴 Colombia (Cédula)', '🇵🇹 Portugal (CC)', '🇩🇪 Germany (Personalausweis)',
+                '🇸🇬 Singapore (NRIC/FIN)', '🇰🇷 South Korea (RRN)', '🇯🇵 Japan (My Number)',
+                '🇵🇱 Poland (PESEL)', '🇷🇴 Romania (CNP)', '🇨🇿 Czech Rep. (Rodné číslo)',
+                '🇳🇱 Netherlands (BSN)', '🇧🇪 Belgium (NN)', '🇨🇳 China (身份证)', '🇪🇨 Ecuador (Cédula)',
+              ].map(c => (
+                <span key={c} style={{
+                  display: 'inline-block', padding: '0.3rem 0.65rem', fontSize: '0.76rem',
+                  background: 'rgba(0,229,255,0.08)', border: '1px solid rgba(0,229,255,0.15)',
+                  borderRadius: 6, color: 'var(--color-text)', whiteSpace: 'nowrap',
+                }}>
+                  {c}
+                </span>
+              ))}
+            </div>
+            <p style={{ color: 'var(--color-text-dim)', fontSize: '0.78rem', marginTop: '1rem' }}>
+              + 40+ countries with format validation · All 195 countries supported via universal MRZ + passport number verification.
+            </p>
+          </div>
+        </div>
+      </section>
+
       {/* Security features */}
       <section className={styles.features}>
         <div className="container">
