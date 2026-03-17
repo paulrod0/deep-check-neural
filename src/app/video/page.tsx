@@ -943,7 +943,7 @@ export default function VideoForensicsPage() {
     fetch('/api/video?limit=12')
       .then(r => r.json())
       .then(d => setRecent(d.items ?? []))
-      .catch(() => { /* ignore — table may not exist */ })
+      .catch(err => console.error('[video] Failed to load recent analyses:', err))
   }, [])
 
   const handleFile = useCallback((file: File) => {

@@ -26,7 +26,9 @@ const CERTIFICATE_SECRET = process.env.CERTIFICATE_SIGNING_SECRET || process.env
   console.warn('[certificates] No CERTIFICATE_SIGNING_SECRET or PGRST_JWT_SECRET set — using random ephemeral key')
   return crypto.randomBytes(32).toString('hex')
 })()
-const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL || 'https://deep-check.io'
+const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL || (
+  process.env.NODE_ENV === 'production' ? 'https://deep-check.io' : 'http://localhost:3000'
+)
 
 function getClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL || ''
