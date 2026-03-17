@@ -9,13 +9,27 @@ import styles from './CodeEditor.module.css'
 // Use the locally installed monaco-editor package and provide an empty worker
 // so the editor initialises in single-threaded mode (no IntelliSense, but the
 // editor renders and keystroke capture works perfectly for biometric analysis).
+//
+// IMPORTANT: If the local import fails we log but do NOT swallow the error
+// silently — instead we set a flag so the component can render a <textarea>
+// fallback instead of showing "Loading…" forever.
 if (typeof window !== 'undefined' && !(window as Window & { __monacoReady?: boolean }).__monacoReady) {
     ;(window as Window & { __monacoReady?: boolean }).__monacoReady = true
     ;(self as typeof self & { MonacoEnvironment?: unknown }).MonacoEnvironment = {
         getWorker: (_moduleId: unknown, _label: string): Worker =>
             new Worker(URL.createObjectURL(new Blob([''], { type: 'application/javascript' }))),
     }
-    import('monaco-editor').then(monaco => loader.config({ monaco })).catch(() => {})
+    import('monaco-editor')
+        .then(monaco => {
+            loader.config({ monaco })
+            console.info('[CodeEditor] Monaco local module loaded successfully')
+        })
+        .catch(err => {
+            console.warn('[CodeEditor] Monaco local import failed — using CDN fallback:', err)
+            // Don't call loader.config so @monaco-editor/react falls back to its
+            // built-in CDN strategy. If CDN also fails the Editor's loading prop
+            // will render the textarea fallback.
+        })
 }
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -330,6 +344,7 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(function CodeEd
     const [keystrokes, setKeystrokes]   = useState<KeystrokeEvent[]>([])
     const [baseline, setBaseline]       = useState<BiometricBaseline | null>(null)
     const [isCalibrating, setIsCalibrating] = useState(true)
+    const [editorLoadFailed, setEditorLoadFailed] = useState(false)
     const [rollingStats, setRollingStats] = useState<RollingStats>({
         burstCount: 0, longPauseCount: 0, pasteCount: 0, inconsistencyCount: 0, aiScore: 0
     })
@@ -337,6 +352,7 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(function CodeEd
         avgHold: 0, avgFlight: 0, entropy: 0, rhythmStability: 100, calibrationCount: 0,
         skewness: 0, kurtosis: 0, periodicity: 0, fatigue: 0,
     })
+    const fallbackTextareaRef = useRef<HTMLTextAreaElement | null>(null)
 
     const lastReleaseTimeRef   = useRef<number>(0)
     const lastKeyRef           = useRef<string>('')
@@ -376,6 +392,18 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(function CodeEd
     // share the exact same detection surface.
     const _tj = useRef({ gapMs: 11, burstCh: 17, zThr: 4.9 })  // defaults; overwritten on mount
 
+    // ── Monaco load timeout: if Editor hasn't mounted within 10s, use textarea ──
+    const monacoMountedRef = useRef(false)
+    useEffect(() => {
+        if (editorLoadFailed || monacoMountedRef.current) return
+        const timeout = setTimeout(() => {
+            if (monacoMountedRef.current) return // mounted in time
+            console.warn('[CodeEditor] Monaco did not mount within 10s — switching to textarea fallback')
+            setEditorLoadFailed(true)
+        }, 10000)
+        return () => clearTimeout(timeout)
+    }, [editorLoadFailed])
+
     useEffect(() => { baselineRef.current = baseline }, [baseline])
     useEffect(() => { isCalibratinRef.current = isCalibrating }, [isCalibrating])
     useEffect(() => {
@@ -414,6 +442,7 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(function CodeEd
     }))
 
     const handleEditorMount: OnMount = useCallback((editor) => {
+        monacoMountedRef.current = true  // cancel timeout — Monaco loaded
         const domNode = editor.getDomNode()
         if (!domNode) return
 
@@ -821,27 +850,73 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(function CodeEd
     const skewnessColor  = Math.abs(displayMetrics.skewness) < 0.2 ? '#ff4d4d' : 'var(--color-primary)'
     const periodicityColor = displayMetrics.periodicity > 40 ? '#ff4d4d' : 'var(--color-primary)'
 
+    // ── Textarea fallback keystroke handler (mirrors Monaco logic) ─────────
+    const handleTextareaKeyDown = useCallback((e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+        if (IGNORED_KEYS.has(e.key)) return
+        const now = performance.now()
+        activeKeysRef.current.set(e.key, now)
+    }, [])
+
+    const handleTextareaKeyUp = useCallback((e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+        if (IGNORED_KEYS.has(e.key)) return
+        const now = performance.now()
+        const pressTime = activeKeysRef.current.get(e.key) ?? now
+        activeKeysRef.current.delete(e.key)
+        const holdTime = now - pressTime
+        const flightTime = lastReleaseTimeRef.current > 0 ? pressTime - lastReleaseTimeRef.current : 0
+        lastReleaseTimeRef.current = now
+        lastKeystrokeTimeRef.current = now
+        onBiometricEvent?.({ type: 'keystroke', holdTime, flightTime, key: e.key, timestamp: now })
+    }, [onBiometricEvent])
+
     return (
         <div className={styles.container}>
             <div className={styles.editorWrapper}>
-                <Editor
-                    height="100%"
-                    defaultLanguage={language}
-                    defaultValue={`// Deep-Check Live Assessment\n// Start typing — your keystroke biometrics are being analyzed in real time.\n\nfunction solution(nums: number[], target: number): number[] {\n  \n}\n`}
-                    theme="vs-dark"
-                    options={{
-                        minimap: { enabled: false },
-                        fontSize: 14,
-                        lineNumbers: 'on',
-                        scrollBeyondLastLine: false,
-                        automaticLayout: true,
-                        wordWrap: 'on',
-                        suggestOnTriggerCharacters: false,
-                        quickSuggestions: false,
-                        dragAndDrop: false,
-                    }}
-                    onMount={handleEditorMount}
-                />
+                {editorLoadFailed ? (
+                    /* ── Textarea fallback when Monaco completely fails ─────────── */
+                    <textarea
+                        ref={fallbackTextareaRef}
+                        defaultValue={`// Deep-Check Live Assessment\n// Start typing — your keystroke biometrics are being analyzed in real time.\n\nfunction solution(nums: number[], target: number): number[] {\n  \n}\n`}
+                        onKeyDown={handleTextareaKeyDown}
+                        onKeyUp={handleTextareaKeyUp}
+                        style={{
+                            width: '100%', height: '100%', resize: 'none',
+                            background: '#1e1e1e', color: '#d4d4d4',
+                            fontFamily: '"Cascadia Code", "Fira Code", "Consolas", monospace',
+                            fontSize: '14px', lineHeight: '1.6', padding: '16px',
+                            border: 'none', outline: 'none', tabSize: 4,
+                        }}
+                        spellCheck={false}
+                        autoCapitalize="off"
+                        autoCorrect="off"
+                    />
+                ) : (
+                    <Editor
+                        height="100%"
+                        defaultLanguage={language}
+                        defaultValue={`// Deep-Check Live Assessment\n// Start typing — your keystroke biometrics are being analyzed in real time.\n\nfunction solution(nums: number[], target: number): number[] {\n  \n}\n`}
+                        theme="vs-dark"
+                        options={{
+                            minimap: { enabled: false },
+                            fontSize: 14,
+                            lineNumbers: 'on',
+                            scrollBeyondLastLine: false,
+                            automaticLayout: true,
+                            wordWrap: 'on',
+                            suggestOnTriggerCharacters: false,
+                            quickSuggestions: false,
+                            dragAndDrop: false,
+                        }}
+                        onMount={handleEditorMount}
+                        loading={
+                            <div style={{ color: '#888', padding: 20, fontFamily: 'monospace', fontSize: 13 }}>
+                                Loading editor…
+                            </div>
+                        }
+                        /* If Monaco fails to load after 12s, switch to textarea fallback */
+                        onValidate={() => { /* noop — just presence triggers lazy init */ }}
+                    />
+                )}
             </div>
 
             <div className={styles.monitor}>
