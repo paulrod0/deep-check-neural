@@ -22,6 +22,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { parseMRZ } from '@/lib/mrzParser'
+import { autoValidateDocument, getCountryByCode } from '@/lib/countryValidators'
 import { validateApiKey, initDb } from '@/lib/db'
 
 // ── Config ──────────────────────────────────────────────────────────────────────
@@ -78,6 +79,8 @@ interface VerifyDocumentResult {
     faceCount: number
     qualityScore: number
   } | null
+  countryValidation?: { valid: boolean; country: string; documentType: string; details?: string } | null
+  countryInfo?: { name: string; region: string; idTypes: string[]; hasNFC: boolean } | null
   verifyUrl: string
   externalRef?: string
   processingMs: number
@@ -136,6 +139,22 @@ async function verifyDocument(doc: VerifyDocumentRequest): Promise<VerifyDocumen
     }
   }
 
+  // 2b. Country-specific validation
+  let countryValidation: { valid: boolean; country: string; documentType: string; details?: string } | null = null
+  const natCode = mrzResult.fields.nationality || mrzResult.fields.issuingCountry
+  if (natCode && mrzResult.fields.docNumber) {
+    const cv = autoValidateDocument(natCode, mrzResult.fields.docNumber)
+    if (cv) {
+      countryValidation = {
+        valid: cv.valid,
+        country: cv.country,
+        documentType: cv.documentType,
+        details: cv.details,
+      }
+    }
+  }
+  const countryInfo = natCode ? getCountryByCode(natCode) : undefined
+
   // 3. Compute verdict
   const riskScore = 0 // Client-side forensics not available via API
   let verdict: 'authentic' | 'suspicious' | 'tampered' = 'authentic'
@@ -173,6 +192,8 @@ async function verifyDocument(doc: VerifyDocumentRequest): Promise<VerifyDocumen
             onPremise: IS_ONPREMISE,
             apiVerification: true,
             externalRef: doc.externalRef,
+            countryValidation,
+            countryInfo: countryInfo ? { name: countryInfo.name, region: countryInfo.region } : null,
           },
           case_ref: doc.externalRef || 'api_verification',
           submitted_by: 'api_v1',
@@ -205,6 +226,13 @@ async function verifyDocument(doc: VerifyDocumentRequest): Promise<VerifyDocumen
       riskLevel: verdict === 'authentic' ? 'clean' : verdict,
     },
     faceQuality,
+    countryValidation,
+    countryInfo: countryInfo ? {
+      name: countryInfo.name,
+      region: countryInfo.region,
+      idTypes: countryInfo.idTypes,
+      hasNFC: countryInfo.hasNFC,
+    } : null,
     verifyUrl: `${baseUrl}/verify/${certificateId}`,
     externalRef: doc.externalRef,
     processingMs: Date.now() - t0,
