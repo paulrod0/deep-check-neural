@@ -23,6 +23,7 @@ import { analyzeImage, type ForensicsReport } from '@/lib/imageForensics'
 import { detectDocumentType, type DocumentDetectionResult } from '@/lib/documentDetector'
 import { downloadCertificatePDF } from '@/lib/certificatePDF'
 import { detectLiveness, type LivenessResult } from '@/lib/livenessDetection'
+import { cropMRZZone, type MRZCropResult } from '@/lib/mrzCropper'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -143,6 +144,7 @@ export default function VerifyPage() {
   const [error, setError]             = useState<string | null>(null)
   const [docDetection, setDocDetection] = useState<DocumentDetectionResult | null>(null)
   const [livenessResult, setLivenessResult] = useState<LivenessResult | null>(null)
+  const [mrzCropResult, setMrzCropResult]   = useState<MRZCropResult | null>(null)
 
   // ── Liveness state ──────────────────────────────────────────────────────────
   const [livenessChallenge,  setLivenessChallenge]  = useState<LivenessChallenge | null>(null)
@@ -433,7 +435,7 @@ export default function VerifyPage() {
           return compareFaces(docImage, selfieImage)
         })()
 
-        const [faceResult, forensicsResult, livenessRes] = await Promise.all([
+        const [faceResult, forensicsResult, livenessRes, mrzCrop] = await Promise.all([
           faceMatchPromise,
           (async () => {
             try {
@@ -454,11 +456,20 @@ export default function VerifyPage() {
               return null
             }
           })(),
+          // MRZ zone auto-detection & cropping for improved OCR
+          (async () => {
+            try {
+              return await cropMRZZone(docImage)
+            } catch {
+              return null
+            }
+          })(),
         ])
 
         setFaceMatch(faceResult)
         setForensics(forensicsResult)
         setLivenessResult(livenessRes)
+        setMrzCropResult(mrzCrop)
 
         // Server-side: Textract OCR + Rekognition + save to DB
         const serverRes = await fetch('/api/documents/verify', {
@@ -966,6 +977,83 @@ export default function VerifyPage() {
               </div>
             )}
 
+            {/* MRZ Zone Auto-Detection */}
+            {mrzCropResult && (
+              <div className="glass-panel" style={{ padding: '1.5rem' }}>
+                <h3 style={{ marginBottom: '1rem', fontSize: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  🔍 MRZ Zone Detection
+                  <span style={{
+                    padding: '2px 10px', borderRadius: 20, fontSize: '0.78rem',
+                    background: mrzCropResult.found ? 'rgba(34,197,94,0.15)' : 'rgba(255,77,77,0.15)',
+                    color: mrzCropResult.found ? '#22C55E' : '#ff4d4d',
+                    fontWeight: 600,
+                  }}>
+                    {mrzCropResult.found ? `${mrzCropResult.format} DETECTED` : 'NOT FOUND'}
+                  </span>
+                </h3>
+
+                {mrzCropResult.found && (
+                  <div style={{ display: 'flex', gap: '1.5rem', flexWrap: 'wrap', alignItems: 'flex-start' }}>
+                    {/* Cropped MRZ preview */}
+                    <div style={{ flex: '1 1 240px' }}>
+                      <p style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)', marginBottom: '0.4rem', textTransform: 'uppercase' }}>
+                        Cropped MRZ Zone
+                      </p>
+                      {mrzCropResult.croppedDataUrl && (
+                        <img
+                          src={mrzCropResult.croppedDataUrl}
+                          alt="Cropped MRZ"
+                          style={{ width: '100%', borderRadius: 6, border: '1px solid var(--color-border)' }}
+                        />
+                      )}
+                    </div>
+                    {/* Enhanced (binarized) MRZ */}
+                    <div style={{ flex: '1 1 240px' }}>
+                      <p style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)', marginBottom: '0.4rem', textTransform: 'uppercase' }}>
+                        Enhanced for OCR
+                      </p>
+                      {mrzCropResult.enhancedDataUrl && (
+                        <img
+                          src={mrzCropResult.enhancedDataUrl}
+                          alt="Enhanced MRZ"
+                          style={{ width: '100%', borderRadius: 6, border: '1px solid var(--color-border)', background: '#000' }}
+                        />
+                      )}
+                    </div>
+                    {/* Details */}
+                    <div style={{ flex: '0 0 160px' }}>
+                      <div style={{ fontSize: '0.78rem', marginBottom: '0.5rem' }}>
+                        <span style={{ color: 'var(--color-text-muted)' }}>Format: </span>
+                        <span style={{ fontWeight: 700, color: 'var(--color-accent)' }}>{mrzCropResult.format}</span>
+                      </div>
+                      <div style={{ fontSize: '0.78rem', marginBottom: '0.5rem' }}>
+                        <span style={{ color: 'var(--color-text-muted)' }}>Confidence: </span>
+                        <span style={{ fontWeight: 700, color: mrzCropResult.confidence > 0.7 ? '#22C55E' : '#FFD700' }}>
+                          {Math.round(mrzCropResult.confidence * 100)}%
+                        </span>
+                      </div>
+                      {mrzCropResult.boundingBox && (
+                        <div style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)' }}>
+                          Region: {mrzCropResult.boundingBox.width}×{mrzCropResult.boundingBox.height}px
+                          at ({mrzCropResult.boundingBox.x}, {mrzCropResult.boundingBox.y})
+                        </div>
+                      )}
+                      <p style={{ color: 'var(--color-text-muted)', fontSize: '0.72rem', marginTop: '0.5rem' }}>
+                        {mrzCropResult.processingMs}ms · Sobel + morphological closing
+                      </p>
+                    </div>
+                  </div>
+                )}
+
+                {!mrzCropResult.found && (
+                  <p style={{ fontSize: '0.82rem', color: 'var(--color-text-muted)' }}>
+                    No MRZ zone was detected in this document. The document may not have a machine-readable zone,
+                    or the image quality may be insufficient for automatic detection.
+                  </p>
+                )}
+              </div>
+            )}
+
             {/* MRZ Fields */}
             {apiResult?.ocr?.mrzFields && (
               <div className="glass-panel" style={{ padding: '1.5rem' }}>
@@ -1175,7 +1263,7 @@ export default function VerifyPage() {
                 onClick={() => {
                   setStep(0); setDocImage(null); setSelfieImage(null)
                   setFaceMatch(null); setForensics(null); setApiResult(null)
-                  setError(null); setDocDetection(null); setLivenessResult(null)
+                  setError(null); setDocDetection(null); setLivenessResult(null); setMrzCropResult(null)
                   setLivenessChallenge(null)
                   setLivenessState('idle')
                   setLivenessCountdown(LIVENESS_TIMEOUT_S)
