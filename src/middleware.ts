@@ -21,6 +21,8 @@ const LIMITS: Record<string, number> = {
     '/api/enrollment':         10,  // biometric enrollment
     '/api/documents':          30,  // forensic analysis
     '/api/auth':               5,   // auth attempts — strict
+    '/api/admissions-verify':  5,   // compute-heavy forensics pipeline — strict
+    '/api/osint':              10,  // OSINT batch/analyze — moderate
     'default':                 100, // general limit per minute
 }
 
@@ -63,10 +65,16 @@ function getIP(req: NextRequest): string {
 // Actual token validation happens in server-side route handlers — middleware
 // only checks presence/format to avoid DB calls at the edge.
 
+function looksLikeJwt(value: string): boolean {
+    const parts = value.split('.')
+    return parts.length === 3 && parts.every(p => p.length > 0)
+}
+
 function isAdminAuthenticated(req: NextRequest): boolean {
     // Path 1: Supabase Auth magic-link session (new SaaS users)
+    // Check JWT structure (3 dot-separated base64 segments) not just length
     const sbToken = req.cookies.get('sb-access-token')?.value
-    if (sbToken && sbToken.length > 20) return true
+    if (sbToken && looksLikeJwt(sbToken)) return true
 
     // Path 2: Legacy admin session (password-based, backwards compat)
     const adminToken = req.cookies.get('dc_admin_session')?.value

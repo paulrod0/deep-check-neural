@@ -22,7 +22,9 @@ function getClient() {
 }
 
 function hashIP(ip: string): string {
-    return crypto.createHash('sha256').update(ip + 'dc-salt-2026').digest('hex').slice(0, 16)
+    const salt = process.env.AUDIT_IP_SALT ?? process.env.AUDIT_SALT ?? ''
+    if (!salt) console.warn('[auth/dashboard] AUDIT_IP_SALT not set — IP hashes are weak')
+    return crypto.createHash('sha256').update(ip + salt).digest('hex').slice(0, 16)
 }
 
 function getIP(req: NextRequest): string {
