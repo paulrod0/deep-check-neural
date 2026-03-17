@@ -22,6 +22,7 @@ import MLFeedbackWidget from '@/components/MLFeedbackWidget'
 import { analyzeImage, type ForensicsReport } from '@/lib/imageForensics'
 import { detectDocumentType, type DocumentDetectionResult } from '@/lib/documentDetector'
 import { downloadCertificatePDF } from '@/lib/certificatePDF'
+import { detectLiveness, type LivenessResult } from '@/lib/livenessDetection'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -141,6 +142,7 @@ export default function VerifyPage() {
   const [apiResult, setApiResult]     = useState<VerifyAPIResponse | null>(null)
   const [error, setError]             = useState<string | null>(null)
   const [docDetection, setDocDetection] = useState<DocumentDetectionResult | null>(null)
+  const [livenessResult, setLivenessResult] = useState<LivenessResult | null>(null)
 
   // ── Liveness state ──────────────────────────────────────────────────────────
   const [livenessChallenge,  setLivenessChallenge]  = useState<LivenessChallenge | null>(null)
@@ -431,7 +433,7 @@ export default function VerifyPage() {
           return compareFaces(docImage, selfieImage)
         })()
 
-        const [faceResult, forensicsResult] = await Promise.all([
+        const [faceResult, forensicsResult, livenessRes] = await Promise.all([
           faceMatchPromise,
           (async () => {
             try {
@@ -444,10 +446,19 @@ export default function VerifyPage() {
               return null
             }
           })(),
+          // Liveness anti-spoofing analysis on selfie
+          (async () => {
+            try {
+              return await detectLiveness(selfieImage)
+            } catch {
+              return null
+            }
+          })(),
         ])
 
         setFaceMatch(faceResult)
         setForensics(forensicsResult)
+        setLivenessResult(livenessRes)
 
         // Server-side: Textract OCR + Rekognition + save to DB
         const serverRes = await fetch('/api/documents/verify', {
@@ -878,6 +889,83 @@ export default function VerifyPage() {
               </div>
             )}
 
+            {/* Liveness Anti-Spoofing */}
+            {livenessResult && (
+              <div className="glass-panel" style={{ padding: '1.5rem' }}>
+                <h3 style={{ marginBottom: '1rem', fontSize: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  🛡️ Liveness Detection
+                  <span style={{
+                    padding: '2px 10px', borderRadius: 20, fontSize: '0.78rem',
+                    background: livenessResult.isLive ? 'rgba(34,197,94,0.15)' : 'rgba(255,77,77,0.15)',
+                    color: livenessResult.isLive ? '#22C55E' : '#ff4d4d',
+                    fontWeight: 600,
+                  }}>
+                    {livenessResult.isLive ? 'LIVE' : 'SPOOFING SUSPECTED'}
+                  </span>
+                </h3>
+
+                <div style={{ display: 'flex', gap: '1.5rem', flexWrap: 'wrap', alignItems: 'flex-start' }}>
+                  {/* Score ring */}
+                  <div style={{ textAlign: 'center', minWidth: 90 }}>
+                    <div style={{ position: 'relative', width: 80, height: 80, margin: '0 auto' }}>
+                      <svg viewBox="0 0 80 80" style={{ transform: 'rotate(-90deg)' }}>
+                        <circle cx="40" cy="40" r="34" fill="none" stroke="var(--color-border)" strokeWidth="7" />
+                        <circle
+                          cx="40" cy="40" r="34" fill="none"
+                          stroke={livenessResult.score >= 60 ? '#22C55E' : '#FF4D4D'}
+                          strokeWidth="7"
+                          strokeDasharray={`${2 * Math.PI * 34}`}
+                          strokeDashoffset={`${2 * Math.PI * 34 * (1 - livenessResult.score / 100)}`}
+                          strokeLinecap="round"
+                        />
+                      </svg>
+                      <div style={{
+                        position: 'absolute', inset: 0,
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        fontSize: '0.9rem', fontWeight: 700,
+                        color: livenessResult.score >= 60 ? '#22C55E' : '#FF4D4D',
+                      }}>
+                        {livenessResult.score}
+                      </div>
+                    </div>
+                    <p style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)', marginTop: '0.4rem' }}>
+                      Liveness Score
+                    </p>
+                  </div>
+
+                  {/* Checks grid */}
+                  <div style={{ flex: 1 }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                      {livenessResult.checks.map((check, i) => (
+                        <div key={i} style={{
+                          display: 'flex', alignItems: 'center', gap: '0.5rem',
+                          padding: '0.4rem 0.6rem', borderRadius: 6,
+                          background: check.passed ? 'rgba(34,197,94,0.06)' : 'rgba(255,77,77,0.06)',
+                        }}>
+                          <span style={{ fontSize: '0.82rem' }}>{check.passed ? '✓' : '✗'}</span>
+                          <span style={{ fontSize: '0.8rem', fontWeight: 600, minWidth: 120, color: check.passed ? '#22C55E' : '#FF4D4D' }}>
+                            {check.name}
+                          </span>
+                          <span style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)', flex: 1 }}>{check.detail}</span>
+                        </div>
+                      ))}
+                    </div>
+                    {livenessResult.attackType !== 'none' && (
+                      <p style={{
+                        color: '#FF4D4D', fontSize: '0.82rem', marginTop: '0.75rem', fontWeight: 600,
+                        background: 'rgba(255,77,77,0.08)', padding: '0.5rem 0.75rem', borderRadius: 6,
+                      }}>
+                        ⚠️ Suspected attack: {livenessResult.attackType.replace(/_/g, ' ')}
+                      </p>
+                    )}
+                    <p style={{ color: 'var(--color-text-muted)', fontSize: '0.72rem', marginTop: '0.5rem' }}>
+                      Processed in {livenessResult.processingMs}ms · All checks performed client-side
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+
             {/* MRZ Fields */}
             {apiResult?.ocr?.mrzFields && (
               <div className="glass-panel" style={{ padding: '1.5rem' }}>
@@ -1087,7 +1175,7 @@ export default function VerifyPage() {
                 onClick={() => {
                   setStep(0); setDocImage(null); setSelfieImage(null)
                   setFaceMatch(null); setForensics(null); setApiResult(null)
-                  setError(null); setDocDetection(null)
+                  setError(null); setDocDetection(null); setLivenessResult(null)
                   setLivenessChallenge(null)
                   setLivenessState('idle')
                   setLivenessCountdown(LIVENESS_TIMEOUT_S)
