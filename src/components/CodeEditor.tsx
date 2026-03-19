@@ -824,12 +824,40 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(function CodeEd
         }, { capture: true })
 
         // ── Paste via clipboard event ─────────────────────────────────────────
-        domNode.addEventListener('paste', (e: ClipboardEvent) => {
-            const text = e.clipboardData?.getData('text') || ''
+        // Monaco uses an internal <textarea> for clipboard ops — the paste event
+        // only fires on that element, not on the container div. Using capture
+        // phase intercepts the event as it travels DOWN from container to textarea.
+        const handlePaste = (e: Event) => {
+            const ce = e as ClipboardEvent
+            const text = ce.clipboardData?.getData('text') || ''
+            const len = text.length || 1 // at least flag the paste
             lastKeystrokeTimeRef.current = performance.now()
-            lastContentLenRef.current += text.length
-            onBiometricEvent?.({ type: 'paste', length: text.length, timestamp: performance.now() })
+            lastContentLenRef.current += len
+            onBiometricEvent?.({ type: 'paste', length: len, timestamp: performance.now() })
             setRollingStats(prev => ({ ...prev, pasteCount: prev.pasteCount + 1 }))
+        }
+        domNode.addEventListener('paste', handlePaste, { capture: true })
+
+        // Monaco's built-in paste callback — backup in case the DOM event doesn't
+        // fire (e.g. programmatic paste via execCommand). Only increments if the
+        // DOM handler didn't already catch it within the last 200ms.
+        let lastDomPasteTime = 0
+        const origHandlePaste = handlePaste
+        const wrappedHandlePaste = (e: Event) => { lastDomPasteTime = performance.now(); origHandlePaste(e) }
+        domNode.removeEventListener('paste', handlePaste, { capture: true })
+        domNode.addEventListener('paste', wrappedHandlePaste, { capture: true })
+
+        const monacoDisposable = editor.onDidPaste(() => {
+            if (performance.now() - lastDomPasteTime > 200) {
+                // DOM handler didn't fire — Monaco caught paste internally
+                const model = editor.getModel()
+                const currentLen = model ? model.getValueLength() : 0
+                const delta = Math.max(1, currentLen - lastContentLenRef.current)
+                lastContentLenRef.current = currentLen
+                lastKeystrokeTimeRef.current = performance.now()
+                onBiometricEvent?.({ type: 'paste', length: delta, timestamp: performance.now() })
+                setRollingStats(prev => ({ ...prev, pasteCount: prev.pasteCount + 1 }))
+            }
         })
 
         // ── Drag & drop text ──────────────────────────────────────────────────
@@ -842,7 +870,10 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(function CodeEd
             }
         })
 
-        return () => clearInterval(contentPollInterval)
+        return () => {
+            clearInterval(contentPollInterval)
+            monacoDisposable.dispose()
+        }
     }, [onBiometricEvent])
 
     const aiColor        = rollingStats.aiScore > 60 ? '#ff4d4d' : rollingStats.aiScore > 30 ? '#ffd700' : 'var(--color-primary)'

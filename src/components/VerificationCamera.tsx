@@ -701,33 +701,48 @@ const VerificationCamera = forwardRef<VerificationCameraHandle, VerificationCame
                 })
             }
 
-            const init = async () => {
+            const MAX_RETRIES = 3
+
+            const tryLoadLandmarker = async (attempt: number): Promise<FaceLandmarker> => {
+                const vision = await FilesetResolver.forVisionTasks(MP_WASM_CDN)
                 try {
-                    const vision = await FilesetResolver.forVisionTasks(MP_WASM_CDN)
+                    // Try GPU first for best performance
+                    const lm = await createLandmarker(vision, 'GPU')
+                    console.info('[VerificationCamera] FaceLandmarker loaded with GPU delegate')
+                    return lm
+                } catch (gpuErr) {
+                    // GPU failed (no WebGL2, driver issue, etc.) — fallback to CPU
+                    console.warn(`[VerificationCamera] GPU delegate failed (attempt ${attempt}), falling back to CPU:`, gpuErr)
+                    const lm = await createLandmarker(vision, 'CPU')
+                    console.info('[VerificationCamera] FaceLandmarker loaded with CPU delegate')
+                    return lm
+                }
+            }
 
-                    let landmarker: FaceLandmarker
+            const init = async () => {
+                for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+                    if (cancelled) return
                     try {
-                        // Try GPU first for best performance
-                        landmarker = await createLandmarker(vision, 'GPU')
-                        console.info('[VerificationCamera] FaceLandmarker loaded with GPU delegate')
-                    } catch (gpuErr) {
-                        // GPU failed (no WebGL2, driver issue, etc.) — fallback to CPU
-                        console.warn('[VerificationCamera] GPU delegate failed, falling back to CPU:', gpuErr)
-                        landmarker = await createLandmarker(vision, 'CPU')
-                        console.info('[VerificationCamera] FaceLandmarker loaded with CPU delegate')
-                    }
+                        const landmarker = await tryLoadLandmarker(attempt)
 
-                    if (!cancelled) {
-                        landmarkerRef.current = landmarker
-                        setIsModelLoaded(true)
-                        setVerificationStatus('scanning')
-                        modelReadyTimeRef.current = Date.now()
-                        // Warm up deepfake CNN silently (non-blocking)
-                        warmupDeepfakeModel().catch(() => {/* ignore — model may not exist yet */})
+                        if (!cancelled) {
+                            landmarkerRef.current = landmarker
+                            setIsModelLoaded(true)
+                            setVerificationStatus('scanning')
+                            modelReadyTimeRef.current = Date.now()
+                            // Warm up deepfake CNN silently (non-blocking)
+                            warmupDeepfakeModel().catch(() => {/* ignore — model may not exist yet */})
+                        }
+                        return // success — exit retry loop
+                    } catch (e) {
+                        console.error(`[VerificationCamera] FaceLandmarker load error (attempt ${attempt}/${MAX_RETRIES}):`, e)
+                        if (attempt < MAX_RETRIES) {
+                            console.info(`[VerificationCamera] Retrying in ${attempt * 2}s...`)
+                            await new Promise(r => setTimeout(r, attempt * 2000))
+                        } else {
+                            if (!cancelled) setModelLoadError('AI models failed to load. Please refresh the page.')
+                        }
                     }
-                } catch (e) {
-                    console.error('[VerificationCamera] FaceLandmarker load error (both GPU and CPU failed):', e)
-                    if (!cancelled) setModelLoadError('AI models failed to load. Please refresh the page.')
                 }
             }
             init()
