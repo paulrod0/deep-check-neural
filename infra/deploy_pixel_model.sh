@@ -20,10 +20,18 @@ warn() { echo -e "${YELLOW}⚠️  $*${NC}"; }
 
 mkdir -p "$DEST"
 
+# ── Selección de modelo ───────────────────────────────────────────────────────
+# Modelos disponibles en S3 (entrenados en EC2 g4dn.xlarge con Tesla T4):
+#   celebdf_best.onnx        — AUC 0.9913 (FF++ → CelebDF v2) ← RECOMENDADO
+#   faceforensics++_best.onnx — AUC 0.9602 (base)
+#   dfdc_best.onnx            — AUC 0.9434 (FF++ → DFDC)
+S3_MODEL="${S3_MODEL:-celebdf_best.onnx}"
+S3_PREFIX="trained"
+
 # ── Opción --wait: poll S3 hasta que el modelo aparezca ───────────────────────
 if [[ "${1:-}" == "--wait" ]]; then
-  log "Esperando que $MODEL aparezca en s3://$S3_BUCKET/deepfake/ ..."
-  while ! aws s3 ls "s3://$S3_BUCKET/deepfake/$MODEL" &>/dev/null; do
+  log "Esperando que $S3_MODEL aparezca en s3://$S3_BUCKET/$S3_PREFIX/ ..."
+  while ! aws s3 ls "s3://$S3_BUCKET/$S3_PREFIX/$S3_MODEL" &>/dev/null; do
     echo -n "."
     sleep 30
   done
@@ -32,12 +40,12 @@ if [[ "${1:-}" == "--wait" ]]; then
 fi
 
 # ── Descargar modelo y metadata ───────────────────────────────────────────────
-log "Descargando $MODEL de S3..."
-aws s3 cp "s3://$S3_BUCKET/deepfake/$MODEL"   "$DEST/$MODEL"   && ok "$MODEL"
-aws s3 cp "s3://$S3_BUCKET/deepfake/$META"    "$DEST/$META"    && ok "$META"
-aws s3 cp "s3://$S3_BUCKET/deepfake/training_history.json" \
-          "$DEST/training_history.json" 2>/dev/null && ok "training_history.json" || \
-  warn "training_history.json no encontrado (opcional)"
+log "Descargando $S3_MODEL de s3://$S3_BUCKET/$S3_PREFIX/ ..."
+aws s3 cp "s3://$S3_BUCKET/$S3_PREFIX/$S3_MODEL"   "$DEST/$MODEL"   && ok "$S3_MODEL → $MODEL"
+log "Descargando métricas..."
+aws s3 cp "s3://$S3_BUCKET/$S3_PREFIX/metrics.jsonl" \
+          "$DEST/training_metrics.jsonl" 2>/dev/null && ok "metrics.jsonl" || \
+  warn "metrics.jsonl no encontrado (opcional)"
 
 # ── Mostrar métricas ──────────────────────────────────────────────────────────
 if [ -f "$DEST/$META" ]; then
