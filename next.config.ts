@@ -34,15 +34,16 @@ const securityHeaders = [
     value: [
       "default-src 'self'",
       // Scripts: self + inline (Next.js requires this) + blob: (ONNX wasm)
-      "script-src 'self' 'unsafe-inline' 'unsafe-eval' blob:",
+      // jsdelivr: MediaPipe WASM runtime | wasm-unsafe-eval: WASM compilation
+      "script-src 'self' 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval' blob: https://cdn.jsdelivr.net",
       // Styles: self + inline (CSS-in-JS / modules)
       "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
       // Images: self + data: (canvas thumbnails / ELA) + blob:
       "img-src 'self' data: blob:",
       // Fonts
       "font-src 'self' https://fonts.gstatic.com",
-      // Connections: self (API routes) + Supabase
-      `connect-src 'self' https://*.supabase.co wss://*.supabase.co https://tessdata.projectnaptha.com`,
+      // Connections: self (API routes) + Supabase + MediaPipe model + Tesseract
+      `connect-src 'self' https://*.supabase.co wss://*.supabase.co https://tessdata.projectnaptha.com https://cdn.jsdelivr.net https://storage.googleapis.com`,
       // Media: camera stream
       "media-src 'self' blob:",
       // Workers: face-api wasm workers
