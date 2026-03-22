@@ -56,12 +56,28 @@ async function getOrtSession() {
     // Dynamic import — onnxruntime-node is optional (install: npm i onnxruntime-node)
     const ort = await import('onnxruntime-node')
 
-    const modelPath = path.join(process.cwd(), 'public', 'models', 'deepfake', 'deepfake_pixel_v1.onnx')
-    const metaPath  = path.join(process.cwd(), 'public', 'models', 'deepfake', 'deepfake_pixel_v1_metadata.json')
+    const modelDir = path.join(process.cwd(), 'public', 'models', 'deepfake')
+    let modelPath = path.join(modelDir, 'deepfake_pixel_v1.onnx')
+    const metaPath  = path.join(modelDir, 'deepfake_pixel_v1_metadata.json')
 
+    // If model not found locally (excluded via .vercelignore), download from S3
     if (!fs.existsSync(modelPath)) {
-      console.warn('[deepfake] deepfake_pixel_v1.onnx not found — train it first with kaggle_deepfake_notebook.py')
-      return null
+      const S3_MODEL_URL = 'https://deep-check-models.s3.eu-west-1.amazonaws.com/deepfake/deepfake_pixel_v3.onnx'
+      const tmpPath = path.join('/tmp', 'deepfake_pixel_v3.onnx')
+      if (!fs.existsSync(tmpPath)) {
+        console.log('[deepfake] Downloading model from S3...')
+        try {
+          const res = await fetch(S3_MODEL_URL)
+          if (!res.ok) throw new Error(`S3 fetch failed: ${res.status}`)
+          const buf = Buffer.from(await res.arrayBuffer())
+          fs.writeFileSync(tmpPath, buf)
+          console.log(`[deepfake] Downloaded ${(buf.length/1e6).toFixed(1)} MB`)
+        } catch (dlErr) {
+          console.warn('[deepfake] S3 download failed:', dlErr)
+          return null
+        }
+      }
+      modelPath = tmpPath
     }
 
     ortSession = await ort.InferenceSession.create(modelPath, {
