@@ -1,0 +1,35 @@
+{
+  "timestamp": "2026-03-22T08:59:02",
+  "model": "deepfake_pixel_v3_calibrated",
+  "standard": "ISO/IEC 30107-3:2023",
+  "type": "REAL INFERENCE (not simulated)",
+  "datasets": {
+    "deepfake_test": {
+      "n_real": 1081,
+      "n_fake": 960,
+      "inference_time_s": 175.58,
+      "ms_per_img": 86.0,
+      "tta": true,
+      "metrics": {
+        "auc": 0.513497,
+        "eer": 0.485038,
+        "eer_threshold": 1.0,
+        "apcer": 0.278125,
+        "bpcer": 0.691952,
+        "acer": 0.485038,
+        "d_prime": 0.0054,
+        "accuracy_05": 0.4713,
+        "precision_05": 0.4704,
+        "recall_05": 0.9844,
+        "f1_05": 0.6366,
+        "real_mean": 0.974189,
+        "real_std": 0.119352,
+        "fake_mean": 0.973546,
+        "fake_std": 0.119717,
+        "frr_at_far_0_001": 0.999075,
+        "frr_at_far_0_01": 0.989824,
+        "frr_at_far_0_05": 0.948196
+      }
+    }
+  }
+}
