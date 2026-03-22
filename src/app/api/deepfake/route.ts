@@ -184,10 +184,12 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     // Run inference
     const ort = await import('onnxruntime-node')
     const tensor = new ort.Tensor('float32', inputTensor, [1, 3, 224, 224])
-    const feeds  = { face_image: tensor }
+    const inputName = (session as import('onnxruntime-node').InferenceSession).inputNames?.[0] ?? 'x'
+    const feeds  = { [inputName]: tensor }
     const result = await (session as import('onnxruntime-node').InferenceSession).run(feeds)
 
-    const logit          = result['logit'].data[0] as number
+    const outputName = (session as import('onnxruntime-node').InferenceSession).outputNames?.[0] ?? 'logit'
+    const logit          = result[outputName].data[0] as number
     const calibratedProb = plattCalibrate(logit, modelMeta)
     const threshold      = modelMeta?.threshold ?? 0.5
 

@@ -61,43 +61,37 @@ class ONNXPredictor:
         arr = np.array(img, dtype=np.float32).transpose(2, 0, 1) / 255.0
         return (arr - self.mean) / self.std
 
-    def predict_batch(self, paths, batch_size=16) -> np.ndarray:
+    def predict_batch(self, paths, batch_size=1) -> np.ndarray:
         scores = []
-        for i in range(0, len(paths), batch_size):
-            batch = paths[i:i+batch_size]
-            tensors = []
-            for p in batch:
-                try:
-                    tensors.append(self.preprocess(str(p)))
-                except Exception:
-                    tensors.append(np.zeros((3, self.img_size, self.img_size), dtype=np.float32))
-            stacked = np.stack(tensors)
-            logits = self.session.run(None, {self.input_name: stacked})[0].flatten()
-            probs = 1.0 / (1.0 + np.exp(-logits))
-            scores.extend(probs.tolist())
+        for p in paths:
+            try:
+                tensor = self.preprocess(str(p))
+            except Exception:
+                tensor = np.zeros((3, self.img_size, self.img_size), dtype=np.float32)
+            inp = tensor[np.newaxis, ...]  # [1, 3, H, W]
+            logit = self.session.run(None, {self.input_name: inp})[0].flatten()
+            prob = 1.0 / (1.0 + np.exp(-logit))
+            scores.append(float(prob[0]))
         return np.array(scores)
 
-    def predict_tta(self, paths, batch_size=8) -> np.ndarray:
-        """Test-Time Augmentation: original + hflip + gamma, averaged."""
-        original = self.predict_batch(paths, batch_size)
+    def predict_tta(self, paths, batch_size=1) -> np.ndarray:
+        """Test-Time Augmentation: original + hflip, averaged."""
+        original = self.predict_batch(paths)
 
         # Horizontal flip
         flip_scores = []
-        for i in range(0, len(paths), batch_size):
-            batch = paths[i:i+batch_size]
-            tensors = []
-            for p in batch:
-                try:
-                    img = Image.open(str(p)).convert("RGB")
-                    img = img.transpose(Image.FLIP_LEFT_RIGHT)
-                    img = img.resize((self.img_size, self.img_size), Image.BILINEAR)
-                    arr = np.array(img, dtype=np.float32).transpose(2, 0, 1) / 255.0
-                    tensors.append((arr - self.mean) / self.std)
-                except Exception:
-                    tensors.append(np.zeros((3, self.img_size, self.img_size), dtype=np.float32))
-            stacked = np.stack(tensors)
-            logits = self.session.run(None, {self.input_name: stacked})[0].flatten()
-            flip_scores.extend((1.0 / (1.0 + np.exp(-logits))).tolist())
+        for p in paths:
+            try:
+                img = Image.open(str(p)).convert("RGB")
+                img = img.transpose(Image.FLIP_LEFT_RIGHT)
+                img = img.resize((self.img_size, self.img_size), Image.BILINEAR)
+                arr = np.array(img, dtype=np.float32).transpose(2, 0, 1) / 255.0
+                tensor = (arr - self.mean) / self.std
+            except Exception:
+                tensor = np.zeros((3, self.img_size, self.img_size), dtype=np.float32)
+            inp = tensor[np.newaxis, ...]
+            logit = self.session.run(None, {self.input_name: inp})[0].flatten()
+            flip_scores.append(float(1.0 / (1.0 + np.exp(-logit[0]))))
 
         return (original + np.array(flip_scores)) / 2
 
