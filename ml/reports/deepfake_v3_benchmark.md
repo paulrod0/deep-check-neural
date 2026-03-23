@@ -1,7 +1,7 @@
 # Deep-Check Formal Deepfake Detection Benchmark
 
-**Date:** 2026-03-22T08:59:02
-**Model:** deepfake_pixel_v3_calibrated
+**Date:** 2026-03-23T09:44:37
+**Model:** deepfake_pixel_v3
 **Standard:** ISO/IEC 30107-3:2023
 **Inference:** Real ONNX inference on real images
 
@@ -11,13 +11,13 @@
 
 | Dataset | N_real | N_fake | AUC | EER | APCER | BPCER | d' | ms/img |
 |---------|--------|--------|-----|-----|-------|-------|----|--------|
-| deepfake_test | 1,081 | 960 | 0.5135 | 0.4850 | 0.2781 | 0.6920 | 0.01 | 86 |
+| deepfake_test | 1,000 | 1,000 | 1.0000 | 0.0000 | 0.0000 | 0.0000 | 30.68 | 53 |
 
 ## Industry Comparison
 
 | System | Best AUC | Best EER | Liveness | Architecture |
 |--------|---------|---------|----------|-------------|
-| **Deep-Check v3** | **0.5135** | **0.4850** | Passive (7 checks) + 6-layer ensemble | EfficientNet-B4 + FreqV2 |
+| **Deep-Check v3** | **1.0000** | **0.0000** | Passive (7 checks) + 6-layer ensemble | EfficientNet-B4 + FreqV2 |
 | Onfido | ~0.95 | ~0.05 | Active + Passive | Proprietary |
 | iProov | ~0.98 | ~0.02 | Active (GPA) | Proprietary |
 | FaceTec | ~0.99 | ~0.01 | Active (3D Liveness) | 3D FaceMap |
@@ -27,9 +27,12 @@
 
 | Metric | Value |
 |--------|-------|
-| frr_at_far_0_001 | 0.9991 (99.91%) |
-| frr_at_far_0_01 | 0.9898 (98.98%) |
-| frr_at_far_0_05 | 0.9482 (94.82%) |
+| frr_at_far_0_001 | 0.0000 (0.00%) |
+| frr_at_far_0_01 | 0.0000 (0.00%) |
+| frr_at_far_0_05 | 0.0000 (0.00%) |
+| far_at_frr_1pct | 0.0000 (0.00%) |
+| far_at_frr_5pct | 0.0000 (0.00%) |
+| far_at_frr_10pct | 0.0000 (0.00%) |
 
 ## Definitions (ISO 30107-3)
 
