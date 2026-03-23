@@ -21,20 +21,19 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
 
   const usage = await getPlanUsage(org.id)
 
-  // Build LemonSqueezy customer portal URL
+  // Build billing portal URL — Paddle takes priority over LemonSqueezy
+  const isPaddle = Boolean(org.paddle_customer_id)
   let billingPortalUrl: string | null = null
-  if (org.ls_customer_id) {
-    // LemonSqueezy hosted customer portal
-    const storeId = process.env.LEMONSQUEEZY_STORE_ID
-    if (storeId) {
-      billingPortalUrl = `https://app.lemonsqueezy.com/my-orders`
-    }
-  }
-
-  // Subscription management URL
   let manageSubscriptionUrl: string | null = null
-  if (org.ls_subscription_id) {
-    manageSubscriptionUrl = `https://app.lemonsqueezy.com/my-orders`
+
+  if (isPaddle && org.paddle_subscription_id) {
+    // Paddle customer portal
+    const env = process.env.PADDLE_ENVIRONMENT === 'production' ? '' : 'sandbox-'
+    billingPortalUrl = `https://${env}customer-portal.paddle.com`
+    manageSubscriptionUrl = billingPortalUrl
+  } else if (org.ls_customer_id) {
+    billingPortalUrl = `https://app.lemonsqueezy.com/my-orders`
+    manageSubscriptionUrl = billingPortalUrl
   }
 
   return NextResponse.json({
@@ -58,9 +57,10 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
         periodReset: usage.periodReset,
       } : null,
       billing: {
-        hasSubscription: Boolean(org.ls_subscription_id),
-        customerId: org.ls_customer_id,
-        subscriptionId: org.ls_subscription_id,
+        hasSubscription: Boolean(org.paddle_subscription_id || org.ls_subscription_id),
+        provider: isPaddle ? 'paddle' : org.ls_customer_id ? 'lemonsqueezy' : null,
+        customerId: org.paddle_customer_id ?? org.ls_customer_id,
+        subscriptionId: org.paddle_subscription_id ?? org.ls_subscription_id,
         billingPortalUrl,
         manageSubscriptionUrl,
       },
