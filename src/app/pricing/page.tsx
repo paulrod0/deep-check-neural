@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import type { Metadata } from 'next'
+import PaddleCheckoutButton from '@/components/PaddleCheckoutButton'
 
 export const metadata: Metadata = {
   title: 'Planes y Precios — Deep-Check',
@@ -177,9 +178,11 @@ export default function PricingPage() {
               </li>
             ))}
           </ul>
-          <a href={STARTER_CHECKOUT} className="btn btn-outline" style={{ width: '100%', justifyContent: 'center', display: 'flex' }}>
-            Suscribirse →
-          </a>
+          <PaddleCheckoutButton
+            priceId={process.env.PADDLE_STARTER_PRICE_ID ?? 'pri_01kmd3y9b6bd4kg8k0a91mz7dn'}
+            className="btn btn-outline"
+            style={{ width: '100%', justifyContent: 'center', display: 'flex', cursor: 'pointer' }}
+          />
           <p style={{ color: 'var(--color-text-muted)', fontSize: '0.75rem', textAlign: 'center', marginTop: '0.75rem' }}>
             Cancela cuando quieras · Pago seguro por Paddle
           </p>
@@ -218,9 +221,11 @@ export default function PricingPage() {
               </li>
             ))}
           </ul>
-          <a href={PRO_CHECKOUT} className="btn btn-primary" style={{ width: '100%', justifyContent: 'center', display: 'flex' }}>
-            Suscribirse →
-          </a>
+          <PaddleCheckoutButton
+            priceId={process.env.PADDLE_PRO_PRICE_ID ?? 'pri_01kmd40b8wjxzf79angzbv9ywa'}
+            className="btn btn-primary"
+            style={{ width: '100%', justifyContent: 'center', display: 'flex', cursor: 'pointer' }}
+          />
           <p style={{ color: 'var(--color-text-muted)', fontSize: '0.75rem', textAlign: 'center', marginTop: '0.75rem' }}>
             Cancela cuando quieras · Pago seguro por Paddle
           </p>
