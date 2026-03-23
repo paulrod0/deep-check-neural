@@ -31,6 +31,9 @@ export interface Organization {
   plan_status:        string
   ls_customer_id:     string | null
   ls_subscription_id: string | null
+  paddle_customer_id:     string | null
+  paddle_subscription_id: string | null
+  paddle_price_id:        string | null
   sessions_used:      number
   docs_used:          number
   period_reset:       string
