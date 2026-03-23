@@ -113,27 +113,83 @@ def find_real_fake_dirs(base: Path):
             fake_dirs.append(d)
     return real_dirs, fake_dirs
 
+def _use_140k_original_splits(raw):
+    """Use the 140K dataset's ORIGINAL train/valid/test splits to prevent data leakage."""
+    splits = {'train': {'real':[], 'fake':[]}, 'val': {'real':[], 'fake':[]}, 'test': {'real':[], 'fake':[]}}
+    exts = {'.jpg','.jpeg','.png'}
+    for split_name, orig_name in [('train','train'), ('val','valid'), ('test','test')]:
+        for label in ['real', 'fake']:
+            d = None
+            # Search for the original split directory
+            for candidate in raw.rglob(f'{orig_name}/{label}'):
+                if candidate.is_dir():
+                    d = candidate; break
+            if d:
+                imgs = [str(f) for f in d.rglob('*') if f.suffix.lower() in exts]
+                splits[split_name][label] = imgs
+                print(f"    140k {orig_name}/{label}: {len(imgs):,}")
+    return splits
+
 def organize_splits():
-    print("\n[2/5] Organizing splits...")
+    """Organize datasets into train/val/test splits, RESPECTING original splits to prevent leakage."""
+    print("\n[2/5] Organizing splits (leak-safe)...")
     splits = {k: {'real':[],'fake':[]} for k in ['train','val','test','cross_test']}
+
     for slug, name, role in KAGGLE_DATASETS:
         raw = DATA_DIR / 'raw' / name
         if not raw.exists(): print(f"  [{name}] Not found"); continue
+
+        if role == 'cross_test':
+            rdirs, fdirs = find_real_fake_dirs(raw)
+            rimgs = [str(f) for d in rdirs for f in d.rglob('*') if f.suffix.lower() in {'.jpg','.jpeg','.png'}]
+            fimgs = [str(f) for d in fdirs for f in d.rglob('*') if f.suffix.lower() in {'.jpg','.jpeg','.png'}]
+            splits['cross_test']['real'].extend(rimgs)
+            splits['cross_test']['fake'].extend(fimgs)
+            print(f"  [{name}] {len(rimgs):,}R + {len(fimgs):,}F (cross-test, fully held out)")
+            continue
+
+        # CRITICAL: For 140K dataset, use ORIGINAL train/valid/test splits
+        if name == '140k':
+            print(f"  [{name}] Using ORIGINAL splits (preventing leak):")
+            orig = _use_140k_original_splits(raw)
+            for sp in ['train','val','test']:
+                splits[sp]['real'].extend(orig[sp]['real'])
+                splits[sp]['fake'].extend(orig[sp]['fake'])
+            continue
+
+        # For other datasets: do our own 80/10/10 split
         rdirs, fdirs = find_real_fake_dirs(raw)
         if not rdirs and not fdirs: continue
         rimgs = [str(f) for d in rdirs for f in d.rglob('*') if f.suffix.lower() in {'.jpg','.jpeg','.png'}]
         fimgs = [str(f) for d in fdirs for f in d.rglob('*') if f.suffix.lower() in {'.jpg','.jpeg','.png'}]
         random.shuffle(rimgs); random.shuffle(fimgs)
-        print(f"  [{name}] {len(rimgs):,} real + {len(fimgs):,} fake ({role})")
-        if role == 'cross_test':
-            splits['cross_test']['real'].extend(rimgs)
-            splits['cross_test']['fake'].extend(fimgs)
-        else:
-            for imgs, label in [(rimgs,'real'),(fimgs,'fake')]:
-                n = len(imgs); nt = int(n*0.8); nv = int(n*0.1)
-                splits['train'][label].extend(imgs[:nt])
-                splits['val'][label].extend(imgs[nt:nt+nv])
-                splits['test'][label].extend(imgs[nt+nv:])
+        print(f"  [{name}] {len(rimgs):,}R + {len(fimgs):,}F (own 80/10/10 split)")
+        for imgs, label in [(rimgs,'real'),(fimgs,'fake')]:
+            n = len(imgs); nt = int(n*0.8); nv = int(n*0.1)
+            splits['train'][label].extend(imgs[:nt])
+            splits['val'][label].extend(imgs[nt:nt+nv])
+            splits['test'][label].extend(imgs[nt+nv:])
+
+    # LEAK VERIFICATION: ensure zero overlap between splits
+    print("\n  === LEAK VERIFICATION ===")
+    all_train = set(splits['train']['real'] + splits['train']['fake'])
+    all_val = set(splits['val']['real'] + splits['val']['fake'])
+    all_test = set(splits['test']['real'] + splits['test']['fake'])
+    all_cross = set(splits['cross_test']['real'] + splits['cross_test']['fake'])
+
+    leak_tv = len(all_train & all_val)
+    leak_tt = len(all_train & all_test)
+    leak_tc = len(all_train & all_cross)
+    leak_vt = len(all_val & all_test)
+    print(f"  train ∩ val:   {leak_tv} {'✅' if leak_tv==0 else '🚨 LEAK!'}")
+    print(f"  train ∩ test:  {leak_tt} {'✅' if leak_tt==0 else '🚨 LEAK!'}")
+    print(f"  train ∩ cross: {leak_tc} {'✅' if leak_tc==0 else '🚨 LEAK!'}")
+    print(f"  val   ∩ test:  {leak_vt} {'✅' if leak_vt==0 else '🚨 LEAK!'}")
+
+    if leak_tv + leak_tt + leak_tc + leak_vt > 0:
+        print("  🚨 DATA LEAKAGE DETECTED — aborting to prevent invalid results!")
+        sys.exit(1)
+
     for sp, data in splits.items():
         p = DATA_DIR / f'{sp}_real.txt'; p.parent.mkdir(parents=True, exist_ok=True)
         with open(p, 'w') as f: f.write('\n'.join(data['real']))
