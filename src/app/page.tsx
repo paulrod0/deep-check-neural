@@ -9,6 +9,54 @@ export default function Home() {
         <div className="container" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div className={styles.logo}>Deep-Check<span style={{ color: 'var(--color-primary)' }}>.</span></div>
           <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
+            <div className="dropdown" style={{ position: 'relative' }}>
+              <button style={{
+                background: 'none', border: '1px solid rgba(255,255,255,0.15)',
+                color: 'var(--color-text-muted)', fontSize: '0.9rem', padding: '0.5rem 1rem',
+                borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.4rem'
+              }}>
+                Products <span style={{ fontSize: '0.7rem' }}>▼</span>
+              </button>
+              <div className="dropdown-menu" style={{
+                position: 'absolute', top: '100%', right: 0, marginTop: '0.5rem',
+                background: '#1a1a1a', border: '1px solid rgba(255,255,255,0.1)',
+                borderRadius: '12px', padding: '0.5rem', minWidth: '220px',
+                opacity: 0, pointerEvents: 'none', transform: 'translateY(-8px)',
+                transition: 'all 0.2s ease', zIndex: 100,
+                boxShadow: '0 8px 32px rgba(0,0,0,0.4)',
+              }}>
+                <Link href="/interview" style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', padding: '0.6rem 0.8rem', color: '#fff', textDecoration: 'none', borderRadius: '8px', fontSize: '0.85rem', transition: 'background 0.15s' }}>
+                  <span>🛡️</span> Live Verification
+                </Link>
+                <Link href="/amireal" style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', padding: '0.6rem 0.8rem', color: '#fff', textDecoration: 'none', borderRadius: '8px', fontSize: '0.85rem', transition: 'background 0.15s' }}>
+                  <span>🤖</span> Am I Real?
+                </Link>
+                <Link href="/trustmyprofile" style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', padding: '0.6rem 0.8rem', color: '#fff', textDecoration: 'none', borderRadius: '8px', fontSize: '0.85rem', transition: 'background 0.15s' }}>
+                  <span>💚</span> TrustMyProfile
+                </Link>
+                <Link href="/documents/verify" style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', padding: '0.6rem 0.8rem', color: '#fff', textDecoration: 'none', borderRadius: '8px', fontSize: '0.85rem', transition: 'background 0.15s' }}>
+                  <span>📄</span> Document Forensics
+                </Link>
+                <Link href="/enroll" style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', padding: '0.6rem 0.8rem', color: '#fff', textDecoration: 'none', borderRadius: '8px', fontSize: '0.85rem', transition: 'background 0.15s' }}>
+                  <span>🧬</span> Biometric Enrollment
+                </Link>
+                <div style={{ borderTop: '1px solid rgba(255,255,255,0.08)', margin: '0.3rem 0' }} />
+                <Link href="/docs" style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', padding: '0.6rem 0.8rem', color: 'var(--color-text-muted)', textDecoration: 'none', borderRadius: '8px', fontSize: '0.8rem', transition: 'background 0.15s' }}>
+                  <span>📚</span> API Docs
+                </Link>
+              </div>
+              <style>{`
+                .dropdown:hover .dropdown-menu,
+                .dropdown:focus-within .dropdown-menu {
+                  opacity: 1 !important;
+                  pointer-events: auto !important;
+                  transform: translateY(0) !important;
+                }
+                .dropdown-menu a:hover {
+                  background: rgba(0, 255, 136, 0.08) !important;
+                }
+              `}</style>
+            </div>
             <a href="#vs-onfido" style={{ color: 'var(--color-text-muted)', fontSize: '0.9rem', textDecoration: 'none' }}>vs Onfido</a>
             <Link href="/pricing" className="btn btn-primary">See Plans</Link>
           </div>
