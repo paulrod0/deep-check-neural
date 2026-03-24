@@ -238,15 +238,27 @@ export default function AmIRealPage() {
       // Preprocess
       const tensorData = preprocessFrame(canvas)
 
-      // Load ONNX Runtime
-      const ort = await import('onnxruntime-web')
+      // Load ONNX Runtime with robust error handling
+      let ort: typeof import('onnxruntime-web')
+      try {
+        ort = await import('onnxruntime-web')
+      } catch {
+        throw new Error('Failed to load ONNX Runtime Web module')
+      }
       ort.env.wasm.wasmPaths = '/'
+      ort.env.wasm.numThreads = 1
 
-      // Create session
-      const session = await ort.InferenceSession.create(MODEL_PATH, {
-        executionProviders: ['wasm'],
-        graphOptimizationLevel: 'all',
-      })
+      // Create session with timeout
+      let session: import('onnxruntime-web').InferenceSession
+      try {
+        session = await ort.InferenceSession.create(MODEL_PATH, {
+          executionProviders: ['wasm'],
+          graphOptimizationLevel: 'all',
+        })
+      } catch (modelErr) {
+        console.error('ONNX session error:', modelErr)
+        throw new Error('Failed to load AI model (70MB). Check network connection.')
+      }
 
       // Build input tensor [1, 3, 224, 224]
       const input = new ort.Tensor('float32', tensorData, [1, 3, TARGET_SIZE, TARGET_SIZE])
@@ -268,7 +280,8 @@ export default function AmIRealPage() {
       setPhase('result')
     } catch (err) {
       console.error('[AmIReal] Inference error:', err)
-      setError('Analysis failed. Your browser may not support WebAssembly ONNX inference. Try Chrome or Edge.')
+      const msg = err instanceof Error ? err.message : 'Unknown error'
+      setError(`Analysis failed: ${msg}. Try Chrome or Edge.`)
       setPhase('hero')
     }
   }, [stopCamera])
