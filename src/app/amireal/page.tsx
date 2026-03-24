@@ -251,10 +251,12 @@ export default function AmIRealPage() {
       // Build input tensor [1, 3, 224, 224]
       const input = new ort.Tensor('float32', tensorData, [1, 3, TARGET_SIZE, TARGET_SIZE])
 
-      // Run inference — input name is "face_image", output name is "logit"
-      const feeds: Record<string, import('onnxruntime-web').Tensor> = { face_image: input }
+      // Run inference — detect input/output names dynamically
+      const inputName = session.inputNames[0]   // "x" or "face_image"
+      const outputName = session.outputNames[0] // "squeeze" or "logit"
+      const feeds: Record<string, import('onnxruntime-web').Tensor> = { [inputName]: input }
       const output = await session.run(feeds)
-      const logitData = output['logit'].data as Float32Array
+      const logitData = output[outputName].data as Float32Array
 
       const logit = logitData[0]
       const pFake = sigmoid(logit)
