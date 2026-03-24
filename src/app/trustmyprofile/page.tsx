@@ -348,9 +348,11 @@ export default function TrustMyProfilePage() {
           }
 
           const input = new ort.Tensor('float32', tensor, [1, 3, TARGET, TARGET])
-          const feeds: Record<string, import('onnxruntime-web').Tensor> = { face_image: input }
+          const inputName = session.inputNames[0]
+          const outputName = session.outputNames[0]
+          const feeds: Record<string, import('onnxruntime-web').Tensor> = { [inputName]: input }
           const output = await session.run(feeds)
-          const logit = (output.logit.data as Float32Array)[0]
+          const logit = (output[outputName].data as Float32Array)[0]
           const pFake = 1 / (1 + Math.exp(-logit)) // sigmoid
 
           deepfakeScore = Math.round(pFake * 100)
