@@ -19,6 +19,7 @@ const IMAGENET_STD = [0.229, 0.224, 0.225]
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
+type VerifyMode = 'check_profile' | 'verify_self'
 type Step = 'landing' | 'upload' | 'selfie' | 'verifying' | 'result'
 
 interface Landmark {
@@ -155,6 +156,7 @@ function generateBadge(confidence: number): string {
 
 export default function TrustMyProfilePage() {
   const [step, setStep] = useState<Step>('landing')
+  const [mode, setMode] = useState<VerifyMode>('check_profile')
   const [profileImage, setProfileImage] = useState<string | null>(null)
   const [selfieImage, setSelfieImage] = useState<string | null>(null)
   const [result, setResult] = useState<VerificationResult | null>(null)
@@ -276,41 +278,54 @@ export default function TrustMyProfilePage() {
           img.src = src
         })
 
-      const [profileImg, selfieImg] = await Promise.all([
-        loadImg(profileImage),
-        loadImg(selfieImage),
-      ])
+      const profileImg = await loadImg(profileImage)
 
-      // Step 3: Detect faces
+      let match = false
+      let similarity = 0
+      let confidence = 0
+      let profileFaceFound = false
+      let selfieFaceFound = !selfieImage  // true if no selfie needed
+
+      // Face detection on profile photo
       setStatusText('Detecting faces...')
       const profileResult = landmarker.detect(profileImg)
-      const selfieResult = landmarker.detect(selfieImg)
+      profileFaceFound = profileResult.faceLandmarks.length > 0
 
-      const profileFaceFound = profileResult.faceLandmarks.length > 0
-      const selfieFaceFound = selfieResult.faceLandmarks.length > 0
-
-      if (!profileFaceFound || !selfieFaceFound) {
+      if (!profileFaceFound) {
         setResult({
-          match: false,
-          similarity: 0,
-          confidence: 0,
-          deepfakeDetected: false,
-          deepfakeScore: 0,
-          profileFaceFound,
-          selfieFaceFound,
+          match: false, similarity: 0, confidence: 0,
+          deepfakeDetected: false, deepfakeScore: 0,
+          profileFaceFound, selfieFaceFound: true,
         })
         setStep('result')
         landmarker.close()
         return
       }
 
-      // Step 4: Compare faces
-      setStatusText('Comparing face geometry...')
-      const profileVec = normalizeLandmarks(profileResult.faceLandmarks[0] as Landmark[])
-      const selfieVec = normalizeLandmarks(selfieResult.faceLandmarks[0] as Landmark[])
-      const similarity = Math.max(0, Math.min(1, cosineSimilarity(profileVec, selfieVec)))
-      const match = similarity >= MATCH_THRESHOLD
-      const confidence = Math.round(Math.max(0, Math.min(100, ((similarity - 0.6) / 0.4) * 100)))
+      // Face comparison (only if selfie provided — verify_self mode)
+      if (selfieImage) {
+        const selfieImg = await loadImg(selfieImage)
+        const selfieResult = landmarker.detect(selfieImg)
+        selfieFaceFound = selfieResult.faceLandmarks.length > 0
+
+        if (!selfieFaceFound) {
+          setResult({
+            match: false, similarity: 0, confidence: 0,
+            deepfakeDetected: false, deepfakeScore: 0,
+            profileFaceFound, selfieFaceFound,
+          })
+          setStep('result')
+          landmarker.close()
+          return
+        }
+
+        setStatusText('Comparing face geometry...')
+        const profileVec = normalizeLandmarks(profileResult.faceLandmarks[0] as Landmark[])
+        const selfieVec = normalizeLandmarks(selfieResult.faceLandmarks[0] as Landmark[])
+        similarity = Math.max(0, Math.min(1, cosineSimilarity(profileVec, selfieVec)))
+        match = similarity >= MATCH_THRESHOLD
+        confidence = Math.round(Math.max(0, Math.min(100, ((similarity - 0.6) / 0.4) * 100)))
+      }
 
       landmarker.close()
 
@@ -324,7 +339,7 @@ export default function TrustMyProfilePage() {
         const modelCheck = await fetch(DEEPFAKE_MODEL_URL, { method: 'HEAD' })
         if (modelCheck.ok) {
           const ort = await import('onnxruntime-web')
-          ort.env.wasm.wasmPaths = '/onnx/'
+          ort.env.wasm.wasmPaths = '/'
 
           const session = await ort.InferenceSession.create(DEEPFAKE_MODEL_URL)
 
@@ -376,6 +391,12 @@ export default function TrustMyProfilePage() {
       }
       setResult(verificationResult)
 
+      // In check_profile mode, "match" means "photo is real" (not deepfake)
+      if (mode === 'check_profile') {
+        match = !deepfakeDetected
+        confidence = deepfakeDetected ? deepfakeScore : (100 - deepfakeScore)
+      }
+
       if (match && !deepfakeDetected) {
         setBadgeDataUrl(generateBadge(confidence))
       }
@@ -386,7 +407,7 @@ export default function TrustMyProfilePage() {
       setError('Verification failed. Please try again.')
       setStep('selfie')
     }
-  }, [profileImage, selfieImage])
+  }, [profileImage, selfieImage, mode])
 
   // ── Step navigation ────────────────────────────────────────────────────
 
@@ -400,6 +421,11 @@ export default function TrustMyProfilePage() {
   }
 
   const goToSelfie = () => {
+    if (mode === 'check_profile') {
+      // Skip selfie — go directly to verification with photo-only deepfake check
+      runVerification()
+      return
+    }
     setStep('selfie')
     setSelfieImage(null)
     startCamera()
@@ -538,8 +564,32 @@ export default function TrustMyProfilePage() {
                 e.currentTarget.style.boxShadow = `0 0 30px ${colors.primaryGlow}`
               }}
             >
-              Verify Now
+              🔍 Check a Profile
             </button>
+
+            <button
+              onClick={() => { setMode('verify_self'); setStep('upload') }}
+              style={{
+                display: 'block',
+                margin: '0.75rem auto 0',
+                padding: '0.9rem 2.5rem',
+                background: 'transparent',
+                border: `2px solid ${colors.primary}`,
+                color: colors.primary,
+                fontSize: '1.05rem',
+                fontWeight: 700,
+                borderRadius: '14px',
+                cursor: 'pointer',
+                transition: 'all 0.2s',
+              }}
+            >
+              🤳 Verify Myself
+            </button>
+
+            <p style={{ color: colors.muted, fontSize: '0.8rem', marginTop: '0.75rem' }}>
+              <strong>Check a Profile:</strong> Upload any photo → AI tells you if it&apos;s real or fake<br/>
+              <strong>Verify Myself:</strong> Upload photo + live selfie → proves you are who you say
+            </p>
 
             {/* Benefits */}
             <div style={{
