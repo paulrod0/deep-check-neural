@@ -3,6 +3,10 @@
 # IDE / tooling
 .gemini/
 
+# Private integrations (never push)
+sdk/
+galtea-integration/
+
 # dependencies
 /node_modules
 /.pnp
