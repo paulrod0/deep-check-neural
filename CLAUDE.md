@@ -5,7 +5,7 @@ AI-powered identity verification platform. Privacy-first: all biometric processi
 
 **Live:** https://deep-check-two.vercel.app
 **Repo:** https://github.com/paulrod0/deep-check (private, BSL license)
-**Owner:** Pablo Lopez Rodriguez, HIUM Solutions SL, Andalucia, Spain
+**Owner:** Pablo Lopez Rodriguez, Madrid, Spain
 
 ## Architecture
 
@@ -25,7 +25,10 @@ Bayesian logit-space fusion of 6 independent detection layers:
 - **Face Detection:** MediaPipe FaceLandmarker (CDN: jsdelivr + googleapis)
 - **Backend:** Supabase (auth + DB), Vercel (hosting)
 - **Payments:** Paddle (Overlay Checkout)
-- **ML Training:** PyTorch + timm on AWS EC2 (T4/A10G GPUs)
+- **ML Training:** PyTorch + timm on AWS EC2 (A10G GPUs)
+- **Foundation Models:** DINOv2, DINOv3 (via timm + HuggingFace)
+- **Database:** Neon (PostgreSQL serverless) + Supabase (auth)
+- **i18n:** EN/ES with language selector (src/lib/i18n.tsx)
 
 ## Models
 
@@ -37,11 +40,22 @@ Bayesian logit-space fusion of 6 independent detection layers:
   - File: `public/models/deepfake/deepfake_pixel_v1.onnx`
   - S3: `s3://deep-check-models/deepfake/deepfake_pixel_v3.onnx`
 
-- **V4 (training):** ConvNeXt-Base + FrequencyBranchV2
-  - ~89M params, 13 Kaggle datasets (~500K images)
-  - Includes: StyleGAN2, PhotoShop, ProGAN, CycleGAN, StarGAN, DFDC, AI faces, Stable Diffusion, ArtiFact (13 generators), anti-spoofing
-  - 200 epochs with adversarial augmentation
-  - Training script: `ml/train_deepfake_v3.py` (modified for v4 on EC2)
+- **V7 (stopped):** DINOv2 ViT-L/14 + FrequencyBranch
+  - 304M params, 315K images (cross-source validation)
+  - Best AUC 0.988, EER 2.18% (cross-source: LFW + UTKFace + val-fakes)
+  - S3: `s3://deep-check-models/deepfake/v5/best_v5_clip.pt`
+
+- **V8 (best, API deployed):** DINOv3 ViT-L/16 + Linear Head
+  - 303M params, 315K images, cross-source validation
+  - **Best AUC 0.991, EER 2.51%** — state of the art cross-source
+  - API live at EC2 52.215.31.248:8080 (proxied via /api/v1/detect-v8)
+  - S3: `s3://deep-check-models/deepfake/v8/best_v8.pt`
+
+- **Doc Forensics (training):** DINOv2 ViT-L/14 + ELA branch
+  - 304M params, 171K images (CASIA + forensics-rf 4 datasets)
+  - Cross-source validation (Set 4 as val)
+  - Training on EC2 54.229.204.211
+  - 6-channel input: RGB + Error Level Analysis (ELA)
 
 ### ONNX Contract (DO NOT CHANGE)
 ```
@@ -128,9 +142,49 @@ Reports: `ml/reports/industrial_benchmark.json` and `.md`
 | Script | Purpose |
 |--------|---------|
 | `ml/train_deepfake_v3.py` | V3 training (7 datasets, EfficientNet-B4) |
+| `ml/train_v5_fixed.py` | V5-B4 cross-source training (811K images, anti-overfitting) |
+| `ml/train_v5_b4v2.py` | V5-B4v2 with higher LR and warmup |
+| `ml/train_v5_effnetv2.py` | V5 with EfficientNet-V2-S backbone |
+| `ml/train_deepfake_v5.py` | V5 original training script |
 | `ml/benchmark_industrial.py` | Industrial benchmark (ISO 30107-3) |
 | `ml/benchmark_deepfake_v3.py` | Basic benchmark |
-| `infra/train_pixel_ec2.py` | Original V1 EC2 training |
+
+## EC2 Instances (Active)
+| Instance | IP | GPU | Purpose |
+|----------|-----|-----|---------|
+| i-0105e7979c9ad73a0 | 54.229.204.211 | A10G | Doc Forensics training |
+| i-027f26e44cea55363 | 52.215.31.248 | A10G | V8 API server |
+
+## API Endpoints
+| Endpoint | Method | Purpose |
+|----------|--------|---------|
+| `/api/v1/detect` | POST | V3 deepfake detection (ONNX server-side) |
+| `/api/v1/detect-v8` | POST/GET | V8 DINOv3 detection (proxy to EC2) |
+| `/api/v1/verify` | POST | Document verification (MRZ + forensics) |
+| `/api/v1/batch` | POST/GET | Async batch verification |
+| `/api/v1/sessions` | GET/POST | Assessment session management |
+| `/api/v1/keys` | GET/POST | API key management (admin) |
+| `/api/waitlist` | POST | Enterprise waitlist signup |
+| `/api/training/metrics` | GET | Training dashboard data (S3) |
+
+## Products (Consumer)
+| Product | Route | Description |
+|---------|-------|-------------|
+| Am I Real? | `/amireal` | Live webcam deepfake detection (V3 + V8 selector) |
+| DateSafe | `/datesafe` | Catfish detector for dating apps |
+| ProofShot | `/proofshot` | Photo authenticity certificate |
+| DocSafe | `/docsafe` | Document manipulation detection |
+| ListingCheck | `/listingcheck` | Listing photo verification |
+| ResumeGuard | `/resumeguard` | Resume photo batch verification |
+| TrustMyProfile | `/trustmyprofile` | Profile verification badge |
+| FakeCheck | `extensions/fakecheck/` | Chrome Extension |
+
+## SEO & Analytics
+- Google Search Console verified (meta tag in layout.tsx)
+- Sitemap at `/sitemap.xml` (14 routes)
+- robots.txt configured
+- JSON-LD structured data (Organization, SoftwareApplication, WebSite)
+- Page-specific metadata via layout.tsx files per route
 
 ## Key Decisions Made
 1. **BSL License** — protects IP while allowing code visibility
@@ -155,9 +209,16 @@ src/lib/neuralForensics.ts    — EfficientNet pixel model loader
 src/lib/deepfakeInference.ts  — CNN blendshape model
 src/lib/faceMatch.ts          — MediaPipe face verification
 src/lib/keystrokeBiometrics.ts — Typing pattern analysis
+src/lib/facePreprocess.ts     — Shared face preprocessing (detect + crop + normalize + calibrate)
+src/lib/i18n.tsx              — Internationalization (EN/ES) with LanguageProvider
+src/lib/db.ts                 — Supabase/Neon database client
 src/app/pricing/page.tsx      — Pricing page with Paddle checkout
+src/app/training/page.tsx     — Training dashboard (real-time metrics from S3)
+src/app/amireal/page.tsx      — Am I Real? with V3/V8 model selector
+src/app/api/v1/detect-v8/     — V8 DINOv3 API proxy to EC2
 next.config.ts                — CSP headers, security config
 public/models/deepfake/       — ONNX models served to browser
 nist-fate-pad/                — NIST C++ SDKs
 ml/                           — Training and benchmark scripts
+docs/                         — Pitch decks, commercial decks (PDF generators)
 ```
