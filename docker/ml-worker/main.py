@@ -1,202 +1,194 @@
 """
-Deep-Check — ML Worker (FastAPI)
-=================================
-Server-side pixel forensics service for on-premise deployments.
-Runs EfficientNet-Lite ONNX model for L4 deepfake analysis.
-
+Deep-Check ML Worker v3 -- All Verification Engines
+=====================================================
 Endpoints:
-  GET  /health                  — Model status
-  POST /analyze-frame           — Analyze a face frame image
-
-Veritas Engine v2 — Deep-Check
+  GET  /health              -- Status of all engines
+  POST /detect/deepfake     -- Deepfake detection (V9 DINOv3 / V3 ONNX)
+  POST /detect/document     -- Document forensics (DINOv2 + ELA)
+  POST /verify/keystroke    -- Keystroke verification + bot detection
+  POST /enroll/keystroke    -- Enroll user typing pattern
+  GET  /models/status       -- Model versions and metrics
+  POST /models/reload       -- Hot-reload models from disk
 """
-
-import os
-import io
-import base64
-import logging
+import os, io, base64, logging, time
 from pathlib import Path
 
-import numpy as np
 import uvicorn
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
+from typing import Optional, List
 
-# Optional ONNX runtime
-try:
-    import onnxruntime as ort
-    ONNX_AVAILABLE = True
-except ImportError:
-    ONNX_AVAILABLE = False
-    logging.warning("onnxruntime not installed — model inference disabled")
-
-# Optional PIL for image decoding
-try:
-    from PIL import Image
-    PIL_AVAILABLE = True
-except ImportError:
-    PIL_AVAILABLE = False
+from engines.deepfake_engine import DeepfakeEngine
+from engines.doc_engine import DocForensicsEngine
+from engines.keystroke_engine import KeystrokeEngine
+from model_loader import ensure_models_exist, check_and_download_models, get_model_status
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# ─── Config ───────────────────────────────────────────────────────────────────
+PORT = int(os.getenv("PORT", 8001))
 
-MODEL_DIR  = Path(os.getenv('MODEL_DIR', '/app/models'))
-PORT       = int(os.getenv('PORT', 8001))
-IMG_SIZE   = 224
-LABELS     = ['real_human', 'deepfake_video', 'photo_replay']
+# Download models on startup if missing
+logger.info("Checking models...")
+ensure_models_exist()
 
-# ─── Load model ───────────────────────────────────────────────────────────────
+# Initialize engines
+logger.info("Loading engines...")
+deepfake = DeepfakeEngine()
+doc_forensics = DocForensicsEngine()
+keystroke = KeystrokeEngine()
+logger.info("All engines initialized")
 
-session: 'ort.InferenceSession | None' = None
-model_path_used: str = ''
-
-
-def load_model():
-    global session, model_path_used
-    if not ONNX_AVAILABLE:
-        return
-
-    candidates = [
-        MODEL_DIR / 'efficientnet_pixel.onnx',
-        MODEL_DIR / 'deepfake_detector.onnx',
-    ]
-    for path in candidates:
-        if path.exists():
-            try:
-                session = ort.InferenceSession(str(path))
-                model_path_used = str(path)
-                logger.info(f"Loaded model: {path}")
-                return
-            except Exception as e:
-                logger.warning(f"Failed to load {path}: {e}")
-
-    logger.warning("No ONNX model found — running heuristic fallback only")
+# FastAPI
+app = FastAPI(title="Deep-Check ML Worker", version="3.0.0",
+              description="Unified verification API: deepfake + document forensics + keystroke biometrics")
+app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
 
-load_model()
+# -- Schemas --
+class KeystrokeEntry(BaseModel):
+    hold_time: float = 0
+    flight_time: float = 0
+    key_category: int = 0
 
-# ─── FastAPI app ──────────────────────────────────────────────────────────────
+class KeystrokeRequest(BaseModel):
+    keystrokes: List[KeystrokeEntry]
+    user_id: Optional[str] = None
 
-app = FastAPI(title='Deep-Check ML Worker', version='2.0.0')
-app.add_middleware(CORSMiddleware, allow_origins=['*'], allow_methods=['POST', 'GET'])
+class EnrollRequest(BaseModel):
+    keystrokes: List[KeystrokeEntry]
+    user_id: str
 
-# ─── Schemas ──────────────────────────────────────────────────────────────────
 
-class AnalyzeRequest(BaseModel):
-    frameBase64: str
-    sessionId: str = ''
-
-class AnalyzeResponse(BaseModel):
-    score: int
-    method: str
-    features: dict
-    prediction: str
-    probabilities: dict
-
-# ─── Endpoints ────────────────────────────────────────────────────────────────
-
-@app.get('/health')
+# -- Health --
+@app.get("/health")
 def health():
     return {
-        'status': 'ok',
-        'model_loaded': session is not None,
-        'model_path': model_path_used,
-        'onnx_available': ONNX_AVAILABLE,
+        "status": "ok",
+        "engines": {
+            "deepfake": deepfake.status(),
+            "doc_forensics": doc_forensics.status(),
+            "keystroke": keystroke.status(),
+        },
     }
 
 
-@app.post('/analyze-frame', response_model=AnalyzeResponse)
-def analyze_frame(req: AnalyzeRequest):
-    # Decode image
-    b64 = req.frameBase64
-    if ',' in b64:
-        b64 = b64.split(',', 1)[1]
+# -- Deepfake Detection --
+@app.post("/detect/deepfake")
+async def detect_deepfake(image: UploadFile = File(None), frameBase64: str = Form(None)):
+    """Detect deepfake in image. Accepts file upload or base64."""
+    t0 = time.time()
 
-    try:
-        image_bytes = base64.b64decode(b64)
-    except Exception:
-        raise HTTPException(status_code=400, detail='Invalid base64 image data')
-
-    if len(image_bytes) > 2 * 1024 * 1024:
-        raise HTTPException(status_code=413, detail='Image too large (max 2MB)')
-
-    img_array = decode_image(image_bytes)
-
-    if session is not None:
-        return run_model_inference(img_array)
+    if image is not None:
+        image_bytes = await image.read()
+    elif frameBase64:
+        b64 = frameBase64.split(",", 1)[-1] if "," in frameBase64 else frameBase64
+        try:
+            image_bytes = base64.b64decode(b64)
+        except Exception:
+            raise HTTPException(400, "Invalid base64")
     else:
-        return run_heuristic(image_bytes)
+        raise HTTPException(400, "Provide 'image' file or 'frameBase64'")
+
+    if len(image_bytes) > 10 * 1024 * 1024:
+        raise HTTPException(413, "Image too large (max 10MB)")
+
+    result = deepfake.detect(image_bytes)
+    result["processing_ms"] = round((time.time() - t0) * 1000, 1)
+    return result
 
 
-# ─── Inference ────────────────────────────────────────────────────────────────
+# -- Document Forensics --
+@app.post("/detect/document")
+async def detect_document(image: UploadFile = File(None), frameBase64: str = Form(None)):
+    """Detect document manipulation. Accepts file upload or base64."""
+    t0 = time.time()
 
-def decode_image(data: bytes) -> np.ndarray:
-    """Decode JPEG/PNG bytes to (224, 224, 3) float32 array."""
-    if PIL_AVAILABLE:
-        img = Image.open(io.BytesIO(data)).convert('RGB').resize((IMG_SIZE, IMG_SIZE))
-        arr = np.array(img, dtype=np.float32) / 255.0
+    if image is not None:
+        image_bytes = await image.read()
+    elif frameBase64:
+        b64 = frameBase64.split(",", 1)[-1] if "," in frameBase64 else frameBase64
+        try:
+            image_bytes = base64.b64decode(b64)
+        except Exception:
+            raise HTTPException(400, "Invalid base64")
     else:
-        # Fallback: random noise (model unavailable)
-        arr = np.random.rand(IMG_SIZE, IMG_SIZE, 3).astype(np.float32)
+        raise HTTPException(400, "Provide 'image' file or 'frameBase64'")
 
-    # Normalize (ImageNet mean/std)
-    mean = np.array([0.485, 0.456, 0.406], dtype=np.float32)
-    std  = np.array([0.229, 0.224, 0.225], dtype=np.float32)
-    arr  = (arr - mean) / std
-
-    # HWC -> NCHW
-    return arr.transpose(2, 0, 1)[np.newaxis]  # (1, 3, 224, 224)
+    result = doc_forensics.detect(image_bytes)
+    result["processing_ms"] = round((time.time() - t0) * 1000, 1)
+    return result
 
 
-def run_model_inference(img: np.ndarray) -> AnalyzeResponse:
-    input_name = session.get_inputs()[0].name
-    outputs    = session.run(None, {input_name: img})
-    logits     = outputs[0][0]  # (3,)
-
-    # Softmax
-    exp_l = np.exp(logits - logits.max())
-    probs = exp_l / exp_l.sum()
-
-    pred_idx = int(probs.argmax())
-    pred     = LABELS[pred_idx]
-    # fake score: 1 - P(real)
-    score    = int(round((1 - probs[0]) * 100))
-
-    return AnalyzeResponse(
-        score=score,
-        method='efficientnet',
-        prediction=pred,
-        probabilities={LABELS[i]: round(float(probs[i]), 4) for i in range(len(LABELS))},
-        features={'model': model_path_used},
-    )
+# -- Keystroke Verification --
+@app.post("/verify/keystroke")
+def verify_keystroke(req: KeystrokeRequest):
+    """Verify keystroke pattern. Returns bot score and user similarity if user_id given."""
+    keystrokes = [ks.dict() for ks in req.keystrokes]
+    if len(keystrokes) < 10:
+        raise HTTPException(400, "Need at least 10 keystrokes")
+    return keystroke.verify(keystrokes, req.user_id)
 
 
-def run_heuristic(raw_bytes: bytes) -> AnalyzeResponse:
-    """Byte-level heuristic when no model is loaded."""
-    data     = np.frombuffer(raw_bytes, dtype=np.uint8)
-    freq     = np.bincount(data, minlength=256).astype(float)
-    n        = len(data)
-    prob     = freq / n
-    nonzero  = prob[prob > 0]
-    entropy  = -float(np.sum(nonzero * np.log2(nonzero)))
-    # Very smooth image = low entropy = possibly synthetic
-    score    = max(0, int((6.5 - entropy) / 2.0 * 100))
-    score    = min(100, score)
-
-    pred_idx = 1 if score > 60 else 0
-    return AnalyzeResponse(
-        score=score,
-        method='heuristic',
-        prediction=LABELS[pred_idx],
-        probabilities={'real_human': round(1 - score/100, 4), 'deepfake_video': round(score/100, 4), 'photo_replay': 0.0},
-        features={'entropy': round(entropy, 3), 'bytes_analyzed': n},
-    )
+# -- Keystroke Enrollment --
+@app.post("/enroll/keystroke")
+def enroll_keystroke(req: EnrollRequest):
+    """Enroll a user's typing pattern for future verification."""
+    keystrokes = [ks.dict() for ks in req.keystrokes]
+    if len(keystrokes) < 20:
+        raise HTTPException(400, "Need at least 20 keystrokes for enrollment")
+    return keystroke.enroll(keystrokes, req.user_id)
 
 
-# ─── Entry point ──────────────────────────────────────────────────────────────
+# -- Model Management --
+@app.get("/models/status")
+def models_status():
+    """Return versions and metrics for all loaded models."""
+    return {
+        "models": get_model_status(),
+        "engines": {
+            "deepfake": deepfake.status(),
+            "doc_forensics": doc_forensics.status(),
+            "keystroke": keystroke.status(),
+        },
+    }
 
-if __name__ == '__main__':
-    uvicorn.run(app, host='0.0.0.0', port=PORT, log_level='info')
+
+@app.post("/models/reload")
+def models_reload():
+    """Hot-reload all models from disk (called by model-updater)."""
+    logger.info("Reloading all models...")
+    deepfake.reload()
+    doc_forensics.reload()
+    keystroke.reload()
+    return {
+        "status": "reloaded",
+        "engines": {
+            "deepfake": deepfake.status(),
+            "doc_forensics": doc_forensics.status(),
+            "keystroke": keystroke.status(),
+        },
+    }
+
+
+@app.post("/models/update")
+def models_update():
+    """Check S3 for new models and download if available."""
+    updated = check_and_download_models()
+    if updated:
+        deepfake.reload()
+        doc_forensics.reload()
+        keystroke.reload()
+    return {"updated_engines": updated, "status": "ok"}
+
+
+# -- Legacy endpoint (backward compatible) --
+@app.post("/analyze-frame")
+async def analyze_frame_legacy(frameBase64: str = Form(...), sessionId: str = Form("")):
+    """Legacy endpoint for backward compatibility."""
+    return await detect_deepfake(frameBase64=frameBase64)
+
+
+if __name__ == "__main__":
+    uvicorn.run(app, host="0.0.0.0", port=PORT, log_level="info")

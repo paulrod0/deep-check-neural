@@ -87,18 +87,31 @@ services:
     volumes:
       - models_data:/app/models:ro   # ML models (read-only at runtime)
 
-  # ── ML Worker — server-side pixel forensics (L4 EfficientNet) ───────────────
+  # ── ML Worker — All verification engines (deepfake + doc + keystroke) ────────
   ml-worker:
     build:
       context: ./docker/ml-worker
       dockerfile: Dockerfile
     container_name: deepcheck-ml-worker
     restart: unless-stopped
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
     environment:
       MODEL_DIR: /app/models
       PORT: 8001
+      GPU_MODE: ${GPU_MODE:-auto}
+      S3_BUCKET: ${S3_BUCKET:-deep-check-models}
+      S3_PREFIX: ${S3_PREFIX:-approved}
+      AWS_DEFAULT_REGION: ${AWS_DEFAULT_REGION:-eu-west-1}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
     volumes:
-      - models_data:/app/models:ro
+      - models_data:/app/models
     ports:
       - "127.0.0.1:8001:8001"
     healthcheck:
@@ -106,7 +119,29 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 15s
+      start_period: 60s
+
+  # ── Model Updater — auto-sync models from S3 ────────────────────────────────
+  model-updater:
+    build:
+      context: ./docker/model-updater
+      dockerfile: Dockerfile
+    container_name: deepcheck-model-updater
+    restart: unless-stopped
+    depends_on:
+      ml-worker:
+        condition: service_healthy
+    environment:
+      MODEL_DIR: /app/models
+      S3_BUCKET: ${S3_BUCKET:-deep-check-models}
+      S3_PREFIX: ${S3_PREFIX:-approved}
+      CHECK_INTERVAL: ${MODEL_CHECK_INTERVAL:-21600}
+      ML_WORKER_URL: http://ml-worker:8001
+      AWS_DEFAULT_REGION: ${AWS_DEFAULT_REGION:-eu-west-1}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
+    volumes:
+      - models_data:/app/models
 
   # ── Nginx reverse proxy ──────────────────────────────────────────────────────
   nginx:
