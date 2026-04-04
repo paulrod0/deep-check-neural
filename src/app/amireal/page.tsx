@@ -17,11 +17,13 @@ const TARGET_SIZE   = 224
 // ─── Types ───────────────────────────────────────────────────────────────────
 
 type AppPhase = 'hero' | 'camera' | 'countdown' | 'analyzing' | 'result'
+type ModelChoice = 'v3-browser' | 'v8-server'
 
 interface ResultData {
   humanScore: number        // 0-100
   pFake: number             // 0-1
   inferenceMs: number
+  model?: string
 }
 
 // ─── Sigmoid helper ──────────────────────────────────────────────────────────
@@ -109,6 +111,7 @@ export default function AmIRealPage() {
   const [error, setError] = useState<string | null>(null)
   const [animatedScore, setAnimatedScore] = useState(0)
   const [cameraReady, setCameraReady] = useState(false)
+  const [selectedModel, setSelectedModel] = useState<ModelChoice>('v3-browser')
 
   const videoRef = useRef<HTMLVideoElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
@@ -235,49 +238,67 @@ export default function AmIRealPage() {
     try {
       const t0 = performance.now()
 
-      // Preprocess
-      const tensorData = preprocessFrame(canvas)
-
-      // Load ONNX Runtime with robust error handling
-      let ort: typeof import('onnxruntime-web')
-      try {
-        ort = await import('onnxruntime-web')
-      } catch {
-        throw new Error('Failed to load ONNX Runtime Web module')
-      }
-      ort.env.wasm.wasmPaths = '/'
-      ort.env.wasm.numThreads = 1
-
-      // Create session with timeout
-      let session: import('onnxruntime-web').InferenceSession
-      try {
-        session = await ort.InferenceSession.create(MODEL_PATH, {
-          executionProviders: ['wasm'],
-          graphOptimizationLevel: 'all',
+      if (selectedModel === 'v8-server') {
+        // ── V8 DINOv3 server-side inference ──
+        // Convert canvas to blob and send to API
+        const blob = await new Promise<Blob>((resolve) => {
+          canvas.toBlob((b) => resolve(b!), 'image/jpeg', 0.92)
         })
-      } catch (modelErr) {
-        console.error('ONNX session error:', modelErr)
-        throw new Error('Failed to load AI model (70MB). Check network connection.')
+        const form = new FormData()
+        form.append('image', blob, 'capture.jpg')
+
+        const res = await fetch('/api/v1/detect-v8', { method: 'POST', body: form })
+        const data = await res.json()
+
+        if (data.error) throw new Error(data.error)
+
+        const pFake = data.probability_fake ?? 0.5
+        const pReal = 1 - pFake
+        const humanScore = Math.round(pReal * 100)
+        const inferenceMs = Math.round(performance.now() - t0)
+
+        setResult({ humanScore, pFake, inferenceMs, model: 'V8-DINOv3' })
+        setPhase('result')
+      } else {
+        // ── V3 browser-side ONNX inference ──
+        const tensorData = preprocessFrame(canvas)
+
+        let ort: typeof import('onnxruntime-web')
+        try {
+          ort = await import('onnxruntime-web')
+        } catch {
+          throw new Error('Failed to load ONNX Runtime Web module')
+        }
+        ort.env.wasm.wasmPaths = '/'
+        ort.env.wasm.numThreads = 1
+
+        let session: import('onnxruntime-web').InferenceSession
+        try {
+          session = await ort.InferenceSession.create(MODEL_PATH, {
+            executionProviders: ['wasm'],
+            graphOptimizationLevel: 'all',
+          })
+        } catch (modelErr) {
+          console.error('ONNX session error:', modelErr)
+          throw new Error('Failed to load AI model (70MB). Check network connection.')
+        }
+
+        const input = new ort.Tensor('float32', tensorData, [1, 3, TARGET_SIZE, TARGET_SIZE])
+        const inputName = session.inputNames[0]
+        const outputName = session.outputNames[0]
+        const feeds: Record<string, import('onnxruntime-web').Tensor> = { [inputName]: input }
+        const output = await session.run(feeds)
+        const logitData = output[outputName].data as Float32Array
+
+        const logit = logitData[0]
+        const pFake = sigmoid(logit)
+        const pReal = 1 - pFake
+        const humanScore = Math.round(pReal * 100)
+        const inferenceMs = Math.round(performance.now() - t0)
+
+        setResult({ humanScore, pFake, inferenceMs, model: 'V3-Browser' })
+        setPhase('result')
       }
-
-      // Build input tensor [1, 3, 224, 224]
-      const input = new ort.Tensor('float32', tensorData, [1, 3, TARGET_SIZE, TARGET_SIZE])
-
-      // Run inference — detect input/output names dynamically
-      const inputName = session.inputNames[0]   // "x" or "face_image"
-      const outputName = session.outputNames[0] // "squeeze" or "logit"
-      const feeds: Record<string, import('onnxruntime-web').Tensor> = { [inputName]: input }
-      const output = await session.run(feeds)
-      const logitData = output[outputName].data as Float32Array
-
-      const logit = logitData[0]
-      const pFake = sigmoid(logit)
-      const pReal = 1 - pFake
-      const humanScore = Math.round(pReal * 100)
-      const inferenceMs = Math.round(performance.now() - t0)
-
-      setResult({ humanScore, pFake, inferenceMs })
-      setPhase('result')
     } catch (err) {
       console.error('[AmIReal] Inference error:', err)
       const msg = err instanceof Error ? err.message : 'Unknown error'
@@ -471,6 +492,39 @@ export default function AmIRealPage() {
             No data leaves your browser.
           </p>
 
+          {/* Model selector */}
+          <div className="amireal-fade-in-delay2" style={{
+            display: 'flex', gap: '12px', marginBottom: '24px',
+            position: 'relative', zIndex: 1, justifyContent: 'center', flexWrap: 'wrap',
+          }}>
+            <button
+              onClick={() => setSelectedModel('v3-browser')}
+              style={{
+                padding: '10px 20px', borderRadius: '10px', fontSize: '0.85rem',
+                border: selectedModel === 'v3-browser' ? '2px solid #00ff9d' : '2px solid #333',
+                background: selectedModel === 'v3-browser' ? 'rgba(0,255,157,0.1)' : 'rgba(255,255,255,0.03)',
+                color: selectedModel === 'v3-browser' ? '#00ff9d' : '#a1a1aa',
+                cursor: 'pointer', transition: 'all 0.2s',
+              }}
+            >
+              <div style={{ fontWeight: 700 }}>Standard (V3)</div>
+              <div style={{ fontSize: '0.7rem', marginTop: '2px', opacity: 0.7 }}>Browser · Private · 70MB</div>
+            </button>
+            <button
+              onClick={() => setSelectedModel('v8-server')}
+              style={{
+                padding: '10px 20px', borderRadius: '10px', fontSize: '0.85rem',
+                border: selectedModel === 'v8-server' ? '2px solid #3b82f6' : '2px solid #333',
+                background: selectedModel === 'v8-server' ? 'rgba(59,130,246,0.1)' : 'rgba(255,255,255,0.03)',
+                color: selectedModel === 'v8-server' ? '#3b82f6' : '#a1a1aa',
+                cursor: 'pointer', transition: 'all 0.2s',
+              }}
+            >
+              <div style={{ fontWeight: 700 }}>Advanced (V8 DINOv3)</div>
+              <div style={{ fontSize: '0.7rem', marginTop: '2px', opacity: 0.7 }}>Server · AUC 0.991 · 303M params</div>
+            </button>
+          </div>
+
           <div className="amireal-fade-in-delay2" style={{ position: 'relative', zIndex: 1 }}>
             <button className="amireal-cta" onClick={startCamera}>
               Test My Face &rarr;
@@ -505,11 +559,15 @@ export default function AmIRealPage() {
               zIndex: 1,
             }}
           >
-            {[
+            {(selectedModel === 'v8-server' ? [
+              { value: '303M', label: 'Model Parameters' },
+              { value: '2.5%', label: 'Error Rate (EER)' },
+              { value: '0.991', label: 'AUC Score' },
+            ] : [
               { value: '18.6M', label: 'Model Parameters' },
               { value: '0.31%', label: 'Error Rate' },
               { value: '0ms', label: 'Data Sent to Server' },
-            ].map((stat) => (
+            ]).map((stat) => (
               <div key={stat.label} style={{ textAlign: 'center' }}>
                 <div style={{ fontSize: '1.5rem', fontWeight: 700, color: '#00ff9d' }}>
                   {stat.value}

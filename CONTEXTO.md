@@ -45,17 +45,29 @@ Bayesian logit-space fusion of 6 independent detection layers:
   - Best AUC 0.988, EER 2.18% (cross-source: LFW + UTKFace + val-fakes)
   - S3: `s3://deep-check-models/deepfake/v5/best_v5_clip.pt`
 
-- **V8 (best, API deployed):** DINOv3 ViT-L/16 + Linear Head
-  - 303M params, 315K images, cross-source validation
-  - **Best AUC 0.991, EER 2.51%** — state of the art cross-source
-  - API live at EC2 52.215.31.248:8080 (proxied via /api/v1/detect-v8)
+- **V8 (legacy API):** DINOv3 ViT-L/16 + Linear Head
+  - 303M params, 315K images (legacy fakes only: StyleGAN, FaceSwap)
+  - AUC 0.991, EER 2.51% cross-source (legacy generators)
+  - **Problem:** misclassifies modern AI images (SDXL, MidJourney, Flux) as real
   - S3: `s3://deep-check-models/deepfake/v8/best_v8.pt`
 
-- **Doc Forensics (training):** DINOv2 ViT-L/14 + ELA branch
-  - 304M params, 171K images (CASIA + forensics-rf 4 datasets)
-  - Cross-source validation (Set 4 as val)
-  - Training on EC2 54.229.204.211
-  - 6-channel input: RGB + Error Level Analysis (ELA)
+- **V9.4 (current best deepfake):** DINOv3 ViT-L/16 + Linear Head
+  - 303M params, 900K+ images (legacy + 207K modern fakes)
+  - Modern fakes: SFHQ-T2I (Flux+SDXL+DALL-E 3), DeepDetect-2025, FFGenAI, OpenFake
+  - **AUC 0.945, EER 13.0%** cross-source against modern generators
+  - V9.5 multi-GPU training on g5.12xlarge (4x A10G) in progress
+  - S3: `s3://deep-check-models/deepfake/v9/best_v9_simple.pt`
+
+- **Doc Forensics V2b (DONE):** DINOv2 ViT-L/14 + ELA (6-channel)
+  - 304M params, 171K images (CASIA + forensics-rf), warm restart with fresh LR
+  - **AUC 0.998, EER 1.87%** — production ready
+  - S3: `s3://deep-check-models/doc_forensics/v2b/best_doc_restart.pt`
+
+- **Keystroke Biometrics (DONE):** Transformer Encoder (4L, 8H, 256D)
+  - 3.3M params, 251 users (Aalto 136M + CMU + IKDD), 4190 sequences
+  - Dual output: 128D user embedding + bot detection score
+  - **Bot AUC 0.949, accuracy 90.8%**
+  - S3: `s3://deep-check-models/keystroke/best_keystroke.pt`
 
 ### ONNX Contract (DO NOT CHANGE)
 ```
@@ -142,18 +154,68 @@ Reports: `ml/reports/industrial_benchmark.json` and `.md`
 | Script | Purpose |
 |--------|---------|
 | `ml/train_deepfake_v3.py` | V3 training (7 datasets, EfficientNet-B4) |
-| `ml/train_v5_fixed.py` | V5-B4 cross-source training (811K images, anti-overfitting) |
-| `ml/train_v5_b4v2.py` | V5-B4v2 with higher LR and warmup |
-| `ml/train_v5_effnetv2.py` | V5 with EfficientNet-V2-S backbone |
-| `ml/train_deepfake_v5.py` | V5 original training script |
+| `ml/train_v9_simple.py` | **V9.4 DINOv3 + Linear (207K modern fakes)** |
+| `ml/train_v9_warm.py` | V9.4 warm restart from checkpoint |
+| `ml/train_v9_staged.py` | V9.2 staged (P1 Linear -> P2 Gated) |
+| `ml/train_v9_freq.py` | V9.1 with FrequencyBranch + SRM |
+| `ml/train_v9_modern.py` | V9 baseline with modern data |
+| `ml/train_doc_v2.py` | Doc Forensics V2 (FreqBranch + SRM) |
+| `ml/train_keystroke.py` | **Keystroke biometrics (Transformer)** |
 | `ml/benchmark_industrial.py` | Industrial benchmark (ISO 30107-3) |
-| `ml/benchmark_deepfake_v3.py` | Basic benchmark |
 
-## EC2 Instances (Active)
-| Instance | IP | GPU | Purpose |
-|----------|-----|-----|---------|
-| i-0105e7979c9ad73a0 | 54.229.204.211 | A10G | Doc Forensics training |
-| i-027f26e44cea55363 | 52.215.31.248 | A10G | V8 API server |
+## EC2 Instances
+| Instance | Type | IP | GPU | Purpose |
+|----------|------|-----|-----|---------|
+| i-07189a89d5f7f254a | g5.12xlarge | 108.130.98.126 | **4x A10G (96GB)** | V9.5 multi-GPU training |
+| i-0105e7979c9ad73a0 | g5.xlarge | 54.229.204.211 | 1x A10G | Keystroke (done) / available |
+| i-027f26e44cea55363 | g5.xlarge | 3.253.40.29 | 1x A10G | Stopped (V9 migrated to g5.12xlarge) |
+
+## AWS GPU Quota
+- G instances: **64 vCPU** (approved April 2026)
+- P instances: 8 vCPU
+- Best available: g5.12xlarge (4x A10G, 48 vCPU)
+
+## Docker On-Premise Deployment
+```bash
+docker compose up -d   # Full stack: DB + API + ML Worker + Model Updater + Nginx
+```
+
+### Services
+| Service | Image | Purpose |
+|---------|-------|---------|
+| `db` | postgres:16 | PostgreSQL with pgcrypto |
+| `rest` | postgrest/postgrest | Supabase-compatible REST |
+| `app` | deep-check (Next.js) | Frontend + API routes |
+| `ml-worker` | deep-check-ml (FastAPI) | **All ML engines (GPU/CPU)** |
+| `model-updater` | Python cron | Auto-sync models from S3 every 6h |
+| `nginx` | nginx:1.25 | Reverse proxy + TLS |
+
+### ML Worker Engines
+| Engine | Model | GPU | CPU Fallback |
+|--------|-------|-----|-------------|
+| Deepfake | V9 DINOv3 (303M) | Yes | V3 ONNX EfficientNet |
+| Doc Forensics | DINOv2 + ELA (304M) | Yes | ELA heuristic |
+| Keystroke | Transformer (3.3M) | Optional | CPU fine |
+
+### ML Worker Endpoints
+| Endpoint | Method | Purpose |
+|----------|--------|---------|
+| `/health` | GET | All engine status |
+| `/detect/deepfake` | POST | Deepfake detection |
+| `/detect/document` | POST | Document forensics |
+| `/verify/keystroke` | POST | Keystroke verification + bot |
+| `/enroll/keystroke` | POST | Enroll user typing pattern |
+| `/models/status` | GET | Model versions + metrics |
+| `/models/reload` | POST | Hot-reload from disk |
+| `/models/update` | POST | Check S3 + download + reload |
+
+### Model Auto-Update
+Models auto-update from S3 via manifests:
+```
+s3://deep-check-models/approved/{engine}/manifest.json
+{"version": "v9.5", "file": "best_v9.pt", "auc": 0.96, "eer": 0.05}
+```
+model-updater checks every 6h, downloads newer versions, notifies ml-worker to hot-reload.
 
 ## API Endpoints
 | Endpoint | Method | Purpose |
