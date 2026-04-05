@@ -22,6 +22,7 @@ from typing import Optional, List
 from engines.deepfake_engine import DeepfakeEngine
 from engines.doc_engine import DocForensicsEngine
 from engines.keystroke_engine import KeystrokeEngine
+from engines.gemma_doc_engine import GemmaDocEngine
 from model_loader import ensure_models_exist, check_and_download_models, get_model_status
 
 logging.basicConfig(level=logging.INFO)
@@ -38,6 +39,7 @@ logger.info("Loading engines...")
 deepfake = DeepfakeEngine()
 doc_forensics = DocForensicsEngine()
 keystroke = KeystrokeEngine()
+gemma_doc = GemmaDocEngine()
 logger.info("All engines initialized")
 
 # FastAPI
@@ -70,6 +72,7 @@ def health():
             "deepfake": deepfake.status(),
             "doc_forensics": doc_forensics.status(),
             "keystroke": keystroke.status(),
+            "gemma_doc": gemma_doc.status(),
         },
     }
 
@@ -121,6 +124,67 @@ async def detect_document(image: UploadFile = File(None), frameBase64: str = For
     return result
 
 
+# -- Document AI Analysis (Gemma 4) --
+@app.post("/analyze/document")
+async def analyze_document(image: UploadFile = File(None), frameBase64: str = Form(None)):
+    """Full document AI analysis: OCR + MRZ + coherence + forensic explanation.
+    Combines DINOv2 forensics with Gemma 4 language understanding."""
+    t0 = time.time()
+
+    if image is not None:
+        image_bytes = await image.read()
+    elif frameBase64:
+        b64 = frameBase64.split(",", 1)[-1] if "," in frameBase64 else frameBase64
+        try:
+            image_bytes = base64.b64decode(b64)
+        except Exception:
+            raise HTTPException(400, "Invalid base64")
+    else:
+        raise HTTPException(400, "Provide 'image' file or 'frameBase64'")
+
+    # Step 1: DINOv2 forensic detection
+    forensic_result = doc_forensics.detect(image_bytes)
+
+    # Step 2: Gemma 4 analysis (OCR + coherence + explanation)
+    gemma_result = gemma_doc.analyze_document(image_bytes, forensic_result)
+
+    return {
+        "forensics": forensic_result,
+        "analysis": gemma_result,
+        "processing_ms": round((time.time() - t0) * 1000, 1),
+    }
+
+
+@app.post("/analyze/mrz")
+async def analyze_mrz(image: UploadFile = File(None), frameBase64: str = Form(None)):
+    """Extract and parse MRZ from document image using Gemma 4."""
+    if image is not None:
+        image_bytes = await image.read()
+    elif frameBase64:
+        b64 = frameBase64.split(",", 1)[-1] if "," in frameBase64 else frameBase64
+        image_bytes = base64.b64decode(b64)
+    else:
+        raise HTTPException(400, "Provide 'image' file or 'frameBase64'")
+
+    return gemma_doc.extract_mrz(image_bytes)
+
+
+@app.post("/explain")
+async def explain_detection(image: UploadFile = File(None), frameBase64: str = Form(None),
+                            detection_type: str = Form("deepfake"),
+                            score: int = Form(50), details: str = Form("")):
+    """Generate human-readable explanation of any detection result using Gemma 4."""
+    if image is not None:
+        image_bytes = await image.read()
+    elif frameBase64:
+        b64 = frameBase64.split(",", 1)[-1] if "," in frameBase64 else frameBase64
+        image_bytes = base64.b64decode(b64)
+    else:
+        raise HTTPException(400, "Provide 'image' file or 'frameBase64'")
+
+    return gemma_doc.explain_detection(image_bytes, detection_type, score, details)
+
+
 # -- Keystroke Verification --
 @app.post("/verify/keystroke")
 def verify_keystroke(req: KeystrokeRequest):
@@ -162,12 +226,14 @@ def models_reload():
     deepfake.reload()
     doc_forensics.reload()
     keystroke.reload()
+    gemma_doc.reload()
     return {
         "status": "reloaded",
         "engines": {
             "deepfake": deepfake.status(),
             "doc_forensics": doc_forensics.status(),
             "keystroke": keystroke.status(),
+            "gemma_doc": gemma_doc.status(),
         },
     }
 
