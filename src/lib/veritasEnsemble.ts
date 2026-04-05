@@ -88,20 +88,20 @@ export interface EnsembleResult {
 //   Layer activates in VerificationCamera once ONNX is deployed to public/models/deepfake/
 //
 // Current active weights (sum of non-zero = 1.00):
-//   rppg:         0.30  (physiological coupling — hardest to spoof)
-//   facs:         0.26  (biomechanical rules — model-agnostic)
+//   rppg:         0.00  (DISABLED — unreliable with standard webcams)
+//   facs:         0.32  (biomechanical rules — model-agnostic)
 //   cnn_v1:       0.00  (DEPRECATED)
-//   cnn_v2:       0.10  (blendshape temporal CNN — synthetic training)
-//   efficientnet: 0.22  (pixel GAN artifact detection — real-data trained)
-//   keystroke:    0.12  (behavioral biometrics)
+//   cnn_v2:       0.18  (blendshape temporal CNN — synthetic training)
+//   efficientnet: 0.30  (pixel forensics — EfficientNet + DINOv3)
+//   keystroke:    0.20  (behavioral biometrics — Transformer encoder)
 
 const BASE_WEIGHTS: Record<LayerName, number> = {
-    rppg:        0.30,   // Physiological coupling — hardest to fake
-    facs:        0.26,   // Biomechanical rules — model-agnostic
+    rppg:        0.00,   // DISABLED: requires stable lighting + long video, unreliable on webcams
+    facs:        0.32,   // Biomechanical rules — micro-expression analysis
     cnn_v1:      0.00,   // DEPRECATED: validated at 29.5% accuracy, superseded by v2
-    cnn_v2:      0.10,   // ACTIVATED 2026-03-15: 3-stream blendshape CNN (synthetic training)
-    efficientnet: 0.22,  // Pixel-level forensics — catches GAN artifacts
-    keystroke:   0.12,   // Behavioral biometrics
+    cnn_v2:      0.18,   // ACTIVATED 2026-03-15: 3-stream blendshape CNN (synthetic training)
+    efficientnet: 0.30,  // Pixel-level forensics — catches GAN + diffusion artifacts
+    keystroke:   0.20,   // Behavioral biometrics — typing pattern DNA
 }
 
 /** Whether cnn_v1 has been superseded by real-data calibration. */
