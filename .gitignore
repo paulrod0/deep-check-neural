@@ -5,8 +5,10 @@
 .gemini/
 
 # Private integrations (never push)
-sdk/
 galtea-integration/
+
+# SDK (tracked — public API clients)
+# sdk/ is now included in the repo
 
 # dependencies
 /node_modules
