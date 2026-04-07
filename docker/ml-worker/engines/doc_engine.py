@@ -1,8 +1,8 @@
 """
-Document forensics engine: DINOv2 + ELA (pixel) + PDF structural analysis.
-Combined pipeline for both images and PDFs.
+Document forensics engine: DINOv2 + ELA (pixel) + PDF structural + QR validation.
+Combined pipeline for images and PDFs.
 """
-import os, io, logging, cv2, json
+import os, io, logging, cv2, json, re
 from pathlib import Path
 from datetime import datetime
 import numpy as np
@@ -26,6 +26,144 @@ def compute_ela(img_bgr, quality=90):
     _, buf = cv2.imencode(".jpg", img_bgr, [int(cv2.IMWRITE_JPEG_QUALITY), quality])
     resaved = cv2.imdecode(buf, cv2.IMREAD_COLOR)
     return np.clip(cv2.absdiff(img_bgr, resaved).astype(np.float32) * 15, 0, 255).astype(np.uint8)
+
+
+# ── QR Code Extraction & Validation ──
+
+def extract_qr_codes(image_bytes=None, pdf_bytes=None):
+    """Extract and decode QR codes from image or PDF pages."""
+    qr_results = []
+
+    try:
+        detector = cv2.QRCodeDetector()
+    except Exception:
+        logger.warning("QR detector not available")
+        return qr_results
+
+    images = []
+
+    if pdf_bytes:
+        try:
+            import fitz
+            doc = fitz.open(stream=pdf_bytes, filetype="pdf")
+            for i, page in enumerate(doc):
+                pix = page.get_pixmap(dpi=200)
+                img = np.frombuffer(pix.samples, dtype=np.uint8).reshape(pix.height, pix.width, 3)
+                images.append((f"page_{i+1}", cv2.cvtColor(img, cv2.COLOR_RGB2BGR)))
+
+                # Also extract embedded QR images from PDF objects
+                for img_info in page.get_images(full=True):
+                    try:
+                        xref = img_info[0]
+                        base_img = doc.extract_image(xref)
+                        if base_img and base_img.get("image"):
+                            img_data = base_img["image"]
+                            nparr = np.frombuffer(img_data, np.uint8)
+                            embedded = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+                            if embedded is not None and embedded.shape[0] > 50 and embedded.shape[1] > 50:
+                                images.append((f"page_{i+1}_embed", embedded))
+                    except Exception:
+                        pass
+            doc.close()
+        except ImportError:
+            pass
+    elif image_bytes:
+        nparr = np.frombuffer(image_bytes, np.uint8)
+        img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+        if img is not None:
+            images.append(("image", img))
+
+    for source, img in images:
+        try:
+            # Try OpenCV QR detector
+            data, bbox, _ = detector.detectAndDecode(img)
+            if data:
+                qr_results.append({
+                    "source": source,
+                    "data": data,
+                    "type": classify_qr_content(data),
+                    "bbox": bbox.tolist() if bbox is not None else None,
+                })
+
+            # Also try with grayscale (better detection for some QRs)
+            if not data:
+                gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+                data_g, bbox_g, _ = detector.detectAndDecode(gray)
+                if data_g:
+                    qr_results.append({
+                        "source": source,
+                        "data": data_g,
+                        "type": classify_qr_content(data_g),
+                        "bbox": bbox_g.tolist() if bbox_g is not None else None,
+                    })
+        except Exception as e:
+            logger.debug(f"QR scan failed on {source}: {e}")
+
+    return qr_results
+
+
+def classify_qr_content(data):
+    """Classify what the QR code contains."""
+    if not data:
+        return "empty"
+    d = data.strip()
+    if d.startswith("http://") or d.startswith("https://"):
+        return "verification_url"
+    if re.match(r'^[A-Za-z0-9+/=]{20,}$', d):
+        return "encoded_data"
+    try:
+        json.loads(d)
+        return "json_data"
+    except (json.JSONDecodeError, ValueError):
+        pass
+    if re.search(r'\d{8,}', d):
+        return "document_id"
+    return "text"
+
+
+def validate_qr_against_document(qr_results, document_fields, document_text):
+    """Cross-validate QR data against extracted document fields."""
+    issues = []
+    validations = []
+
+    for qr in qr_results:
+        data = qr.get("data", "")
+        qr_type = qr.get("type", "")
+
+        if qr_type == "verification_url":
+            validations.append(f"QR contains verification URL: {data[:80]}...")
+            # Check if URL domain is plausible
+            if any(s in data.lower() for s in ["gov.", "edu.", "universidad", "university", ".ac.", "ministeri"]):
+                validations.append("URL domain appears to be institutional (good)")
+            else:
+                issues.append(f"QR URL domain may not be institutional: {data[:50]}")
+
+        elif qr_type == "json_data":
+            try:
+                qr_json = json.loads(data)
+                validations.append(f"QR contains structured data with {len(qr_json)} fields")
+                # Cross-validate fields
+                for key in ["name", "nombre", "dni", "document", "id", "date", "fecha"]:
+                    if key in qr_json and key in document_fields:
+                        if str(qr_json[key]).upper() != str(document_fields[key]).upper():
+                            issues.append(f"CRITICAL: QR field '{key}' ({qr_json[key]}) does not match document ({document_fields[key]})")
+                        else:
+                            validations.append(f"QR field '{key}' matches document")
+            except (json.JSONDecodeError, ValueError):
+                pass
+
+        elif qr_type == "document_id":
+            validations.append(f"QR contains document ID: {data}")
+            # Check if this ID appears in the document text
+            if data in document_text:
+                validations.append("Document ID from QR found in document text (consistent)")
+            else:
+                issues.append("Document ID from QR not found in document text")
+
+        elif qr_type == "encoded_data":
+            validations.append(f"QR contains encoded data ({len(data)} chars)")
+
+    return {"issues": issues, "validations": validations, "qr_count": len(qr_results)}
 
 
 # ── PDF Structural Analysis ──
@@ -145,6 +283,30 @@ def analyze_pdf_structure(pdf_bytes):
                 result["structural_score"] += 0.3
     except Exception:
         pass
+
+    # 8. QR Code extraction and validation
+    qr_codes = extract_qr_codes(pdf_bytes=pdf_bytes)
+    result["qr_codes"] = qr_codes
+
+    if qr_codes:
+        qr_validation = validate_qr_against_document(
+            qr_codes,
+            result.get("fields_from_text", {}),
+            result.get("text_extracted", "")
+        )
+        result["qr_validation"] = qr_validation
+
+        # QR with verification URL = positive signal (reduces suspicion)
+        if any(qr["type"] == "verification_url" for qr in qr_codes):
+            result["structural_score"] = max(0, result["structural_score"] - 0.1)
+            result["risk_indicators"].append("QR verification URL present (positive)")
+
+        # QR field mismatches = strong negative signal
+        if qr_validation.get("issues"):
+            for issue in qr_validation["issues"]:
+                if "CRITICAL" in issue:
+                    result["structural_score"] += 0.5
+                    result["risk_indicators"].append(issue)
 
     # Clamp score
     result["structural_score"] = min(1.0, result["structural_score"])
@@ -338,6 +500,8 @@ class DocForensicsEngine:
                 },
                 "text_extracted": pdf_result.get("text_extracted", ""),
                 "fields_from_pdf": pdf_result.get("fields_from_text", {}),
+                "qr_codes": [{"data": qr["data"], "type": qr["type"], "source": qr["source"]} for qr in pdf_result.get("qr_codes", [])],
+                "qr_validation": pdf_result.get("qr_validation"),
             }
 
         # Image only (no PDF structural)

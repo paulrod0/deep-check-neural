@@ -2,12 +2,15 @@
 
 import { useState, useRef } from 'react'
 
-type Step = 'front' | 'back' | 'processing' | 'result'
+type DocMode = 'identity' | 'document'
+type Step = 'select' | 'front' | 'back' | 'upload_pdf' | 'processing' | 'result'
 
 export default function VerifyId() {
-  const [step, setStep] = useState<Step>('front')
+  const [mode, setMode] = useState<DocMode | null>(null)
+  const [step, setStep] = useState<Step>('select')
   const [frontFile, setFrontFile] = useState<File | null>(null)
   const [backFile, setBackFile] = useState<File | null>(null)
+  const [pdfFile, setPdfFile] = useState<File | null>(null)
   const [frontPreview, setFrontPreview] = useState<string | null>(null)
   const [backPreview, setBackPreview] = useState<string | null>(null)
   const [result, setResult] = useState<any>(null)
@@ -15,6 +18,7 @@ export default function VerifyId() {
   const [processing, setProcessing] = useState(false)
   const frontRef = useRef<HTMLInputElement>(null)
   const backRef = useRef<HTMLInputElement>(null)
+  const pdfRef = useRef<HTMLInputElement>(null)
 
   const compressImage = (file: File, maxSize = 1500): Promise<File> => {
     return new Promise((resolve) => {
@@ -58,20 +62,26 @@ export default function VerifyId() {
   }
 
   const verify = async () => {
-    if (!frontFile || !backFile) return
     setStep('processing')
     setProcessing(true)
     setError(null)
 
     try {
-      const form = new FormData()
-      form.append('front', frontFile)
-      form.append('back', backFile)
-
-      const res = await fetch('/api/verify-identity', { method: 'POST', body: form })
-      if (!res.ok) throw new Error(`HTTP ${res.status}`)
-      const data = await res.json()
-      setResult(data)
+      if (mode === 'identity' && frontFile && backFile) {
+        const form = new FormData()
+        form.append('front', frontFile)
+        form.append('back', backFile)
+        const res = await fetch('/api/verify-identity', { method: 'POST', body: form })
+        if (!res.ok) throw new Error(`HTTP ${res.status}`)
+        setResult(await res.json())
+      } else if (mode === 'document' && pdfFile) {
+        const form = new FormData()
+        form.append('image', pdfFile)
+        form.append('backend', 'xeon')
+        const res = await fetch('/api/verify-proxy', { method: 'POST', body: form })
+        if (!res.ok) throw new Error(`HTTP ${res.status}`)
+        setResult(await res.json())
+      }
       setStep('result')
     } catch (e: any) {
       setError(e.message)
@@ -82,9 +92,11 @@ export default function VerifyId() {
   }
 
   const reset = () => {
-    setStep('front')
+    setStep('select')
+    setMode(null)
     setFrontFile(null)
     setBackFile(null)
+    setPdfFile(null)
     setFrontPreview(null)
     setBackPreview(null)
     setResult(null)
@@ -123,6 +135,96 @@ export default function VerifyId() {
             )
           })}
         </div>
+
+        {/* Step: Select Document Type */}
+        {step === 'select' && (
+          <div>
+            <h2 style={{ fontSize: 20, fontWeight: 700, textAlign: 'center', marginBottom: 8 }}>What do you want to verify?</h2>
+            <p style={{ fontSize: 13, color: '#94a3b8', textAlign: 'center', marginBottom: 24 }}>
+              Select the type of document to use the right verification method
+            </p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              <button onClick={() => { setMode('identity'); setStep('front') }}
+                style={{
+                  padding: '20px 16px', borderRadius: 12, border: '2px solid #1e293b', background: '#111827',
+                  cursor: 'pointer', textAlign: 'left', transition: 'border-color 0.2s',
+                }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                  <div style={{ fontSize: 36 }}>🪪</div>
+                  <div>
+                    <div style={{ fontSize: 15, fontWeight: 600, color: '#10b981' }}>ID Document (DNI / Passport)</div>
+                    <div style={{ fontSize: 12, color: '#94a3b8', marginTop: 2 }}>Take photos of front + back with your camera</div>
+                    <div style={{ fontSize: 11, color: '#64748b', marginTop: 4 }}>
+                      Pixel forensics + MRZ + check digit + cross-validation
+                    </div>
+                  </div>
+                </div>
+              </button>
+              <button onClick={() => { setMode('document'); setStep('upload_pdf') }}
+                style={{
+                  padding: '20px 16px', borderRadius: 12, border: '2px solid #1e293b', background: '#111827',
+                  cursor: 'pointer', textAlign: 'left', transition: 'border-color 0.2s',
+                }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                  <div style={{ fontSize: 36 }}>📄</div>
+                  <div>
+                    <div style={{ fontSize: 15, fontWeight: 600, color: '#3b82f6' }}>Document (Payslip / Diploma / Certificate)</div>
+                    <div style={{ fontSize: 12, color: '#94a3b8', marginTop: 2 }}>Upload PDF file</div>
+                    <div style={{ fontSize: 11, color: '#64748b', marginTop: 4 }}>
+                      PDF structural analysis + QR validation + text extraction
+                    </div>
+                  </div>
+                </div>
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Step: Upload PDF */}
+        {step === 'upload_pdf' && (
+          <div>
+            <h2 style={{ fontSize: 20, fontWeight: 700, textAlign: 'center', marginBottom: 8 }}>Upload Document</h2>
+            <p style={{ fontSize: 13, color: '#94a3b8', textAlign: 'center', marginBottom: 20 }}>
+              Upload the PDF of your payslip, diploma, or certificate
+            </p>
+            <div onClick={() => pdfRef.current?.click()}
+              style={{
+                border: '2px dashed #3b82f6', borderRadius: 12, padding: pdfFile ? 24 : 48, textAlign: 'center',
+                cursor: 'pointer', background: '#3b82f608', marginBottom: 16,
+              }}>
+              {pdfFile ? (
+                <div>
+                  <div style={{ fontSize: 48, marginBottom: 8 }}>📄</div>
+                  <div style={{ fontSize: 14, fontWeight: 600, color: '#3b82f6' }}>{pdfFile.name}</div>
+                  <div style={{ fontSize: 12, color: '#94a3b8', marginTop: 4 }}>{Math.round(pdfFile.size / 1024)} KB</div>
+                </div>
+              ) : (
+                <div>
+                  <div style={{ fontSize: 56, marginBottom: 12 }}>📁</div>
+                  <div style={{ fontSize: 15, fontWeight: 600, color: '#3b82f6' }}>Tap to select PDF</div>
+                  <div style={{ fontSize: 12, color: '#64748b', marginTop: 8 }}>
+                    Payslip, diploma, certificate, transcript...
+                  </div>
+                  <div style={{ fontSize: 11, color: '#475569', marginTop: 8, padding: '6px 12px', background: '#111827', borderRadius: 6, display: 'inline-block' }}>
+                    QR codes will be scanned and validated automatically
+                  </div>
+                </div>
+              )}
+            </div>
+            <input ref={pdfRef} type="file" accept=".pdf,application/pdf" hidden
+              onChange={e => { if (e.target.files?.[0]) setPdfFile(e.target.files[0]) }} />
+
+            {pdfFile && (
+              <button onClick={verify}
+                style={{
+                  width: '100%', padding: '16px', borderRadius: 12, border: 'none', fontSize: 15, fontWeight: 700,
+                  background: 'linear-gradient(135deg, #3b82f6, #6366f1)', color: 'white', cursor: 'pointer',
+                }}>
+                Verify Document
+              </button>
+            )}
+          </div>
+        )}
 
         {/* Step: Front */}
         {step === 'front' && (
@@ -300,6 +402,80 @@ export default function VerifyId() {
                 <div style={{ fontSize: 11, marginTop: 8, color: result.back.mrz.check_digits_valid ? '#10b981' : '#ef4444' }}>
                   Check digits: {result.back.mrz.check_digits_valid ? '✅ Valid' : '❌ Invalid'}
                 </div>
+              </div>
+            )}
+
+            {/* QR Codes (PDF documents) */}
+            {result.forensics?.qr_codes && result.forensics.qr_codes.length > 0 && (
+              <div style={{ background: '#111827', border: '1px solid #1e293b', borderRadius: 10, padding: 14, marginBottom: 16 }}>
+                <h3 style={{ fontSize: 12, marginBottom: 10 }}>QR Codes Found</h3>
+                {result.forensics.qr_codes.map((qr: any, i: number) => (
+                  <div key={i} style={{ fontSize: 12, marginBottom: 8, padding: 8, background: '#0a0e17', borderRadius: 6 }}>
+                    <div style={{ color: '#3b82f6', fontWeight: 600 }}>{qr.type} ({qr.source})</div>
+                    <div style={{ color: '#94a3b8', marginTop: 2, wordBreak: 'break-all', fontSize: 11 }}>{qr.data}</div>
+                  </div>
+                ))}
+                {result.forensics.qr_validation && (
+                  <div style={{ marginTop: 8 }}>
+                    {result.forensics.qr_validation.validations?.map((v: string, i: number) => (
+                      <div key={i} style={{ fontSize: 11, color: '#10b981', marginBottom: 2 }}>✅ {v}</div>
+                    ))}
+                    {result.forensics.qr_validation.issues?.map((v: string, i: number) => (
+                      <div key={i} style={{ fontSize: 11, color: '#ef4444', marginBottom: 2 }}>🚨 {v}</div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* PDF Structural (PDF documents) */}
+            {result.forensics?.pdf_structural && (
+              <div style={{ background: '#111827', border: '1px solid #1e293b', borderRadius: 10, padding: 14, marginBottom: 16 }}>
+                <h3 style={{ fontSize: 12, marginBottom: 10 }}>PDF Structure</h3>
+                <div style={{ display: 'grid', gridTemplateColumns: 'auto 1fr', gap: '4px 12px', fontSize: 12 }}>
+                  <div style={{ color: '#64748b' }}>Producer</div><div>{result.forensics.pdf_structural.producer || 'Unknown'}</div>
+                  <div style={{ color: '#64748b' }}>Creator</div><div>{result.forensics.pdf_structural.creator || 'Unknown'}</div>
+                  <div style={{ color: '#64748b' }}>Pages</div><div>{result.forensics.pdf_structural.pages}</div>
+                  <div style={{ color: '#64748b' }}>Native text</div><div>{result.forensics.pdf_structural.has_native_text ? '✅ Yes' : '❌ No (scanned)'}</div>
+                  <div style={{ color: '#64748b' }}>Fonts</div><div>{result.forensics.pdf_structural.fonts_count}</div>
+                  <div style={{ color: '#64748b' }}>Annotations</div><div>{result.forensics.pdf_structural.has_annotations ? '⚠️ Yes' : '✅ None'}</div>
+                  <div style={{ color: '#64748b' }}>Layers</div><div>{result.forensics.pdf_structural.has_layers ? '⚠️ Yes' : '✅ None'}</div>
+                </div>
+                {result.forensics.pdf_structural.risk_indicators?.length > 0 && (
+                  <div style={{ marginTop: 8 }}>
+                    {result.forensics.pdf_structural.risk_indicators.map((r: string, i: number) => (
+                      <div key={i} style={{ fontSize: 11, color: r.includes('positive') ? '#10b981' : '#f59e0b', marginBottom: 2 }}>
+                        {r.includes('positive') ? '✅' : '⚠️'} {r}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Extracted Text (PDF) */}
+            {result.forensics?.text_extracted && (
+              <details style={{ marginBottom: 16 }}>
+                <summary style={{ fontSize: 12, color: '#64748b', cursor: 'pointer' }}>Extracted Text</summary>
+                <div style={{ background: '#0a0e17', border: '1px solid #1e293b', borderRadius: 8, padding: 12, fontSize: 11, fontFamily: 'monospace', maxHeight: 200, overflowY: 'auto', whiteSpace: 'pre-wrap', marginTop: 8 }}>
+                  {result.forensics.text_extracted}
+                </div>
+              </details>
+            )}
+
+            {/* Analysis from /analyze/document (PDF mode) */}
+            {result.analysis?.ocr_text && (
+              <details style={{ marginBottom: 16 }}>
+                <summary style={{ fontSize: 12, color: '#64748b', cursor: 'pointer' }}>AI Analysis (OCR)</summary>
+                <div style={{ background: '#0a0e17', border: '1px solid #1e293b', borderRadius: 8, padding: 12, fontSize: 11, maxHeight: 200, overflowY: 'auto', whiteSpace: 'pre-wrap', marginTop: 8 }}>
+                  {result.analysis.ocr_text}
+                </div>
+              </details>
+            )}
+            {result.analysis?.explanation && (
+              <div style={{ background: '#111827', border: '1px solid #8b5cf630', borderRadius: 10, borderLeft: '3px solid #8b5cf6', padding: 14, marginBottom: 16 }}>
+                <h3 style={{ fontSize: 12, marginBottom: 8 }}>AI Explanation</h3>
+                <div style={{ fontSize: 12, lineHeight: 1.6, color: '#94a3b8' }}>{result.analysis.explanation}</div>
               </div>
             )}
 
