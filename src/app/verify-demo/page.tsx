@@ -1,384 +1,430 @@
 'use client'
 
-import { useState, useRef, useCallback } from 'react'
+import { useState, useRef } from 'react'
 
+type DocMode = 'identity' | 'document'
 type Backend = 'xeon' | 'aws'
-type AnalysisResult = {
-  verdict?: string
-  confidence_score?: number
-  forensics?: { p_tampered: number; verdict: string; model: string; version: string; processing_ms?: number }
-  combined?: { p_tampered_combined: number; p_tampered_forensic: number; llm_confirms_authentic: boolean; verdict: string }
-  analysis?: {
-    ocr_text: string; fields: Record<string, string>; mrz?: any; doc_type: string
-    coherence_issues: string[]; explanation: string; llm_enabled?: boolean
-  }
-  // Gemma 4 direct response
-  doc_type?: string; ocr_text?: string; fields?: Record<string, string>
-  coherence_issues?: string[]; explanation?: string
-  processing_ms?: number
-}
 
 const BACKENDS = {
-  xeon: { label: 'Xeon On-Premise', desc: 'DINOv2 + Ollama Gemma 3 4B', url: 'http://100.116.188.12:8001', icon: '🖥️', color: '#3b82f6' },
-  aws: { label: 'AWS GPU', desc: 'Gemma 4 E4B on A10G', url: 'http://54.229.204.211:8002', icon: '☁️', color: '#8b5cf6' },
-}
-
-const PIPELINE_STEPS = {
-  xeon: [
-    { id: 'upload', label: 'Document received', sub: 'PDF auto-converted to 300dpi JPEG' },
-    { id: 'ela', label: 'Error Level Analysis', sub: 'Multi-level re-compression (Q90+Q70+Q50)' },
-    { id: 'dino', label: 'DINOv2 ViT-L/14 Forensics', sub: '304M params — pixel-level tampering detection' },
-    { id: 'score', label: 'Forensic Scoring', sub: 'p_tampered + verdict' },
-    { id: 'ollama', label: 'Ollama Gemma 3 4B', sub: 'OCR + field extraction + explanation' },
-  ],
-  aws: [
-    { id: 'upload', label: 'Document received', sub: 'PDF auto-converted to 300dpi JPEG' },
-    { id: 'gemma', label: 'Gemma 4 E4B (A10G GPU)', sub: 'Full multimodal analysis — OCR + fields + coherence' },
-    { id: 'explanation', label: 'AI Explanation', sub: 'Professional authenticity assessment' },
-  ],
+  xeon: { label: 'On-Premise', desc: 'DINOv2 + Ollama', icon: '🖥️', color: '#3b82f6' },
+  aws: { label: 'AWS GPU', desc: 'DINOv2 + Gemma 4 E4B', icon: '☁️', color: '#8b5cf6' },
 }
 
 export default function VerifyDemo() {
+  const [mode, setMode] = useState<DocMode>('identity')
   const [backend, setBackend] = useState<Backend>('xeon')
-  const [file, setFile] = useState<File | null>(null)
-  const [preview, setPreview] = useState<string | null>(null)
-  const [inputMode, setInputMode] = useState<'file' | 'camera'>('file')
-  const cameraRef = useRef<HTMLInputElement>(null)
-  const [loading, setLoading] = useState(false)
-  const [activeStep, setActiveStep] = useState(-1)
-  const [result, setResult] = useState<AnalysisResult | null>(null)
+  const [frontFile, setFrontFile] = useState<File | null>(null)
+  const [backFile, setBackFile] = useState<File | null>(null)
+  const [pdfFile, setPdfFile] = useState<File | null>(null)
+  const [frontPreview, setFrontPreview] = useState<string | null>(null)
+  const [backPreview, setBackPreview] = useState<string | null>(null)
+  const [result, setResult] = useState<any>(null)
   const [error, setError] = useState<string | null>(null)
+  const [loading, setLoading] = useState(false)
   const [elapsed, setElapsed] = useState(0)
-  const fileRef = useRef<HTMLInputElement>(null)
+  const frontRef = useRef<HTMLInputElement>(null)
+  const backRef = useRef<HTMLInputElement>(null)
+  const pdfRef = useRef<HTMLInputElement>(null)
 
-  const handleFile = useCallback((f: File) => {
-    setFile(f)
-    setResult(null)
-    setError(null)
-    setActiveStep(-1)
-    if (f.type === 'application/pdf' || f.name.endsWith('.pdf')) {
-      setPreview(null)
-    } else {
-      const reader = new FileReader()
-      reader.onload = e => setPreview(e.target?.result as string)
-      reader.readAsDataURL(f)
-    }
-  }, [])
-
-  const analyze = async () => {
-    if (!file) return
-    setLoading(true)
-    setResult(null)
-    setError(null)
-    setActiveStep(0)
-
-    const steps = PIPELINE_STEPS[backend]
-    let stepTimer: ReturnType<typeof setInterval>
-    let currentStep = 0
-    stepTimer = setInterval(() => {
-      if (currentStep < steps.length - 1) {
-        currentStep++
-        setActiveStep(currentStep)
+  const compress = (file: File, max = 1500): Promise<File> =>
+    new Promise(resolve => {
+      const img = new window.Image()
+      const url = URL.createObjectURL(file)
+      img.onload = () => {
+        URL.revokeObjectURL(url)
+        const c = document.createElement('canvas')
+        let w = img.width, h = img.height
+        if (w > max || h > max) { const r = Math.min(max / w, max / h); w = Math.round(w * r); h = Math.round(h * r) }
+        c.width = w; c.height = h
+        c.getContext('2d')!.drawImage(img, 0, 0, w, h)
+        c.toBlob(b => resolve(new File([b!], file.name, { type: 'image/jpeg' })), 'image/jpeg', 0.85)
       }
-    }, backend === 'xeon' ? 800 : 1200)
+      img.src = url
+    })
 
-    const t0 = performance.now()
-
-    try {
-      const form = new FormData()
-      form.append('image', file)
-      form.append('backend', backend)
-
-      const res = await fetch('/api/verify-proxy', { method: 'POST', body: form })
-      if (!res.ok) throw new Error(`HTTP ${res.status}`)
-      const data = await res.json()
-
-      clearInterval(stepTimer)
-      setActiveStep(steps.length - 1)
-      setElapsed(Math.round(performance.now() - t0))
-      setResult(data)
-    } catch (e: any) {
-      clearInterval(stepTimer)
-      setError(e.message)
-    } finally {
-      setLoading(false)
+  const handleCapture = async (file: File, side: 'front' | 'back') => {
+    const compressed = await compress(file)
+    const reader = new FileReader()
+    reader.onload = e => {
+      if (side === 'front') { setFrontFile(compressed); setFrontPreview(e.target?.result as string) }
+      else { setBackFile(compressed); setBackPreview(e.target?.result as string) }
     }
+    reader.readAsDataURL(compressed)
   }
 
-  const forensics = result?.forensics
-  const combined = result?.combined
-  const analysis = result?.analysis || {
-    ocr_text: result?.ocr_text || '',
-    fields: result?.fields || {},
-    doc_type: result?.doc_type || 'unknown',
-    coherence_issues: result?.coherence_issues || [],
-    explanation: result?.explanation || '',
+  const canVerify = mode === 'identity' ? !!(frontFile && backFile) : !!pdfFile
+
+  const verify = async () => {
+    if (!canVerify) return
+    setLoading(true); setResult(null); setError(null)
+    const t0 = performance.now()
+    try {
+      let res: Response
+      if (mode === 'identity') {
+        const form = new FormData()
+        form.append('front', frontFile!)
+        form.append('back', backFile!)
+        res = await fetch('/api/verify-identity', { method: 'POST', body: form })
+      } else {
+        const form = new FormData()
+        form.append('image', pdfFile!)
+        form.append('backend', backend)
+        res = await fetch('/api/verify-proxy', { method: 'POST', body: form })
+      }
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      setResult(await res.json())
+      setElapsed(Math.round(performance.now() - t0))
+    } catch (e: any) { setError(e.message) }
+    finally { setLoading(false) }
   }
-  // Use combined verdict (forensics + LLM) if available, else fallback to forensics only
-  const verdict = result?.verdict || combined?.verdict || forensics?.verdict || null
-  const pTampered = combined?.p_tampered_combined ?? forensics?.p_tampered
-  const confidenceScore = result?.confidence_score
+
+  const reset = () => {
+    setFrontFile(null); setBackFile(null); setPdfFile(null)
+    setFrontPreview(null); setBackPreview(null)
+    setResult(null); setError(null); setElapsed(0)
+  }
+
+  const vc = (v: string) => v === 'authentic' ? '#10b981' : v === 'likely_authentic' ? '#10b981' : v === 'suspicious' || v === 'review_needed' ? '#f59e0b' : '#ef4444'
+  const verdict = result?.verdict || result?.forensics?.verdict
+  const confidence = result?.confidence_score ?? result?.confidence
 
   return (
     <div style={{ minHeight: '100vh', background: '#0a0e17', color: '#e2e8f0', fontFamily: "'Inter', system-ui, sans-serif" }}>
       {/* Header */}
-      <div style={{ padding: '20px 32px', borderBottom: '1px solid #1e293b', display: 'flex', alignItems: 'center', gap: 16 }}>
-        <h1 style={{ fontSize: 20, fontWeight: 700, margin: 0 }}>Deep-Check</h1>
-        <span style={{ background: '#8b5cf6', color: 'white', padding: '2px 10px', borderRadius: 12, fontSize: 11, fontWeight: 600 }}>VERIFY DEMO</span>
-        <span style={{ color: '#94a3b8', fontSize: 13, marginLeft: 'auto' }}>Pre-production | Document Verification Pipeline</span>
+      <div style={{ padding: '16px 24px', borderBottom: '1px solid #1e293b', display: 'flex', alignItems: 'center', gap: 12 }}>
+        <h1 style={{ fontSize: 18, fontWeight: 700, margin: 0 }}>Deep-Check</h1>
+        <span style={{ background: '#8b5cf6', color: 'white', padding: '2px 8px', borderRadius: 10, fontSize: 10, fontWeight: 600 }}>VERIFY</span>
+        <span style={{ color: '#64748b', fontSize: 12, marginLeft: 'auto' }}>Pre-production</span>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', minHeight: 'calc(100vh - 61px)' }}>
-        {/* LEFT: Input */}
-        <div style={{ padding: '24px 32px', borderRight: '1px solid #1e293b' }}>
-          {/* Backend Selector */}
-          <h3 style={{ fontSize: 13, color: '#94a3b8', marginBottom: 12, textTransform: 'uppercase', letterSpacing: 0.5 }}>Select Backend</h3>
-          <div style={{ display: 'flex', gap: 12, marginBottom: 24 }}>
-            {(Object.keys(BACKENDS) as Backend[]).map(key => (
-              <button key={key} onClick={() => { setBackend(key); setResult(null); setActiveStep(-1) }}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', minHeight: 'calc(100vh - 53px)' }}>
+        {/* LEFT */}
+        <div style={{ padding: '20px 24px', borderRight: '1px solid #1e293b', overflowY: 'auto' }}>
+
+          {/* Document Type */}
+          <h3 style={{ fontSize: 11, color: '#64748b', marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.5 }}>Document Type</h3>
+          <div style={{ display: 'flex', gap: 8, marginBottom: 20 }}>
+            {([
+              { key: 'identity' as DocMode, icon: '🪪', label: 'ID Document', sub: 'DNI / Passport', color: '#10b981' },
+              { key: 'document' as DocMode, icon: '📄', label: 'PDF Document', sub: 'Payslip / Diploma / Certificate', color: '#3b82f6' },
+            ]).map(opt => (
+              <button key={opt.key} onClick={() => { setMode(opt.key); reset() }}
                 style={{
-                  flex: 1, padding: '14px 16px', borderRadius: 10, border: `2px solid ${backend === key ? BACKENDS[key].color : '#1e293b'}`,
-                  background: backend === key ? `${BACKENDS[key].color}15` : '#111827', cursor: 'pointer', textAlign: 'left', transition: 'all 0.2s',
+                  flex: 1, padding: '12px', borderRadius: 10, cursor: 'pointer', textAlign: 'left',
+                  border: `2px solid ${mode === opt.key ? opt.color : '#1e293b'}`,
+                  background: mode === opt.key ? `${opt.color}10` : '#111827',
                 }}>
-                <div style={{ fontSize: 20, marginBottom: 4 }}>{BACKENDS[key].icon}</div>
-                <div style={{ fontSize: 14, fontWeight: 600, color: backend === key ? BACKENDS[key].color : '#e2e8f0' }}>{BACKENDS[key].label}</div>
-                <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 2 }}>{BACKENDS[key].desc}</div>
+                <div style={{ fontSize: 20 }}>{opt.icon}</div>
+                <div style={{ fontSize: 13, fontWeight: 600, color: mode === opt.key ? opt.color : '#e2e8f0', marginTop: 4 }}>{opt.label}</div>
+                <div style={{ fontSize: 10, color: '#64748b' }}>{opt.sub}</div>
               </button>
             ))}
           </div>
 
-          {/* Input Mode Selector */}
-          <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
-            <button onClick={() => setInputMode('camera')}
-              style={{
-                flex: 1, padding: '10px', borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: 'pointer',
-                border: `1px solid ${inputMode === 'camera' ? '#10b981' : '#1e293b'}`,
-                background: inputMode === 'camera' ? '#10b98115' : '#111827',
-                color: inputMode === 'camera' ? '#10b981' : '#94a3b8',
-              }}>
-              📸 Camera {backend === 'xeon' && <span style={{ fontSize: 10, color: '#10b981' }}>(recommended)</span>}
-            </button>
-            <button onClick={() => setInputMode('file')}
-              style={{
-                flex: 1, padding: '10px', borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: 'pointer',
-                border: `1px solid ${inputMode === 'file' ? BACKENDS[backend].color : '#1e293b'}`,
-                background: inputMode === 'file' ? `${BACKENDS[backend].color}15` : '#111827',
-                color: inputMode === 'file' ? BACKENDS[backend].color : '#94a3b8',
-              }}>
-              📁 Upload File
-            </button>
-          </div>
-
-          {/* Camera / Upload Zone */}
-          {inputMode === 'camera' ? (
-            <div onClick={() => cameraRef.current?.click()}
-              style={{
-                border: '2px dashed #10b981', borderRadius: 10, padding: file ? 16 : 40, textAlign: 'center',
-                cursor: 'pointer', marginBottom: 16, background: '#10b98108',
-              }}>
-              {file && preview ? (
-                <div>
-                  <img src={preview} alt="captured" style={{ maxWidth: 250, maxHeight: 180, borderRadius: 8, marginBottom: 8 }} />
-                  <div style={{ fontSize: 13, color: '#94a3b8' }}>{file.name} ({Math.round(file.size / 1024)} KB)</div>
-                  <div style={{ fontSize: 11, color: '#10b981', marginTop: 4 }}>Direct camera capture — optimal for forensic analysis</div>
-                </div>
-              ) : (
-                <div>
-                  <div style={{ fontSize: 48, marginBottom: 8 }}>📸</div>
-                  <div style={{ fontSize: 14, fontWeight: 600, color: '#10b981' }}>Take photo of document</div>
-                  <div style={{ fontSize: 12, color: '#64748b', marginTop: 4 }}>Opens your camera — best accuracy for forensic detection</div>
-                  <div style={{ fontSize: 11, color: '#475569', marginTop: 8, padding: '6px 12px', background: '#111827', borderRadius: 6, display: 'inline-block' }}>
-                    Direct photo = no PDF conversion artifacts = more accurate results
-                  </div>
-                </div>
-              )}
-              <input ref={cameraRef} type="file" accept="image/*" capture="environment" hidden onChange={e => e.target.files?.[0] && handleFile(e.target.files[0])} />
-            </div>
-          ) : (
-            <div onClick={() => fileRef.current?.click()}
-              onDrop={e => { e.preventDefault(); if (e.dataTransfer.files[0]) handleFile(e.dataTransfer.files[0]) }}
-              onDragOver={e => e.preventDefault()}
-              style={{
-                border: '2px dashed #1e293b', borderRadius: 10, padding: file ? 16 : 40, textAlign: 'center',
-                cursor: 'pointer', marginBottom: 16, transition: 'border-color 0.2s',
-              }}>
-              {file ? (
-                <div>
-                  {preview ? <img src={preview} alt="preview" style={{ maxWidth: 250, maxHeight: 180, borderRadius: 8, marginBottom: 8 }} /> :
-                    <div style={{ fontSize: 48, marginBottom: 8 }}>📄</div>}
-                  <div style={{ fontSize: 13, color: '#94a3b8' }}>{file.name} ({Math.round(file.size / 1024)} KB)</div>
-                  {file.name.endsWith('.pdf') && <div style={{ fontSize: 11, color: '#f59e0b', marginTop: 4 }}>PDF — pages auto-converted. Camera capture recommended for best accuracy.</div>}
-                </div>
-              ) : (
-                <div>
-                  <div style={{ fontSize: 36, marginBottom: 8 }}>🪪</div>
-                  <div style={{ fontSize: 14, fontWeight: 500 }}>Drop document or click to upload</div>
-                  <div style={{ fontSize: 12, color: '#64748b', marginTop: 4 }}>PDF, JPEG, PNG — DNI, passport, diploma, invoice (195 countries)</div>
-                </div>
-              )}
-              <input ref={fileRef} type="file" accept="image/*,.pdf,application/pdf" hidden onChange={e => e.target.files?.[0] && handleFile(e.target.files[0])} />
-            </div>
+          {/* Backend (only for PDF mode) */}
+          {mode === 'document' && (
+            <>
+              <h3 style={{ fontSize: 11, color: '#64748b', marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.5 }}>Backend</h3>
+              <div style={{ display: 'flex', gap: 8, marginBottom: 20 }}>
+                {(Object.keys(BACKENDS) as Backend[]).map(key => (
+                  <button key={key} onClick={() => setBackend(key)}
+                    style={{
+                      flex: 1, padding: '10px', borderRadius: 8, cursor: 'pointer', textAlign: 'left',
+                      border: `1px solid ${backend === key ? BACKENDS[key].color : '#1e293b'}`,
+                      background: backend === key ? `${BACKENDS[key].color}10` : '#111827', fontSize: 12,
+                    }}>
+                    <span>{BACKENDS[key].icon} </span>
+                    <span style={{ fontWeight: 600, color: backend === key ? BACKENDS[key].color : '#94a3b8' }}>{BACKENDS[key].label}</span>
+                    <div style={{ fontSize: 10, color: '#64748b', marginTop: 2 }}>{BACKENDS[key].desc}</div>
+                  </button>
+                ))}
+              </div>
+            </>
           )}
 
-          <button onClick={analyze} disabled={!file || loading}
-            style={{
-              width: '100%', padding: '14px 24px', borderRadius: 10, border: 'none', fontSize: 14, fontWeight: 600,
-              background: `linear-gradient(135deg, ${BACKENDS[backend].color}, #6366f1)`, color: 'white', cursor: file && !loading ? 'pointer' : 'not-allowed',
-              opacity: file && !loading ? 1 : 0.5, transition: 'all 0.2s',
-            }}>
-            {loading ? 'Processing...' : `Verify with ${BACKENDS[backend].label}`}
-          </button>
+          {/* ID Mode: Camera Front + Back */}
+          {mode === 'identity' && (
+            <div>
+              <h3 style={{ fontSize: 11, color: '#64748b', marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.5 }}>Capture Document</h3>
 
-          {/* Pipeline Tracker */}
-          {(loading || result) && (
-            <div style={{ marginTop: 24, padding: 16, background: '#111827', border: '1px solid #1e293b', borderRadius: 10 }}>
-              <h3 style={{ fontSize: 12, color: BACKENDS[backend].color, marginBottom: 14, textTransform: 'uppercase', letterSpacing: 0.5 }}>
-                {BACKENDS[backend].icon} Pipeline — {BACKENDS[backend].label}
-              </h3>
-              {PIPELINE_STEPS[backend].map((step, i) => (
-                <div key={step.id} style={{ display: 'flex', alignItems: 'flex-start', gap: 10, marginBottom: 8 }}>
-                  <div style={{
-                    width: 24, height: 24, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    fontSize: 11, fontWeight: 700, flexShrink: 0, transition: 'all 0.3s',
-                    background: i <= activeStep ? BACKENDS[backend].color : '#1e293b',
-                    color: i <= activeStep ? 'white' : '#64748b',
-                  }}>{i <= activeStep && result ? '✓' : i + 1}</div>
+              {/* Front */}
+              <div onClick={() => frontRef.current?.click()}
+                style={{
+                  border: `2px dashed ${frontFile ? '#10b981' : '#1e293b'}`, borderRadius: 10, padding: frontPreview ? 12 : 28,
+                  textAlign: 'center', cursor: 'pointer', marginBottom: 8, background: frontFile ? '#10b98108' : 'transparent',
+                }}>
+                {frontPreview ? (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                    <img src={frontPreview} alt="front" style={{ width: 80, height: 50, objectFit: 'cover', borderRadius: 6 }} />
+                    <div style={{ textAlign: 'left' }}>
+                      <div style={{ fontSize: 12, fontWeight: 600, color: '#10b981' }}>Front captured ✓</div>
+                      <div style={{ fontSize: 10, color: '#64748b' }}>{frontFile?.name}</div>
+                    </div>
+                  </div>
+                ) : (
                   <div>
-                    <div style={{ fontSize: 12, fontWeight: 500, color: i <= activeStep ? '#e2e8f0' : '#64748b', transition: 'color 0.3s' }}>{step.label}</div>
-                    <div style={{ fontSize: 10, color: '#64748b' }}>{step.sub}</div>
+                    <div style={{ fontSize: 24 }}>📸</div>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: '#10b981', marginTop: 4 }}>Take photo — FRONT</div>
+                    <div style={{ fontSize: 10, color: '#64748b' }}>Face side of document</div>
                   </div>
-                </div>
-              ))}
-              {result && <div style={{ fontSize: 11, color: '#64748b', marginTop: 8, textAlign: 'right' }}>Total: {elapsed}ms</div>}
+                )}
+              </div>
+              <input ref={frontRef} type="file" accept="image/*" capture="environment" hidden
+                onChange={e => { if (e.target.files?.[0]) handleCapture(e.target.files[0], 'front') }} />
+
+              {/* Back */}
+              <div onClick={() => backRef.current?.click()}
+                style={{
+                  border: `2px dashed ${backFile ? '#10b981' : '#1e293b'}`, borderRadius: 10, padding: backPreview ? 12 : 28,
+                  textAlign: 'center', cursor: 'pointer', marginBottom: 16, background: backFile ? '#10b98108' : 'transparent',
+                  opacity: frontFile ? 1 : 0.4, pointerEvents: frontFile ? 'auto' : 'none',
+                }}>
+                {backPreview ? (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                    <img src={backPreview} alt="back" style={{ width: 80, height: 50, objectFit: 'cover', borderRadius: 6 }} />
+                    <div style={{ textAlign: 'left' }}>
+                      <div style={{ fontSize: 12, fontWeight: 600, color: '#10b981' }}>Back captured ✓</div>
+                      <div style={{ fontSize: 10, color: '#64748b' }}>{backFile?.name}</div>
+                    </div>
+                  </div>
+                ) : (
+                  <div>
+                    <div style={{ fontSize: 24 }}>🔄</div>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: '#3b82f6', marginTop: 4 }}>Take photo — BACK</div>
+                    <div style={{ fontSize: 10, color: '#64748b' }}>MRZ side of document</div>
+                  </div>
+                )}
+              </div>
+              <input ref={backRef} type="file" accept="image/*" capture="environment" hidden
+                onChange={e => { if (e.target.files?.[0]) handleCapture(e.target.files[0], 'back') }} />
+
+              <div style={{ fontSize: 11, color: '#475569', padding: '8px 12px', background: '#111827', borderRadius: 8, marginBottom: 16, textAlign: 'center' }}>
+                DINOv2 pixel forensics + MRZ check digits + DNI validation + cross-validation front vs back
+              </div>
             </div>
           )}
+
+          {/* PDF Mode: Upload */}
+          {mode === 'document' && (
+            <div>
+              <h3 style={{ fontSize: 11, color: '#64748b', marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.5 }}>Upload PDF</h3>
+              <div onClick={() => pdfRef.current?.click()}
+                style={{
+                  border: `2px dashed ${pdfFile ? '#3b82f6' : '#1e293b'}`, borderRadius: 10, padding: pdfFile ? 16 : 32,
+                  textAlign: 'center', cursor: 'pointer', marginBottom: 16, background: pdfFile ? '#3b82f608' : 'transparent',
+                }}>
+                {pdfFile ? (
+                  <div>
+                    <div style={{ fontSize: 32 }}>📄</div>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: '#3b82f6', marginTop: 4 }}>{pdfFile.name}</div>
+                    <div style={{ fontSize: 11, color: '#64748b' }}>{Math.round(pdfFile.size / 1024)} KB</div>
+                  </div>
+                ) : (
+                  <div>
+                    <div style={{ fontSize: 36 }}>📁</div>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: '#3b82f6', marginTop: 4 }}>Tap to select PDF</div>
+                    <div style={{ fontSize: 11, color: '#64748b', marginTop: 4 }}>Payslip, diploma, certificate, transcript...</div>
+                  </div>
+                )}
+              </div>
+              <input ref={pdfRef} type="file" accept=".pdf,application/pdf" hidden
+                onChange={e => { if (e.target.files?.[0]) setPdfFile(e.target.files[0]) }} />
+
+              <div style={{ fontSize: 11, color: '#475569', padding: '8px 12px', background: '#111827', borderRadius: 8, marginBottom: 16, textAlign: 'center' }}>
+                PDF structural analysis + QR code validation + text extraction + pixel forensics
+              </div>
+            </div>
+          )}
+
+          {/* Verify Button */}
+          <button onClick={verify} disabled={!canVerify || loading}
+            style={{
+              width: '100%', padding: '14px', borderRadius: 10, border: 'none', fontSize: 14, fontWeight: 700,
+              background: canVerify && !loading ? `linear-gradient(135deg, ${mode === 'identity' ? '#10b981' : BACKENDS[backend].color}, #6366f1)` : '#1e293b',
+              color: 'white', cursor: canVerify && !loading ? 'pointer' : 'not-allowed', opacity: canVerify && !loading ? 1 : 0.5,
+            }}>
+            {loading ? 'Verifying...' : mode === 'identity' ? 'Verify ID Document' : `Verify with ${BACKENDS[backend].label}`}
+          </button>
         </div>
 
         {/* RIGHT: Results */}
-        <div style={{ padding: '24px 32px', overflowY: 'auto' }}>
+        <div style={{ padding: '20px 24px', overflowY: 'auto' }}>
+          {loading && (
+            <div style={{ textAlign: 'center', padding: '60px 0' }}>
+              <div style={{ width: 32, height: 32, border: '3px solid #1e293b', borderTopColor: '#10b981', borderRadius: '50%', animation: 'spin 0.6s linear infinite', margin: '0 auto 16px' }} />
+              <style>{`@keyframes spin { to { transform: rotate(360deg) } }`}</style>
+              <div style={{ fontSize: 13, color: '#94a3b8' }}>Analyzing {mode === 'identity' ? 'front + back' : 'PDF'}...</div>
+            </div>
+          )}
+
           {error && (
-            <div style={{ padding: 24, textAlign: 'center' }}>
+            <div style={{ textAlign: 'center', padding: 32 }}>
               <div style={{ fontSize: 48, marginBottom: 12 }}>❌</div>
-              <div style={{ fontSize: 16, fontWeight: 600, color: '#ef4444', marginBottom: 8 }}>Request Failed</div>
-              <div style={{ fontSize: 13, color: '#94a3b8' }}>{error}</div>
-              <div style={{ fontSize: 12, color: '#64748b', marginTop: 8 }}>Check that the {BACKENDS[backend].label} backend is running.</div>
+              <div style={{ fontSize: 16, fontWeight: 600, color: '#ef4444' }}>Request Failed</div>
+              <div style={{ fontSize: 13, color: '#94a3b8', marginTop: 4 }}>{error}</div>
+              <button onClick={reset} style={{ marginTop: 16, padding: '8px 20px', borderRadius: 8, border: '1px solid #1e293b', background: '#111827', color: '#e2e8f0', cursor: 'pointer', fontSize: 12 }}>Try Again</button>
             </div>
           )}
 
           {!result && !error && !loading && (
-            <div style={{ padding: '80px 32px', textAlign: 'center', color: '#64748b' }}>
-              <div style={{ fontSize: 48, marginBottom: 16, opacity: 0.3 }}>⚡</div>
-              <h3 style={{ fontSize: 16, marginBottom: 8, color: '#94a3b8' }}>Ready to verify</h3>
-              <p style={{ fontSize: 13 }}>Upload a document and select your backend to see the full AI verification pipeline in action.</p>
-            </div>
-          )}
-
-          {loading && !result && (
-            <div style={{ padding: '80px 32px', textAlign: 'center' }}>
-              <div style={{ width: 24, height: 24, border: '3px solid #1e293b', borderTopColor: BACKENDS[backend].color, borderRadius: '50%', animation: 'spin 0.6s linear infinite', margin: '0 auto 16px' }} />
-              <div style={{ fontSize: 13, color: '#94a3b8' }}>Analyzing document with {BACKENDS[backend].label}...</div>
-              <style>{`@keyframes spin { to { transform: rotate(360deg) } }`}</style>
+            <div style={{ textAlign: 'center', padding: '60px 0', color: '#475569' }}>
+              <div style={{ fontSize: 48, opacity: 0.2, marginBottom: 12 }}>⚡</div>
+              <div style={{ fontSize: 14, color: '#64748b' }}>Select document type and upload to verify</div>
             </div>
           )}
 
           {result && (
             <div>
               {/* Verdict */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 20, paddingBottom: 16, borderBottom: '1px solid #1e293b' }}>
-                <span style={{
-                  fontSize: 28, fontWeight: 800,
-                  color: verdict === 'authentic' ? '#10b981' : verdict === 'suspicious' ? '#f59e0b' : '#ef4444',
-                }}>{(verdict || analysis.doc_type || 'ANALYZED').toUpperCase()}</span>
-                <span style={{ fontSize: 12, color: '#64748b', marginLeft: 'auto' }}>
-                  {elapsed}ms | {BACKENDS[backend].label}
-                </span>
+              <div style={{ textAlign: 'center', marginBottom: 20, padding: 16, background: '#111827', borderRadius: 12, border: `2px solid ${vc(verdict || '')}` }}>
+                <div style={{ fontSize: 28, fontWeight: 800, color: vc(verdict || '') }}>
+                  {(verdict || 'ANALYZED').toUpperCase().replace(/_/g, ' ')}
+                </div>
+                {confidence !== undefined && (
+                  <div style={{ fontSize: 13, color: '#94a3b8', marginTop: 4 }}>Confidence: {(confidence * 100).toFixed(1)}%</div>
+                )}
+                <div style={{ fontSize: 11, color: '#64748b', marginTop: 4 }}>{elapsed}ms | {mode === 'identity' ? 'On-Premise' : BACKENDS[backend].label}</div>
               </div>
 
-              {/* Metrics */}
-              {(pTampered !== undefined || confidenceScore !== undefined) && (
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 20 }}>
-                  {confidenceScore !== undefined && (
-                    <div style={{ background: '#111827', border: '1px solid #1e293b', borderRadius: 8, padding: 14 }}>
-                      <div style={{ fontSize: 10, color: '#64748b', textTransform: 'uppercase' }}>Confidence</div>
-                      <div style={{ fontSize: 24, fontWeight: 700, color: confidenceScore > 0.7 ? '#10b981' : confidenceScore > 0.4 ? '#f59e0b' : '#ef4444', marginTop: 4 }}>{(confidenceScore * 100).toFixed(1)}%</div>
-                      <div style={{ height: 4, background: '#1e293b', borderRadius: 2, marginTop: 8, overflow: 'hidden' }}>
-                        <div style={{ height: '100%', width: `${Math.min(100, confidenceScore * 100)}%`, background: confidenceScore > 0.7 ? '#10b981' : '#f59e0b', borderRadius: 2, transition: 'width 0.5s' }} />
-                      </div>
-                      <div style={{ fontSize: 10, color: '#64748b', marginTop: 4 }}>Combined: forensics (60%) + AI semantic (40%)</div>
-                    </div>
-                  )}
-                  <div style={{ background: '#111827', border: '1px solid #1e293b', borderRadius: 8, padding: 14 }}>
-                    <div style={{ fontSize: 10, color: '#64748b', textTransform: 'uppercase' }}>Forensics Score</div>
-                    <div style={{ fontSize: 18, fontWeight: 700, color: (forensics?.p_tampered || 0) > 0.3 ? '#f59e0b' : '#10b981', marginTop: 4 }}>{((forensics?.p_tampered || 0) * 100).toFixed(1)}% pixel</div>
-                    <div style={{ fontSize: 11, color: '#64748b', marginTop: 4 }}>{forensics?.model || 'DINOv2+ELA'} ({forensics?.version || 'v2b'})</div>
-                    {combined?.llm_confirms_authentic && <div style={{ fontSize: 10, color: '#10b981', marginTop: 4 }}>LLM confirms authentic</div>}
-                    {combined && !combined.llm_confirms_authentic && <div style={{ fontSize: 10, color: '#f59e0b', marginTop: 4 }}>LLM flagged issues</div>}
+              {/* ID Mode: Front + Back previews */}
+              {mode === 'identity' && frontPreview && backPreview && (
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 16 }}>
+                  <div style={{ textAlign: 'center' }}>
+                    <div style={{ fontSize: 10, color: '#64748b', marginBottom: 4 }}>Front</div>
+                    <img src={frontPreview} alt="front" style={{ width: '100%', borderRadius: 8 }} />
+                    <div style={{ fontSize: 10, color: '#10b981', marginTop: 4 }}>{((result.front?.forensics?.p_tampered || 0) * 100).toFixed(1)}% pixel</div>
+                  </div>
+                  <div style={{ textAlign: 'center' }}>
+                    <div style={{ fontSize: 10, color: '#64748b', marginBottom: 4 }}>Back</div>
+                    <img src={backPreview} alt="back" style={{ width: '100%', borderRadius: 8 }} />
+                    <div style={{ fontSize: 10, color: '#10b981', marginTop: 4 }}>{((result.back?.forensics?.p_tampered || 0) * 100).toFixed(1)}% pixel</div>
                   </div>
                 </div>
               )}
 
-              {/* Document Type */}
-              {analysis.doc_type && analysis.doc_type !== 'unknown' && (
-                <div style={{ background: '#111827', border: '1px solid #1e293b', borderRadius: 8, padding: 14, marginBottom: 16 }}>
-                  <div style={{ fontSize: 10, color: '#64748b', textTransform: 'uppercase', marginBottom: 4 }}>Document Type</div>
-                  <div style={{ fontSize: 16, fontWeight: 600, color: BACKENDS[backend].color }}>{analysis.doc_type}</div>
+              {/* Forensics Score (PDF mode) */}
+              {mode === 'document' && result.forensics && (
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 16 }}>
+                  <div style={{ background: '#111827', border: '1px solid #1e293b', borderRadius: 8, padding: 12 }}>
+                    <div style={{ fontSize: 10, color: '#64748b', textTransform: 'uppercase' }}>P(Tampered)</div>
+                    <div style={{ fontSize: 20, fontWeight: 700, color: (result.forensics.p_tampered || 0) > 0.3 ? '#ef4444' : '#10b981', marginTop: 4 }}>{((result.forensics.p_tampered || 0) * 100).toFixed(1)}%</div>
+                  </div>
+                  <div style={{ background: '#111827', border: '1px solid #1e293b', borderRadius: 8, padding: 12 }}>
+                    <div style={{ fontSize: 10, color: '#64748b', textTransform: 'uppercase' }}>Model</div>
+                    <div style={{ fontSize: 13, fontWeight: 600, marginTop: 4 }}>{result.forensics.model || 'DINOv2+ELA'}</div>
+                  </div>
                 </div>
               )}
 
               {/* Fields */}
-              {analysis.fields && Object.keys(analysis.fields).filter(k => analysis.fields[k]).length > 0 && (
-                <div style={{ marginBottom: 16 }}>
-                  <h3 style={{ fontSize: 13, fontWeight: 600, marginBottom: 10, display: 'flex', alignItems: 'center', gap: 8 }}>📋 Extracted Fields</h3>
-                  <div style={{ display: 'grid', gridTemplateColumns: 'auto 1fr', gap: '4px 16px', fontSize: 12, background: '#111827', border: '1px solid #1e293b', borderRadius: 8, padding: 14 }}>
-                    {Object.entries(analysis.fields).filter(([, v]) => v).map(([k, v]) => (
-                      <div key={k} style={{ display: 'contents' }}>
-                        <div style={{ color: '#64748b', textTransform: 'capitalize' }}>{k.replace(/_/g, ' ')}</div>
-                        <div style={{ fontWeight: 500 }}>{String(v)}</div>
-                      </div>
-                    ))}
+              {(() => {
+                const fields = mode === 'identity' ? { ...result.front?.fields, ...result.back?.fields } : { ...result.forensics?.fields_from_pdf, ...result.analysis?.fields }
+                const entries = Object.entries(fields || {}).filter(([, v]) => v && String(v).length > 0)
+                if (!entries.length) return null
+                return (
+                  <div style={{ background: '#111827', border: '1px solid #1e293b', borderRadius: 10, padding: 14, marginBottom: 16 }}>
+                    <h3 style={{ fontSize: 12, marginBottom: 10 }}>📋 Extracted Fields</h3>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'auto 1fr', gap: '4px 12px', fontSize: 12 }}>
+                      {entries.map(([k, v]) => (
+                        <div key={k} style={{ display: 'contents' }}>
+                          <div style={{ color: '#64748b', textTransform: 'capitalize' }}>{k.replace(/_/g, ' ')}</div>
+                          <div style={{ fontWeight: 500 }}>{String(v)}</div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )
+              })()}
+
+              {/* Cross Validation (ID mode) */}
+              {result.cross_validation && (
+                <div style={{ background: '#111827', border: '1px solid #1e293b', borderRadius: 10, padding: 14, marginBottom: 16 }}>
+                  <h3 style={{ fontSize: 12, marginBottom: 10 }}>🔗 Cross-Validation</h3>
+                  {result.cross_validation.dni_check?.map((c: string, i: number) => (
+                    <div key={i} style={{ fontSize: 11, color: c.includes('valid') && !c.includes('invalid') ? '#10b981' : '#ef4444', marginBottom: 3 }}>
+                      {c.includes('CRITICAL') ? '🚨' : c.includes('valid') && !c.includes('invalid') ? '✅' : '⚠️'} {c}
+                    </div>
+                  ))}
+                  {result.cross_validation.issues?.filter((c: string) => !result.cross_validation.dni_check?.includes(c)).map((c: string, i: number) => (
+                    <div key={`i${i}`} style={{ fontSize: 11, color: c.includes('CRITICAL') ? '#ef4444' : '#f59e0b', marginBottom: 3 }}>
+                      {c.includes('CRITICAL') ? '🚨' : '⚠️'} {c}
+                    </div>
+                  ))}
+                  {(!result.cross_validation.issues?.length) && <div style={{ fontSize: 11, color: '#10b981' }}>✅ No issues found</div>}
+                </div>
+              )}
+
+              {/* MRZ (ID mode) */}
+              {result.back?.mrz?.mrz_lines && (
+                <div style={{ background: '#111827', border: '1px solid #1e293b', borderRadius: 10, padding: 14, marginBottom: 16 }}>
+                  <h3 style={{ fontSize: 12, marginBottom: 8 }}>🔖 MRZ</h3>
+                  <div style={{ fontSize: 10, fontFamily: 'monospace', color: '#94a3b8' }}>
+                    {result.back.mrz.mrz_lines.map((l: string, i: number) => <div key={i}>{l}</div>)}
+                  </div>
+                  <div style={{ fontSize: 10, marginTop: 6, color: result.back.mrz.check_digits_valid ? '#10b981' : '#ef4444' }}>
+                    Check digits: {result.back.mrz.check_digits_valid ? '✅ Valid' : '❌ Invalid'}
                   </div>
                 </div>
               )}
 
-              {/* OCR Text */}
-              {analysis.ocr_text && (
-                <div style={{ marginBottom: 16 }}>
-                  <h3 style={{ fontSize: 13, fontWeight: 600, marginBottom: 10, display: 'flex', alignItems: 'center', gap: 8 }}>📝 OCR Text</h3>
-                  <div style={{ background: '#0a0e17', border: '1px solid #1e293b', borderRadius: 8, padding: 14, fontSize: 11, fontFamily: "'JetBrains Mono', monospace", maxHeight: 200, overflowY: 'auto', whiteSpace: 'pre-wrap' }}>
-                    {analysis.ocr_text}
-                  </div>
+              {/* QR Codes (PDF mode) */}
+              {result.forensics?.qr_codes?.length > 0 && (
+                <div style={{ background: '#111827', border: '1px solid #1e293b', borderRadius: 10, padding: 14, marginBottom: 16 }}>
+                  <h3 style={{ fontSize: 12, marginBottom: 10 }}>📱 QR Codes</h3>
+                  {result.forensics.qr_codes.map((qr: any, i: number) => (
+                    <div key={i} style={{ fontSize: 11, padding: 8, background: '#0a0e17', borderRadius: 6, marginBottom: 6 }}>
+                      <div style={{ color: '#3b82f6', fontWeight: 600 }}>{qr.type} ({qr.source})</div>
+                      <div style={{ color: '#94a3b8', wordBreak: 'break-all', marginTop: 2 }}>{qr.data}</div>
+                    </div>
+                  ))}
+                  {result.forensics.qr_validation?.validations?.map((v: string, i: number) => (
+                    <div key={i} style={{ fontSize: 10, color: '#10b981', marginTop: 2 }}>✅ {v}</div>
+                  ))}
+                  {result.forensics.qr_validation?.issues?.map((v: string, i: number) => (
+                    <div key={i} style={{ fontSize: 10, color: '#ef4444', marginTop: 2 }}>🚨 {v}</div>
+                  ))}
                 </div>
               )}
 
-              {/* Coherence Issues */}
-              {analysis.coherence_issues && analysis.coherence_issues.length > 0 && (
-                <div style={{ marginBottom: 16 }}>
-                  <h3 style={{ fontSize: 13, fontWeight: 600, marginBottom: 10, display: 'flex', alignItems: 'center', gap: 8 }}>⚠️ Coherence Issues</h3>
-                  <div style={{ background: '#111827', border: '1px solid #1e293b', borderRadius: 8, padding: 14 }}>
-                    {analysis.coherence_issues.map((issue, i) => (
-                      <div key={i} style={{ fontSize: 12, color: '#f59e0b', marginBottom: 4 }}>• {issue}</div>
-                    ))}
+              {/* PDF Structure (PDF mode) */}
+              {result.forensics?.pdf_structural && (
+                <div style={{ background: '#111827', border: '1px solid #1e293b', borderRadius: 10, padding: 14, marginBottom: 16 }}>
+                  <h3 style={{ fontSize: 12, marginBottom: 10 }}>🔍 PDF Structure</h3>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'auto 1fr', gap: '3px 12px', fontSize: 11 }}>
+                    <div style={{ color: '#64748b' }}>Producer</div><div>{result.forensics.pdf_structural.producer || '?'}</div>
+                    <div style={{ color: '#64748b' }}>Pages</div><div>{result.forensics.pdf_structural.pages}</div>
+                    <div style={{ color: '#64748b' }}>Native text</div><div>{result.forensics.pdf_structural.has_native_text ? '✅' : '❌ Scanned'}</div>
+                    <div style={{ color: '#64748b' }}>Fonts</div><div>{result.forensics.pdf_structural.fonts_count}</div>
+                    <div style={{ color: '#64748b' }}>Annotations</div><div>{result.forensics.pdf_structural.has_annotations ? '⚠️' : '✅'}</div>
+                    <div style={{ color: '#64748b' }}>Layers</div><div>{result.forensics.pdf_structural.has_layers ? '⚠️' : '✅'}</div>
                   </div>
+                  {result.forensics.pdf_structural.risk_indicators?.map((r: string, i: number) => (
+                    <div key={i} style={{ fontSize: 10, color: r.includes('positive') ? '#10b981' : '#f59e0b', marginTop: 4 }}>
+                      {r.includes('positive') ? '✅' : '⚠️'} {r}
+                    </div>
+                  ))}
                 </div>
               )}
 
-              {/* Explanation */}
-              {analysis.explanation && (
-                <div style={{ marginBottom: 16 }}>
-                  <h3 style={{ fontSize: 13, fontWeight: 600, marginBottom: 10, display: 'flex', alignItems: 'center', gap: 8 }}>💬 AI Explanation</h3>
-                  <div style={{ background: '#111827', border: `1px solid ${BACKENDS[backend].color}30`, borderRadius: 8, padding: 14, fontSize: 13, lineHeight: 1.6, borderLeft: `3px solid ${BACKENDS[backend].color}` }}>
-                    {analysis.explanation}
-                  </div>
+              {/* AI Explanation */}
+              {result.analysis?.explanation && (
+                <div style={{ background: '#111827', borderLeft: '3px solid #8b5cf6', borderRadius: 10, padding: 14, marginBottom: 16 }}>
+                  <h3 style={{ fontSize: 12, marginBottom: 8 }}>💬 AI Explanation</h3>
+                  <div style={{ fontSize: 12, lineHeight: 1.6, color: '#94a3b8' }}>{result.analysis.explanation}</div>
                 </div>
               )}
 
               {/* Raw JSON */}
-              <details style={{ marginTop: 16 }}>
-                <summary style={{ fontSize: 12, color: '#64748b', cursor: 'pointer', marginBottom: 8 }}>Raw JSON Response</summary>
-                <div style={{ background: '#111827', border: '1px solid #1e293b', borderRadius: 8, padding: 14, fontSize: 10, fontFamily: "'JetBrains Mono', monospace", maxHeight: 300, overflowY: 'auto', whiteSpace: 'pre-wrap' }}>
+              <details>
+                <summary style={{ fontSize: 11, color: '#475569', cursor: 'pointer' }}>Raw JSON</summary>
+                <div style={{ background: '#111827', border: '1px solid #1e293b', borderRadius: 8, padding: 12, fontSize: 9, fontFamily: 'monospace', maxHeight: 300, overflowY: 'auto', whiteSpace: 'pre-wrap', marginTop: 8 }}>
                   {JSON.stringify(result, null, 2)}
                 </div>
               </details>
+
+              <button onClick={reset} style={{ width: '100%', marginTop: 16, padding: '12px', borderRadius: 10, border: 'none', background: '#1e293b', color: '#e2e8f0', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
+                Verify Another Document
+              </button>
             </div>
           )}
         </div>
