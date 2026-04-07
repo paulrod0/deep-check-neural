@@ -99,11 +99,17 @@ def check_and_download_models():
 
 def ensure_models_exist():
     """Download models on first startup if not present."""
+    if os.getenv("SKIP_S3_DOWNLOAD", "0") == "1":
+        logger.info("SKIP_S3_DOWNLOAD=1, skipping S3 model check")
+        return
     for engine_name, cfg in ENGINES.items():
         local_dir = MODEL_DIR / cfg["local_dir"]
         if not local_dir.exists() or not any(local_dir.iterdir()):
             logger.info(f"{engine_name}: no local models, downloading from S3...")
-            check_and_download_models()
+            try:
+                check_and_download_models()
+            except Exception as e:
+                logger.warning(f"S3 download failed ({e}), continuing with local models")
             break
 
 
