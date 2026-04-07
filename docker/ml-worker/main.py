@@ -49,6 +49,7 @@ from typing import Optional, List
 
 from engines.deepfake_engine import DeepfakeEngine
 from engines.doc_engine import DocForensicsEngine
+from engines.doc_ocr_engine import DocOcrEngine
 from engines.keystroke_engine import KeystrokeEngine
 from engines.gemma_doc_engine import GemmaDocEngine
 from model_loader import ensure_models_exist, check_and_download_models, get_model_status
@@ -57,6 +58,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 PORT = int(os.getenv("PORT", 8001))
+GEMMA_ENABLED = os.getenv("GEMMA_ENABLED", "0") == "1"
 
 # Download models on startup if missing
 logger.info("Checking models...")
@@ -66,8 +68,16 @@ ensure_models_exist()
 logger.info("Loading engines...")
 deepfake = DeepfakeEngine()
 doc_forensics = DocForensicsEngine()
+doc_ocr = DocOcrEngine()
 keystroke = KeystrokeEngine()
-gemma_doc = GemmaDocEngine()
+
+# Gemma 4: only load if explicitly enabled (pre-production)
+gemma_doc = None
+if GEMMA_ENABLED:
+    logger.info("Gemma 4 ENABLED — loading...")
+    gemma_doc = GemmaDocEngine()
+else:
+    logger.info("Gemma 4 DISABLED (set GEMMA_ENABLED=1 to activate)")
 logger.info("All engines initialized")
 
 # FastAPI
@@ -94,15 +104,17 @@ class EnrollRequest(BaseModel):
 # -- Health --
 @app.get("/health")
 def health():
-    return {
-        "status": "ok",
-        "engines": {
-            "deepfake": deepfake.status(),
-            "doc_forensics": doc_forensics.status(),
-            "keystroke": keystroke.status(),
-            "gemma_doc": gemma_doc.status(),
-        },
+    engines = {
+        "deepfake": deepfake.status(),
+        "doc_forensics": doc_forensics.status(),
+        "doc_ocr": doc_ocr.status(),
+        "keystroke": keystroke.status(),
     }
+    if gemma_doc is not None:
+        engines["gemma_doc"] = gemma_doc.status()
+    else:
+        engines["gemma_doc"] = {"engine": "gemma-doc", "available": False, "note": "Set GEMMA_ENABLED=1 to activate"}
+    return {"status": "ok", "gemma_enabled": GEMMA_ENABLED, "engines": engines}
 
 
 # -- Deepfake Detection --
@@ -157,46 +169,99 @@ async def detect_document(image: UploadFile = File(None), frameBase64: str = For
 # -- Document AI Analysis (Gemma 4) --
 @app.post("/analyze/document")
 async def analyze_document(image: UploadFile = File(None), frameBase64: str = Form(None)):
-    """Full document AI analysis: OCR + MRZ + coherence + forensic explanation.
-    Combines DINOv2 forensics with Gemma 4 language understanding."""
+    """Full document analysis pipeline.
+
+    Always runs:
+      1. PDF auto-conversion (if needed)
+      2. DINOv2 + ELA forensic detection
+      3. OCR (Tesseract) + MRZ parsing + coherence checks
+
+    If GEMMA_ENABLED=1 (pre-production / Xeon):
+      4. Gemma 4 explanation + deep semantic analysis
+    """
     t0 = time.time()
 
     if image is not None:
-        image_bytes = await image.read()
+        raw_bytes = await image.read()
+        image_bytes = ensure_image_bytes(raw_bytes, image.filename or "")
     elif frameBase64:
         b64 = frameBase64.split(",", 1)[-1] if "," in frameBase64 else frameBase64
         try:
-            image_bytes = base64.b64decode(b64)
+            raw_bytes = base64.b64decode(b64)
+            image_bytes = ensure_image_bytes(raw_bytes)
         except Exception:
             raise HTTPException(400, "Invalid base64")
     else:
         raise HTTPException(400, "Provide 'image' file or 'frameBase64'")
 
-    # Step 1: DINOv2 forensic detection
+    # Step 1: DINOv2 + ELA forensic detection (always)
     forensic_result = doc_forensics.detect(image_bytes)
 
-    # Step 2: Gemma 4 analysis (OCR + coherence + explanation)
-    gemma_result = gemma_doc.analyze_document(image_bytes, forensic_result)
+    # Step 2: Base OCR + MRZ + coherence (always, no LLM)
+    base_analysis = doc_ocr.analyze(image_bytes)
+
+    # Step 3: Gemma 4 premium layer (only if enabled)
+    gemma_result = None
+    if gemma_doc is not None:
+        try:
+            gemma_result = gemma_doc.analyze_document(image_bytes, forensic_result)
+        except Exception as e:
+            logger.warning(f"Gemma 4 analysis failed: {e}")
+
+    # Merge results: base always present, Gemma enriches
+    analysis = {
+        "ocr_text": base_analysis.get("ocr_text", ""),
+        "fields": base_analysis.get("fields", {}),
+        "mrz": base_analysis.get("mrz"),
+        "doc_type": base_analysis.get("doc_type", "unknown"),
+        "coherence_issues": base_analysis.get("coherence_issues", []),
+        "explanation": "",
+        "gemma_enabled": gemma_doc is not None,
+    }
+
+    # If Gemma 4 provided richer data, merge it
+    if gemma_result:
+        if gemma_result.get("ocr_text"):
+            analysis["ocr_text"] = gemma_result["ocr_text"]
+        if gemma_result.get("fields"):
+            analysis["fields"].update(gemma_result["fields"])
+        if gemma_result.get("explanation"):
+            analysis["explanation"] = gemma_result["explanation"]
+        if gemma_result.get("coherence_issues"):
+            analysis["coherence_issues"] = gemma_result["coherence_issues"]
 
     return {
         "forensics": forensic_result,
-        "analysis": gemma_result,
+        "analysis": analysis,
         "processing_ms": round((time.time() - t0) * 1000, 1),
     }
 
 
 @app.post("/analyze/mrz")
 async def analyze_mrz(image: UploadFile = File(None), frameBase64: str = Form(None)):
-    """Extract and parse MRZ from document image using Gemma 4."""
+    """Extract and parse MRZ. Uses base engine (always) + Gemma 4 (if enabled)."""
     if image is not None:
-        image_bytes = await image.read()
+        raw_bytes = await image.read()
+        image_bytes = ensure_image_bytes(raw_bytes, image.filename or "")
     elif frameBase64:
         b64 = frameBase64.split(",", 1)[-1] if "," in frameBase64 else frameBase64
         image_bytes = base64.b64decode(b64)
     else:
         raise HTTPException(400, "Provide 'image' file or 'frameBase64'")
 
-    return gemma_doc.extract_mrz(image_bytes)
+    # Base MRZ (always works)
+    base_mrz = doc_ocr.extract_mrz(image_bytes)
+
+    # If Gemma 4 enabled, try richer extraction
+    if gemma_doc is not None:
+        try:
+            gemma_mrz = gemma_doc.extract_mrz(image_bytes)
+            if gemma_mrz and not gemma_mrz.get("error"):
+                return gemma_mrz
+        except Exception as e:
+            logger.warning(f"Gemma MRZ failed, using base: {e}")
+
+    return base_mrz
 
 
 @app.post("/explain")
@@ -212,6 +277,8 @@ async def explain_detection(image: UploadFile = File(None), frameBase64: str = F
     else:
         raise HTTPException(400, "Provide 'image' file or 'frameBase64'")
 
+    if gemma_doc is None:
+        raise HTTPException(503, "Gemma 4 not enabled. Set GEMMA_ENABLED=1 to activate.")
     return gemma_doc.explain_detection(image_bytes, detection_type, score, details)
 
 
