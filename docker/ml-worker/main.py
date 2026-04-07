@@ -52,6 +52,7 @@ from engines.doc_engine import DocForensicsEngine
 from engines.doc_ocr_engine import DocOcrEngine
 from engines.keystroke_engine import KeystrokeEngine
 from engines.gemma_doc_engine import GemmaDocEngine
+from engines.ollama_engine import OllamaDocEngine
 from model_loader import ensure_models_exist, check_and_download_models, get_model_status
 
 logging.basicConfig(level=logging.INFO)
@@ -59,6 +60,7 @@ logger = logging.getLogger(__name__)
 
 PORT = int(os.getenv("PORT", 8001))
 GEMMA_ENABLED = os.getenv("GEMMA_ENABLED", "0") == "1"
+OLLAMA_ENABLED = os.getenv("OLLAMA_ENABLED", "0") == "1"
 
 # Download models on startup if missing
 logger.info("Checking models...")
@@ -71,13 +73,22 @@ doc_forensics = DocForensicsEngine()
 doc_ocr = DocOcrEngine()
 keystroke = KeystrokeEngine()
 
-# Gemma 4: only load if explicitly enabled (pre-production)
+# LLM layer: Gemma 4 (heavy, AWS) or Ollama (light, local)
 gemma_doc = None
+ollama_doc = None
+
 if GEMMA_ENABLED:
-    logger.info("Gemma 4 ENABLED — loading...")
+    logger.info("Gemma 4 ENABLED — loading (heavy, GPU recommended)...")
     gemma_doc = GemmaDocEngine()
+elif OLLAMA_ENABLED:
+    logger.info("Ollama ENABLED — connecting to local Ollama...")
+    ollama_doc = OllamaDocEngine()
 else:
-    logger.info("Gemma 4 DISABLED (set GEMMA_ENABLED=1 to activate)")
+    logger.info("No LLM layer enabled (set GEMMA_ENABLED=1 or OLLAMA_ENABLED=1)")
+
+# Unified LLM interface: prefer Gemma 4 > Ollama > None
+llm_engine = gemma_doc or ollama_doc
+logger.info(f"LLM engine: {llm_engine.__class__.__name__ if llm_engine else 'None'}")
 logger.info("All engines initialized")
 
 # FastAPI
@@ -112,9 +123,11 @@ def health():
     }
     if gemma_doc is not None:
         engines["gemma_doc"] = gemma_doc.status()
-    else:
-        engines["gemma_doc"] = {"engine": "gemma-doc", "available": False, "note": "Set GEMMA_ENABLED=1 to activate"}
-    return {"status": "ok", "gemma_enabled": GEMMA_ENABLED, "engines": engines}
+    if ollama_doc is not None:
+        engines["ollama_doc"] = ollama_doc.status()
+    if llm_engine is None:
+        engines["llm"] = {"available": False, "note": "Set GEMMA_ENABLED=1 or OLLAMA_ENABLED=1"}
+    return {"status": "ok", "llm_engine": llm_engine.__class__.__name__ if llm_engine else "None", "engines": engines}
 
 
 # -- Deepfake Detection --
@@ -202,9 +215,9 @@ async def analyze_document(image: UploadFile = File(None), frameBase64: str = Fo
 
     # Step 3: Gemma 4 premium layer (only if enabled)
     gemma_result = None
-    if gemma_doc is not None:
+    if llm_engine is not None:
         try:
-            gemma_result = gemma_doc.analyze_document(image_bytes, forensic_result)
+            gemma_result = llm_engine.analyze_document(image_bytes, forensic_result)
         except Exception as e:
             logger.warning(f"Gemma 4 analysis failed: {e}")
 
@@ -216,7 +229,7 @@ async def analyze_document(image: UploadFile = File(None), frameBase64: str = Fo
         "doc_type": base_analysis.get("doc_type", "unknown"),
         "coherence_issues": base_analysis.get("coherence_issues", []),
         "explanation": "",
-        "gemma_enabled": gemma_doc is not None,
+        "llm_enabled": llm_engine is not None,
     }
 
     # If Gemma 4 provided richer data, merge it
@@ -253,9 +266,9 @@ async def analyze_mrz(image: UploadFile = File(None), frameBase64: str = Form(No
     base_mrz = doc_ocr.extract_mrz(image_bytes)
 
     # If Gemma 4 enabled, try richer extraction
-    if gemma_doc is not None:
+    if llm_engine is not None:
         try:
-            gemma_mrz = gemma_doc.extract_mrz(image_bytes)
+            gemma_mrz = llm_engine.extract_mrz(image_bytes)
             if gemma_mrz and not gemma_mrz.get("error"):
                 return gemma_mrz
         except Exception as e:
@@ -278,8 +291,8 @@ async def explain_detection(image: UploadFile = File(None), frameBase64: str = F
         raise HTTPException(400, "Provide 'image' file or 'frameBase64'")
 
     if gemma_doc is None:
-        raise HTTPException(503, "Gemma 4 not enabled. Set GEMMA_ENABLED=1 to activate.")
-    return gemma_doc.explain_detection(image_bytes, detection_type, score, details)
+        raise HTTPException(503, "No LLM engine enabled. Set GEMMA_ENABLED=1 or OLLAMA_ENABLED=1")
+    return llm_engine.explain_detection(image_bytes, detection_type, score, details)
 
 
 # -- Keystroke Verification --
