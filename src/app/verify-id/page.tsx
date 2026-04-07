@@ -16,19 +16,45 @@ export default function VerifyId() {
   const frontRef = useRef<HTMLInputElement>(null)
   const backRef = useRef<HTMLInputElement>(null)
 
-  const handleCapture = (file: File, side: 'front' | 'back') => {
+  const compressImage = (file: File, maxSize = 1500): Promise<File> => {
+    return new Promise((resolve) => {
+      const img = new window.Image()
+      const url = URL.createObjectURL(file)
+      img.onload = () => {
+        URL.revokeObjectURL(url)
+        const canvas = document.createElement('canvas')
+        let w = img.width, h = img.height
+        if (w > maxSize || h > maxSize) {
+          const ratio = Math.min(maxSize / w, maxSize / h)
+          w = Math.round(w * ratio)
+          h = Math.round(h * ratio)
+        }
+        canvas.width = w
+        canvas.height = h
+        const ctx = canvas.getContext('2d')!
+        ctx.drawImage(img, 0, 0, w, h)
+        canvas.toBlob((blob) => {
+          resolve(new File([blob!], file.name, { type: 'image/jpeg' }))
+        }, 'image/jpeg', 0.85)
+      }
+      img.src = url
+    })
+  }
+
+  const handleCapture = async (file: File, side: 'front' | 'back') => {
+    const compressed = await compressImage(file)
     const reader = new FileReader()
     reader.onload = e => {
       if (side === 'front') {
-        setFrontFile(file)
+        setFrontFile(compressed)
         setFrontPreview(e.target?.result as string)
         setStep('back')
       } else {
-        setBackFile(file)
+        setBackFile(compressed)
         setBackPreview(e.target?.result as string)
       }
     }
-    reader.readAsDataURL(file)
+    reader.readAsDataURL(compressed)
   }
 
   const verify = async () => {
@@ -115,7 +141,7 @@ export default function VerifyId() {
               <div style={{ fontSize: 12, color: '#64748b', marginTop: 8 }}>Camera will open — capture the front of your document</div>
             </div>
             <input ref={frontRef} type="file" accept="image/*" capture="environment" hidden
-              onChange={e => e.target.files?.[0] && handleCapture(e.target.files[0], 'front')} />
+              onChange={e => { if (e.target.files?.[0]) handleCapture(e.target.files[0], 'front') }} />
           </div>
         )}
 
@@ -145,7 +171,7 @@ export default function VerifyId() {
               <div style={{ fontSize: 12, color: '#64748b', marginTop: 8 }}>Flip the document — capture the back with MRZ</div>
             </div>
             <input ref={backRef} type="file" accept="image/*" capture="environment" hidden
-              onChange={e => e.target.files?.[0] && handleCapture(e.target.files[0], 'back')} />
+              onChange={e => { if (e.target.files?.[0]) handleCapture(e.target.files[0], 'back') }} />
 
             {backPreview && (
               <div style={{ textAlign: 'center', marginBottom: 16 }}>
