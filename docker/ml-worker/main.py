@@ -252,17 +252,24 @@ async def analyze_document(image: UploadFile = File(None), frameBase64: str = Fo
     }
 
     # If LLM provided richer data, merge it
-    if gemma_result:
-        if gemma_result.get("ocr_text"):
-            analysis["ocr_text"] = gemma_result["ocr_text"]
-        if gemma_result.get("fields") and isinstance(gemma_result["fields"], dict):
-            analysis["fields"].update(gemma_result["fields"])
-        if gemma_result.get("explanation"):
-            analysis["explanation"] = gemma_result["explanation"]
-        if gemma_result.get("coherence_issues") and isinstance(gemma_result["coherence_issues"], list):
-            analysis["coherence_issues"] = gemma_result["coherence_issues"]
-        if gemma_result.get("doc_type") and gemma_result["doc_type"] != "unknown":
-            analysis["doc_type"] = gemma_result["doc_type"]
+    if gemma_result and isinstance(gemma_result, dict):
+        try:
+            if gemma_result.get("ocr_text") and isinstance(gemma_result["ocr_text"], str):
+                analysis["ocr_text"] = gemma_result["ocr_text"]
+            gf = gemma_result.get("fields")
+            if gf and isinstance(gf, dict):
+                for k, v in gf.items():
+                    if isinstance(k, str) and v is not None:
+                        analysis["fields"][k] = str(v)
+            if gemma_result.get("explanation") and isinstance(gemma_result["explanation"], str):
+                analysis["explanation"] = gemma_result["explanation"]
+            gc = gemma_result.get("coherence_issues")
+            if gc and isinstance(gc, list):
+                analysis["coherence_issues"] = [str(x) for x in gc]
+            if gemma_result.get("doc_type") and gemma_result["doc_type"] != "unknown":
+                analysis["doc_type"] = str(gemma_result["doc_type"])
+        except Exception as e:
+            logger.warning(f"LLM result merge error: {e}")
 
     return {
         "forensics": forensic_result,
