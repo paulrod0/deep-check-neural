@@ -207,7 +207,8 @@ async def detect_document(image: UploadFile = File(None), frameBase64: str = For
     else:
         raise HTTPException(400, "Provide 'image' file or 'frameBase64'")
 
-    result = doc_forensics.detect(image_bytes)
+    is_pdf = raw_bytes[:5] == b"%PDF-"
+    result = doc_forensics.detect(image_bytes, raw_pdf_bytes=raw_bytes if is_pdf else None)
     result["processing_ms"] = round((time.time() - t0) * 1000, 1)
     return result
 
@@ -246,8 +247,8 @@ async def analyze_document(image: UploadFile = File(None), frameBase64: str = Fo
         all_pages_bytes = raw_bytes
         num_pages = 1
 
-    # Step 1: DINOv2 + ELA forensic detection on PAGE 1 ONLY
-    forensic_result = doc_forensics.detect(page1_bytes)
+    # Step 1: DINOv2 + ELA + PDF structural on PAGE 1
+    forensic_result = doc_forensics.detect(page1_bytes, raw_pdf_bytes=raw_bytes if is_pdf else None)
 
     # Step 2: Base OCR + MRZ + coherence on page 1
     base_analysis = doc_ocr.analyze(page1_bytes)
@@ -260,10 +261,15 @@ async def analyze_document(image: UploadFile = File(None), frameBase64: str = Fo
         except Exception as e:
             logger.warning(f"LLM analysis failed: {e}")
 
-    # Build analysis result
+    # Build analysis result — start with PDF structural text if available (instant, perfect)
+    pdf_text = forensic_result.get("text_extracted", "")
+    pdf_fields = forensic_result.get("fields_from_pdf", {})
+    base_text = pdf_text or base_analysis.get("ocr_text", "")
+    base_fields = {**base_analysis.get("fields", {}), **pdf_fields}
+
     analysis = {
-        "ocr_text": base_analysis.get("ocr_text", ""),
-        "fields": dict(base_analysis.get("fields", {})),
+        "ocr_text": base_text,
+        "fields": dict(base_fields),
         "mrz": base_analysis.get("mrz"),
         "doc_type": base_analysis.get("doc_type", "unknown"),
         "coherence_issues": list(base_analysis.get("coherence_issues", [])),
