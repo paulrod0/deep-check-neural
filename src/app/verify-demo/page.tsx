@@ -4,7 +4,10 @@ import { useState, useRef, useCallback } from 'react'
 
 type Backend = 'xeon' | 'aws'
 type AnalysisResult = {
+  verdict?: string
+  confidence_score?: number
   forensics?: { p_tampered: number; verdict: string; model: string; version: string; processing_ms?: number }
+  combined?: { p_tampered_combined: number; p_tampered_forensic: number; llm_confirms_authentic: boolean; verdict: string }
   analysis?: {
     ocr_text: string; fields: Record<string, string>; mrz?: any; doc_type: string
     coherence_issues: string[]; explanation: string; llm_enabled?: boolean
