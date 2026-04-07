@@ -39,6 +39,8 @@ export default function VerifyDemo() {
   const [backend, setBackend] = useState<Backend>('xeon')
   const [file, setFile] = useState<File | null>(null)
   const [preview, setPreview] = useState<string | null>(null)
+  const [inputMode, setInputMode] = useState<'file' | 'camera'>('file')
+  const cameraRef = useRef<HTMLInputElement>(null)
   const [loading, setLoading] = useState(false)
   const [activeStep, setActiveStep] = useState(-1)
   const [result, setResult] = useState<AnalysisResult | null>(null)
@@ -142,30 +144,78 @@ export default function VerifyDemo() {
             ))}
           </div>
 
-          {/* Upload */}
-          <div onClick={() => fileRef.current?.click()}
-            onDrop={e => { e.preventDefault(); if (e.dataTransfer.files[0]) handleFile(e.dataTransfer.files[0]) }}
-            onDragOver={e => e.preventDefault()}
-            style={{
-              border: '2px dashed #1e293b', borderRadius: 10, padding: file ? 16 : 40, textAlign: 'center',
-              cursor: 'pointer', marginBottom: 16, transition: 'border-color 0.2s',
-            }}>
-            {file ? (
-              <div>
-                {preview ? <img src={preview} alt="preview" style={{ maxWidth: 250, maxHeight: 180, borderRadius: 8, marginBottom: 8 }} /> :
-                  <div style={{ fontSize: 48, marginBottom: 8 }}>📄</div>}
-                <div style={{ fontSize: 13, color: '#94a3b8' }}>{file.name} ({Math.round(file.size / 1024)} KB)</div>
-                {file.name.endsWith('.pdf') && <div style={{ fontSize: 11, color: '#64748b', marginTop: 4 }}>PDF — page 1 auto-converted to 300dpi</div>}
-              </div>
-            ) : (
-              <div>
-                <div style={{ fontSize: 36, marginBottom: 8 }}>🪪</div>
-                <div style={{ fontSize: 14, fontWeight: 500 }}>Drop document or click to upload</div>
-                <div style={{ fontSize: 12, color: '#64748b', marginTop: 4 }}>PDF, JPEG, PNG — DNI, passport, diploma, invoice (195 countries)</div>
-              </div>
-            )}
-            <input ref={fileRef} type="file" accept="image/*,.pdf,application/pdf" hidden onChange={e => e.target.files?.[0] && handleFile(e.target.files[0])} />
+          {/* Input Mode Selector */}
+          <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+            <button onClick={() => setInputMode('camera')}
+              style={{
+                flex: 1, padding: '10px', borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: 'pointer',
+                border: `1px solid ${inputMode === 'camera' ? '#10b981' : '#1e293b'}`,
+                background: inputMode === 'camera' ? '#10b98115' : '#111827',
+                color: inputMode === 'camera' ? '#10b981' : '#94a3b8',
+              }}>
+              📸 Camera {backend === 'xeon' && <span style={{ fontSize: 10, color: '#10b981' }}>(recommended)</span>}
+            </button>
+            <button onClick={() => setInputMode('file')}
+              style={{
+                flex: 1, padding: '10px', borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: 'pointer',
+                border: `1px solid ${inputMode === 'file' ? BACKENDS[backend].color : '#1e293b'}`,
+                background: inputMode === 'file' ? `${BACKENDS[backend].color}15` : '#111827',
+                color: inputMode === 'file' ? BACKENDS[backend].color : '#94a3b8',
+              }}>
+              📁 Upload File
+            </button>
           </div>
+
+          {/* Camera / Upload Zone */}
+          {inputMode === 'camera' ? (
+            <div onClick={() => cameraRef.current?.click()}
+              style={{
+                border: '2px dashed #10b981', borderRadius: 10, padding: file ? 16 : 40, textAlign: 'center',
+                cursor: 'pointer', marginBottom: 16, background: '#10b98108',
+              }}>
+              {file && preview ? (
+                <div>
+                  <img src={preview} alt="captured" style={{ maxWidth: 250, maxHeight: 180, borderRadius: 8, marginBottom: 8 }} />
+                  <div style={{ fontSize: 13, color: '#94a3b8' }}>{file.name} ({Math.round(file.size / 1024)} KB)</div>
+                  <div style={{ fontSize: 11, color: '#10b981', marginTop: 4 }}>Direct camera capture — optimal for forensic analysis</div>
+                </div>
+              ) : (
+                <div>
+                  <div style={{ fontSize: 48, marginBottom: 8 }}>📸</div>
+                  <div style={{ fontSize: 14, fontWeight: 600, color: '#10b981' }}>Take photo of document</div>
+                  <div style={{ fontSize: 12, color: '#64748b', marginTop: 4 }}>Opens your camera — best accuracy for forensic detection</div>
+                  <div style={{ fontSize: 11, color: '#475569', marginTop: 8, padding: '6px 12px', background: '#111827', borderRadius: 6, display: 'inline-block' }}>
+                    Direct photo = no PDF conversion artifacts = more accurate results
+                  </div>
+                </div>
+              )}
+              <input ref={cameraRef} type="file" accept="image/*" capture="environment" hidden onChange={e => e.target.files?.[0] && handleFile(e.target.files[0])} />
+            </div>
+          ) : (
+            <div onClick={() => fileRef.current?.click()}
+              onDrop={e => { e.preventDefault(); if (e.dataTransfer.files[0]) handleFile(e.dataTransfer.files[0]) }}
+              onDragOver={e => e.preventDefault()}
+              style={{
+                border: '2px dashed #1e293b', borderRadius: 10, padding: file ? 16 : 40, textAlign: 'center',
+                cursor: 'pointer', marginBottom: 16, transition: 'border-color 0.2s',
+              }}>
+              {file ? (
+                <div>
+                  {preview ? <img src={preview} alt="preview" style={{ maxWidth: 250, maxHeight: 180, borderRadius: 8, marginBottom: 8 }} /> :
+                    <div style={{ fontSize: 48, marginBottom: 8 }}>📄</div>}
+                  <div style={{ fontSize: 13, color: '#94a3b8' }}>{file.name} ({Math.round(file.size / 1024)} KB)</div>
+                  {file.name.endsWith('.pdf') && <div style={{ fontSize: 11, color: '#f59e0b', marginTop: 4 }}>PDF — pages auto-converted. Camera capture recommended for best accuracy.</div>}
+                </div>
+              ) : (
+                <div>
+                  <div style={{ fontSize: 36, marginBottom: 8 }}>🪪</div>
+                  <div style={{ fontSize: 14, fontWeight: 500 }}>Drop document or click to upload</div>
+                  <div style={{ fontSize: 12, color: '#64748b', marginTop: 4 }}>PDF, JPEG, PNG — DNI, passport, diploma, invoice (195 countries)</div>
+                </div>
+              )}
+              <input ref={fileRef} type="file" accept="image/*,.pdf,application/pdf" hidden onChange={e => e.target.files?.[0] && handleFile(e.target.files[0])} />
+            </div>
+          )}
 
           <button onClick={analyze} disabled={!file || loading}
             style={{
