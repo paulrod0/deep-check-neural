@@ -143,14 +143,55 @@
       <div class="upload-zone" id="docUpload">
         <div class="big">&#128179;</div>
         <div>Drop document scan or click to upload</div>
-        <p>DNI, passport, payslip, invoice... (195 countries)</p>
-        <input type="file" id="docFile" accept="image/*" hidden>
+        <p>PDF or image (JPEG, PNG). DNI, passport, payslip, invoice... (195 countries)</p>
+        <input type="file" id="docFile" accept="image/*,.pdf,application/pdf" hidden>
       </div>
       <div class="options">
         <label class="option"><input type="checkbox" id="docFull" checked> Full analysis (OCR + Gemma 4)</label>
         <label class="option"><input type="checkbox" id="docMrz"> Extract MRZ</label>
       </div>
       <button class="run-btn" id="docBtn" disabled>Verify Document</button>
+
+      <div style="margin-top:20px;padding:16px;background:var(--surface);border:1px solid var(--border);border-radius:8px;">
+        <h3 style="font-size:12px;color:var(--accent);margin-bottom:12px;">VERIFICATION PIPELINE</h3>
+        <div style="font-size:11px;font-family:'JetBrains Mono',monospace;line-height:2;">
+          <div style="display:flex;align-items:center;gap:8px;">
+            <span style="background:#1e3a5f;padding:2px 8px;border-radius:4px;">1</span>
+            <span style="color:var(--muted);">Upload</span>
+            <span>PDF or image received</span>
+          </div>
+          <div style="margin-left:16px;color:var(--border);">|</div>
+          <div style="display:flex;align-items:center;gap:8px;">
+            <span style="background:#1e3a5f;padding:2px 8px;border-radius:4px;">2</span>
+            <span style="color:var(--muted);">PDF?</span>
+            <span>Auto-convert page 1 to JPEG 300dpi (PyMuPDF)</span>
+          </div>
+          <div style="margin-left:16px;color:var(--border);">|</div>
+          <div style="display:flex;align-items:center;gap:8px;">
+            <span style="background:#1e3a5f;padding:2px 8px;border-radius:4px;">3</span>
+            <span style="color:var(--muted);">ELA</span>
+            <span>Error Level Analysis (Q90+Q70+Q50 re-compression)</span>
+          </div>
+          <div style="margin-left:16px;color:var(--border);">|</div>
+          <div style="display:flex;align-items:center;gap:8px;">
+            <span style="background:#1e3a5f;padding:2px 8px;border-radius:4px;">4</span>
+            <span style="color:var(--muted);">DINOv2</span>
+            <span>ViT-L/14 pixel forensics (304M params, AUC 0.998)</span>
+          </div>
+          <div style="margin-left:16px;color:var(--border);">|</div>
+          <div style="display:flex;align-items:center;gap:8px;">
+            <span style="background:#1e3a5f;padding:2px 8px;border-radius:4px;">5</span>
+            <span style="color:var(--muted);">Score</span>
+            <span>p_tampered + verdict (authentic / suspicious / tampered)</span>
+          </div>
+          <div style="margin-left:16px;color:var(--border);">|</div>
+          <div style="display:flex;align-items:center;gap:8px;">
+            <span style="background:#2d1f5e;padding:2px 8px;border-radius:4px;">6</span>
+            <span style="color:var(--purple);">Gemma 4</span>
+            <span>OCR + MRZ parse + field coherence + explanation</span>
+          </div>
+        </div>
+      </div>
     </div>
 
     <div id="sec-keystroke" class="section">
@@ -308,9 +349,14 @@ function setupUpload(zoneId, fileId, type) {
     e.preventDefault();
     zone.classList.remove('dragover');
     var file = e.dataTransfer.files[0];
-    if (file && file.type.startsWith('image/')) {
-      if (type === 'df') { dfImage = file; document.getElementById('dfBtn').disabled = false; }
-      else { docImage = file; document.getElementById('docBtn').disabled = false; }
+    if (!file) return;
+    var isImage = file.type.startsWith('image/');
+    var isPdf = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
+    if (type === 'df' && isImage) {
+      dfImage = file; document.getElementById('dfBtn').disabled = false;
+      showPreview(file, zone);
+    } else if (type === 'doc' && (isImage || isPdf)) {
+      docImage = file; document.getElementById('docBtn').disabled = false;
       showPreview(file, zone);
     }
   });
@@ -324,6 +370,28 @@ function setupUpload(zoneId, fileId, type) {
 }
 
 function showPreview(file, zone) {
+  while (zone.firstChild) zone.removeChild(zone.firstChild);
+  var isPdf = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
+
+  if (isPdf) {
+    var icon = document.createElement('div');
+    icon.style.cssText = 'font-size:48px;margin-bottom:8px';
+    icon.textContent = '\uD83D\uDCC4';
+    zone.appendChild(icon);
+    var label = document.createElement('div');
+    label.style.cssText = 'font-size:14px;font-weight:600;color:var(--accent)';
+    label.textContent = 'PDF Document';
+    zone.appendChild(label);
+    var p = document.createElement('p');
+    p.textContent = file.name + ' (' + Math.round(file.size/1024) + ' KB)';
+    zone.appendChild(p);
+    var note = document.createElement('p');
+    note.style.cssText = 'font-size:11px;color:var(--muted);margin-top:4px';
+    note.textContent = 'Page 1 will be auto-converted to 300dpi JPEG for analysis';
+    zone.appendChild(note);
+    return;
+  }
+
   var reader = new FileReader();
   reader.onload = function(e) {
     while (zone.firstChild) zone.removeChild(zone.firstChild);
@@ -383,11 +451,76 @@ function categorizeKey(key) {
 }
 
 // ── Loading/Result display ──
-function showLoading(msg) {
+function showLoading(msg, isPipeline) {
   document.getElementById('emptyState').style.display = 'none';
   var rc = document.getElementById('resultContent');
   rc.style.display = 'block';
   while (rc.firstChild) rc.removeChild(rc.firstChild);
+
+  if (isPipeline) {
+    var wrapper = document.createElement('div');
+    wrapper.style.cssText = 'padding:24px';
+    wrapper.id = 'pipelineTracker';
+
+    var title = document.createElement('h3');
+    title.textContent = 'Processing Document...';
+    title.style.marginBottom = '16px';
+    wrapper.appendChild(title);
+
+    var steps = [
+      {id: 'step-upload', label: 'Upload received', icon: '\u2B06'},
+      {id: 'step-pdf', label: 'PDF to JPEG 300dpi', icon: '\uD83D\uDCC4'},
+      {id: 'step-ela', label: 'Error Level Analysis (Q90+Q70+Q50)', icon: '\uD83D\uDD0D'},
+      {id: 'step-dino', label: 'DINOv2 ViT-L/14 pixel forensics (304M)', icon: '\uD83E\uDDE0'},
+      {id: 'step-score', label: 'Scoring: p_tampered + verdict', icon: '\uD83C\uDFAF'},
+      {id: 'step-gemma', label: 'Gemma 4 E4B: OCR + MRZ + coherence', icon: '\u2728'},
+    ];
+
+    steps.forEach(function(step, i) {
+      var row = document.createElement('div');
+      row.id = step.id;
+      row.style.cssText = 'display:flex;align-items:center;gap:10px;padding:8px 12px;margin-bottom:4px;border-radius:6px;font-size:13px;font-family:JetBrains Mono,monospace;color:var(--muted);border:1px solid transparent';
+      var dot = document.createElement('span');
+      dot.className = 'pipeline-dot';
+      dot.style.cssText = 'width:24px;height:24px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;background:var(--border);flex-shrink:0';
+      dot.textContent = String(i + 1);
+      row.appendChild(dot);
+      var text = document.createElement('span');
+      text.textContent = step.label;
+      row.appendChild(text);
+      wrapper.appendChild(row);
+
+      if (i < steps.length - 1) {
+        var line = document.createElement('div');
+        line.style.cssText = 'margin-left:11px;width:2px;height:8px;background:var(--border)';
+        wrapper.appendChild(line);
+      }
+    });
+
+    rc.appendChild(wrapper);
+
+    // Animate steps
+    function activateStep(id, delay) {
+      setTimeout(function() {
+        var el = document.getElementById(id);
+        if (el) {
+          el.style.color = 'var(--text)';
+          el.style.borderColor = 'var(--accent)';
+          el.style.background = 'rgba(59,130,246,0.05)';
+          var dot = el.querySelector('.pipeline-dot');
+          if (dot) { dot.style.background = 'var(--accent)'; dot.style.color = 'white'; }
+        }
+      }, delay);
+    }
+    activateStep('step-upload', 100);
+    activateStep('step-pdf', 400);
+    activateStep('step-ela', 800);
+    activateStep('step-dino', 1200);
+    activateStep('step-score', 1800);
+    activateStep('step-gemma', 2400);
+    return;
+  }
+
   var wrapper = document.createElement('div');
   wrapper.style.cssText = 'text-align:center;padding:60px';
   var spinner = document.createElement('div');
@@ -461,7 +594,7 @@ document.getElementById('docBtn').addEventListener('click', async function() {
   if (!docImage) return;
   var full = document.getElementById('docFull').checked;
   var wantMrz = document.getElementById('docMrz').checked;
-  showLoading('Analyzing document (forensics + AI)...');
+  showLoading('Analyzing document (forensics + AI)...', true);
   var t0 = performance.now();
   try {
     var form = new FormData();
