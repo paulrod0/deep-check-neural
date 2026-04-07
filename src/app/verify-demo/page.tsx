@@ -82,12 +82,9 @@ export default function VerifyDemo() {
     try {
       const form = new FormData()
       form.append('image', file)
+      form.append('backend', backend)
 
-      const endpoint = backend === 'xeon'
-        ? `${BACKENDS.xeon.url}/analyze/document`
-        : `${BACKENDS.aws.url}/analyze`
-
-      const res = await fetch(endpoint, { method: 'POST', body: form })
+      const res = await fetch('/api/verify-proxy', { method: 'POST', body: form })
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
       const data = await res.json()
 
