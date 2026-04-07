@@ -251,16 +251,18 @@ async def analyze_document(image: UploadFile = File(None), frameBase64: str = Fo
         "llm_enabled": llm_engine is not None,
     }
 
-    # If Gemma 4 provided richer data, merge it
+    # If LLM provided richer data, merge it
     if gemma_result:
         if gemma_result.get("ocr_text"):
             analysis["ocr_text"] = gemma_result["ocr_text"]
-        if gemma_result.get("fields"):
+        if gemma_result.get("fields") and isinstance(gemma_result["fields"], dict):
             analysis["fields"].update(gemma_result["fields"])
         if gemma_result.get("explanation"):
             analysis["explanation"] = gemma_result["explanation"]
-        if gemma_result.get("coherence_issues"):
+        if gemma_result.get("coherence_issues") and isinstance(gemma_result["coherence_issues"], list):
             analysis["coherence_issues"] = gemma_result["coherence_issues"]
+        if gemma_result.get("doc_type") and gemma_result["doc_type"] != "unknown":
+            analysis["doc_type"] = gemma_result["doc_type"]
 
     return {
         "forensics": forensic_result,
