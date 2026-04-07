@@ -101,6 +101,7 @@ export default function VerifyDemo() {
   }
 
   const forensics = result?.forensics
+  const combined = result?.combined
   const analysis = result?.analysis || {
     ocr_text: result?.ocr_text || '',
     fields: result?.fields || {},
@@ -108,8 +109,10 @@ export default function VerifyDemo() {
     coherence_issues: result?.coherence_issues || [],
     explanation: result?.explanation || '',
   }
-  const pTampered = forensics?.p_tampered
-  const verdict = forensics?.verdict || (pTampered !== undefined ? (pTampered < 0.3 ? 'authentic' : pTampered < 0.6 ? 'suspicious' : 'tampered') : null)
+  // Use combined verdict (forensics + LLM) if available, else fallback to forensics only
+  const verdict = result?.verdict || combined?.verdict || forensics?.verdict || null
+  const pTampered = combined?.p_tampered_combined ?? forensics?.p_tampered
+  const confidenceScore = result?.confidence_score
 
   return (
     <div style={{ minHeight: '100vh', background: '#0a0e17', color: '#e2e8f0', fontFamily: "'Inter', system-ui, sans-serif" }}>
@@ -239,19 +242,24 @@ export default function VerifyDemo() {
               </div>
 
               {/* Metrics */}
-              {pTampered !== undefined && (
+              {(pTampered !== undefined || confidenceScore !== undefined) && (
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 20 }}>
-                  <div style={{ background: '#111827', border: '1px solid #1e293b', borderRadius: 8, padding: 14 }}>
-                    <div style={{ fontSize: 10, color: '#64748b', textTransform: 'uppercase' }}>P(Tampered)</div>
-                    <div style={{ fontSize: 24, fontWeight: 700, color: pTampered > 0.3 ? '#ef4444' : '#10b981', marginTop: 4 }}>{(pTampered * 100).toFixed(1)}%</div>
-                    <div style={{ height: 4, background: '#1e293b', borderRadius: 2, marginTop: 8, overflow: 'hidden' }}>
-                      <div style={{ height: '100%', width: `${Math.min(100, pTampered * 100)}%`, background: pTampered > 0.3 ? '#ef4444' : '#10b981', borderRadius: 2, transition: 'width 0.5s' }} />
+                  {confidenceScore !== undefined && (
+                    <div style={{ background: '#111827', border: '1px solid #1e293b', borderRadius: 8, padding: 14 }}>
+                      <div style={{ fontSize: 10, color: '#64748b', textTransform: 'uppercase' }}>Confidence</div>
+                      <div style={{ fontSize: 24, fontWeight: 700, color: confidenceScore > 0.7 ? '#10b981' : confidenceScore > 0.4 ? '#f59e0b' : '#ef4444', marginTop: 4 }}>{(confidenceScore * 100).toFixed(1)}%</div>
+                      <div style={{ height: 4, background: '#1e293b', borderRadius: 2, marginTop: 8, overflow: 'hidden' }}>
+                        <div style={{ height: '100%', width: `${Math.min(100, confidenceScore * 100)}%`, background: confidenceScore > 0.7 ? '#10b981' : '#f59e0b', borderRadius: 2, transition: 'width 0.5s' }} />
+                      </div>
+                      <div style={{ fontSize: 10, color: '#64748b', marginTop: 4 }}>Combined: forensics (60%) + AI semantic (40%)</div>
                     </div>
-                  </div>
+                  )}
                   <div style={{ background: '#111827', border: '1px solid #1e293b', borderRadius: 8, padding: 14 }}>
-                    <div style={{ fontSize: 10, color: '#64748b', textTransform: 'uppercase' }}>Model</div>
-                    <div style={{ fontSize: 14, fontWeight: 600, marginTop: 4 }}>{forensics?.model || 'DINOv2+ELA'}</div>
-                    <div style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>{forensics?.version || 'v2b'}</div>
+                    <div style={{ fontSize: 10, color: '#64748b', textTransform: 'uppercase' }}>Forensics Score</div>
+                    <div style={{ fontSize: 18, fontWeight: 700, color: (forensics?.p_tampered || 0) > 0.3 ? '#f59e0b' : '#10b981', marginTop: 4 }}>{((forensics?.p_tampered || 0) * 100).toFixed(1)}% pixel</div>
+                    <div style={{ fontSize: 11, color: '#64748b', marginTop: 4 }}>{forensics?.model || 'DINOv2+ELA'} ({forensics?.version || 'v2b'})</div>
+                    {combined?.llm_confirms_authentic && <div style={{ fontSize: 10, color: '#10b981', marginTop: 4 }}>LLM confirms authentic</div>}
+                    {combined && !combined.llm_confirms_authentic && <div style={{ fontSize: 10, color: '#f59e0b', marginTop: 4 }}>LLM flagged issues</div>}
                   </div>
                 </div>
               )}

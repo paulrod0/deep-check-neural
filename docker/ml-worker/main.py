@@ -18,49 +18,63 @@ from fastapi import FastAPI, HTTPException, UploadFile, File, Form
 from PIL import Image
 
 
-def pdf_to_image_bytes(pdf_bytes: bytes) -> bytes:
-    """Convert ALL pages of PDF to a single vertical JPEG image."""
+def pdf_to_images(pdf_bytes: bytes) -> list:
+    """Convert PDF to list of PIL Images (one per page, 300dpi)."""
     try:
         import fitz
         doc = fitz.open(stream=pdf_bytes, filetype="pdf")
-        page_images = []
-        total_width = 0
-        total_height = 0
-
+        images = []
         for page in doc:
             pix = page.get_pixmap(dpi=300)
             img = Image.frombytes("RGB", (pix.width, pix.height), pix.samples)
-            page_images.append(img)
-            total_width = max(total_width, pix.width)
-            total_height += pix.height
-
-        if not page_images:
+            images.append(img)
+        if not images:
             raise HTTPException(400, "PDF has no pages")
-
-        if len(page_images) == 1:
-            buf = io.BytesIO()
-            page_images[0].save(buf, format="JPEG", quality=95)
-            return buf.getvalue()
-
-        # Combine all pages vertically into one image
-        combined = Image.new("RGB", (total_width, total_height), (255, 255, 255))
-        y_offset = 0
-        for img in page_images:
-            combined.paste(img, (0, y_offset))
-            y_offset += img.height
-
-        buf = io.BytesIO()
-        combined.save(buf, format="JPEG", quality=95)
-        logger.info(f"PDF converted: {len(page_images)} pages -> {total_width}x{total_height}px")
-        return buf.getvalue()
+        logger.info(f"PDF: {len(images)} pages extracted")
+        return images
     except ImportError:
-        raise HTTPException(400, "PDF support requires PyMuPDF. Install: pip install PyMuPDF")
+        raise HTTPException(400, "PDF support requires PyMuPDF")
+
+
+def images_to_bytes(images: list) -> bytes:
+    """Combine multiple images into single vertical JPEG."""
+    if len(images) == 1:
+        buf = io.BytesIO()
+        images[0].save(buf, format="JPEG", quality=95)
+        return buf.getvalue()
+    total_w = max(img.width for img in images)
+    total_h = sum(img.height for img in images)
+    combined = Image.new("RGB", (total_w, total_h), (255, 255, 255))
+    y = 0
+    for img in images:
+        combined.paste(img, (0, y))
+        y += img.height
+    buf = io.BytesIO()
+    combined.save(buf, format="JPEG", quality=95)
+    logger.info(f"Combined: {len(images)} pages -> {total_w}x{total_h}px")
+    return buf.getvalue()
+
+
+def image_to_bytes(img: Image.Image) -> bytes:
+    """Single PIL Image to JPEG bytes."""
+    buf = io.BytesIO()
+    img.save(buf, format="JPEG", quality=95)
+    return buf.getvalue()
+
+
+def parse_pdf(raw_bytes: bytes):
+    """Parse PDF into page_1 (for forensics) and all_pages (for LLM OCR)."""
+    pages = pdf_to_images(raw_bytes)
+    page1_bytes = image_to_bytes(pages[0])
+    all_bytes = images_to_bytes(pages) if len(pages) > 1 else page1_bytes
+    return page1_bytes, all_bytes, len(pages)
 
 
 def ensure_image_bytes(raw_bytes: bytes, filename: str = "") -> bytes:
-    """Auto-detect PDF and convert to image bytes if needed."""
+    """Auto-detect PDF and convert to image bytes (page 1 only for forensics)."""
     if raw_bytes[:5] == b"%PDF-" or filename.lower().endswith(".pdf"):
-        return pdf_to_image_bytes(raw_bytes)
+        pages = pdf_to_images(raw_bytes)
+        return image_to_bytes(pages[0])
     return raw_bytes
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -203,77 +217,118 @@ async def detect_document(image: UploadFile = File(None), frameBase64: str = For
 async def analyze_document(image: UploadFile = File(None), frameBase64: str = Form(None)):
     """Full document analysis pipeline.
 
-    Always runs:
-      1. PDF auto-conversion (if needed)
-      2. DINOv2 + ELA forensic detection
-      3. OCR (Tesseract) + MRZ parsing + coherence checks
-
-    If GEMMA_ENABLED=1 (pre-production / Xeon):
-      4. Gemma 4 explanation + deep semantic analysis
+    Pipeline:
+      1. PDF: extract page 1 (forensics) + all pages (LLM OCR)
+      2. DINOv2 + ELA forensic detection on page 1
+      3. Base OCR + MRZ parsing + coherence checks
+      4. LLM analysis (Gemma 4 / Ollama) on all pages
+      5. Combined verdict: forensics + LLM semantic analysis
     """
     t0 = time.time()
 
     if image is not None:
         raw_bytes = await image.read()
-        image_bytes = ensure_image_bytes(raw_bytes, image.filename or "")
     elif frameBase64:
         b64 = frameBase64.split(",", 1)[-1] if "," in frameBase64 else frameBase64
         try:
             raw_bytes = base64.b64decode(b64)
-            image_bytes = ensure_image_bytes(raw_bytes)
         except Exception:
             raise HTTPException(400, "Invalid base64")
     else:
         raise HTTPException(400, "Provide 'image' file or 'frameBase64'")
 
-    # Step 1: DINOv2 + ELA forensic detection (always)
-    forensic_result = doc_forensics.detect(image_bytes)
+    # Separate page 1 (for forensics) from all pages (for LLM)
+    is_pdf = raw_bytes[:5] == b"%PDF-" or (image and image.filename and image.filename.lower().endswith(".pdf"))
+    if is_pdf:
+        page1_bytes, all_pages_bytes, num_pages = parse_pdf(raw_bytes)
+    else:
+        page1_bytes = raw_bytes
+        all_pages_bytes = raw_bytes
+        num_pages = 1
 
-    # Step 2: Base OCR + MRZ + coherence (always, no LLM)
-    base_analysis = doc_ocr.analyze(image_bytes)
+    # Step 1: DINOv2 + ELA forensic detection on PAGE 1 ONLY
+    forensic_result = doc_forensics.detect(page1_bytes)
 
-    # Step 3: Gemma 4 premium layer (only if enabled)
-    gemma_result = None
+    # Step 2: Base OCR + MRZ + coherence on page 1
+    base_analysis = doc_ocr.analyze(page1_bytes)
+
+    # Step 3: LLM analysis on ALL PAGES (richer OCR)
+    llm_result = None
     if llm_engine is not None:
         try:
-            gemma_result = llm_engine.analyze_document(image_bytes, forensic_result)
+            llm_result = llm_engine.analyze_document(all_pages_bytes, forensic_result)
         except Exception as e:
-            logger.warning(f"Gemma 4 analysis failed: {e}")
+            logger.warning(f"LLM analysis failed: {e}")
 
-    # Merge results: base always present, Gemma enriches
+    # Build analysis result
     analysis = {
         "ocr_text": base_analysis.get("ocr_text", ""),
-        "fields": base_analysis.get("fields", {}),
+        "fields": dict(base_analysis.get("fields", {})),
         "mrz": base_analysis.get("mrz"),
         "doc_type": base_analysis.get("doc_type", "unknown"),
-        "coherence_issues": base_analysis.get("coherence_issues", []),
+        "coherence_issues": list(base_analysis.get("coherence_issues", [])),
         "explanation": "",
         "llm_enabled": llm_engine is not None,
+        "pages": num_pages,
     }
 
-    # If LLM provided richer data, merge it
-    if gemma_result and isinstance(gemma_result, dict):
+    # Merge LLM data
+    if llm_result and isinstance(llm_result, dict):
         try:
-            if gemma_result.get("ocr_text") and isinstance(gemma_result["ocr_text"], str):
-                analysis["ocr_text"] = gemma_result["ocr_text"]
-            gf = gemma_result.get("fields")
+            if llm_result.get("ocr_text") and isinstance(llm_result["ocr_text"], str):
+                analysis["ocr_text"] = llm_result["ocr_text"]
+            gf = llm_result.get("fields")
             if gf and isinstance(gf, dict):
                 for k, v in gf.items():
                     if isinstance(k, str) and v is not None:
                         analysis["fields"][k] = str(v)
-            if gemma_result.get("explanation") and isinstance(gemma_result["explanation"], str):
-                analysis["explanation"] = gemma_result["explanation"]
-            gc = gemma_result.get("coherence_issues")
+            if llm_result.get("explanation") and isinstance(llm_result["explanation"], str):
+                analysis["explanation"] = llm_result["explanation"]
+            gc = llm_result.get("coherence_issues")
             if gc and isinstance(gc, list):
                 analysis["coherence_issues"] = [str(x) for x in gc]
-            if gemma_result.get("doc_type") and gemma_result["doc_type"] != "unknown":
-                analysis["doc_type"] = str(gemma_result["doc_type"])
+            if llm_result.get("doc_type") and str(llm_result["doc_type"]) != "unknown":
+                analysis["doc_type"] = str(llm_result["doc_type"])
         except Exception as e:
-            logger.warning(f"LLM result merge error: {e}")
+            logger.warning(f"LLM merge error: {e}")
+
+    # Step 4: COMBINED VERDICT — forensics + LLM semantic
+    p_forensic = forensic_result.get("p_tampered", 0.5)
+    llm_confirms_authentic = False
+
+    if llm_result and isinstance(llm_result, dict):
+        llm_issues = llm_result.get("coherence_issues", [])
+        has_fields = bool(analysis["fields"])
+        no_critical_issues = not llm_issues or all("cannot" in str(x).lower() or "standard" in str(x).lower() for x in llm_issues)
+        llm_confirms_authentic = has_fields and no_critical_issues
+
+    # Combined score: weight forensics 60%, LLM semantic 40%
+    llm_score = 0.1 if llm_confirms_authentic else 0.7
+    combined_p = p_forensic * 0.6 + llm_score * 0.4
+
+    if combined_p < 0.25:
+        combined_verdict = "authentic"
+    elif combined_p < 0.50:
+        combined_verdict = "likely_authentic"
+    elif combined_p < 0.70:
+        combined_verdict = "suspicious"
+    else:
+        combined_verdict = "tampered"
 
     return {
-        "forensics": forensic_result,
+        "verdict": combined_verdict,
+        "confidence_score": round(1 - combined_p, 4),
+        "forensics": {
+            **forensic_result,
+            "note": "DINOv2 + ELA analysis on page 1 only",
+        },
         "analysis": analysis,
+        "combined": {
+            "p_tampered_forensic": round(p_forensic, 4),
+            "llm_confirms_authentic": llm_confirms_authentic,
+            "p_tampered_combined": round(combined_p, 4),
+            "verdict": combined_verdict,
+        },
         "processing_ms": round((time.time() - t0) * 1000, 1),
     }
 
