@@ -15,6 +15,34 @@ from pathlib import Path
 
 import uvicorn
 from fastapi import FastAPI, HTTPException, UploadFile, File, Form
+from PIL import Image
+
+
+def pdf_to_image_bytes(pdf_bytes: bytes) -> bytes:
+    """Convert first page of PDF to JPEG bytes."""
+    try:
+        from pdf2image import convert_from_bytes
+        images = convert_from_bytes(pdf_bytes, first_page=1, last_page=1, dpi=300)
+        buf = io.BytesIO()
+        images[0].save(buf, format="JPEG", quality=95)
+        return buf.getvalue()
+    except ImportError:
+        # Fallback: try fitz (PyMuPDF)
+        try:
+            import fitz
+            doc = fitz.open(stream=pdf_bytes, filetype="pdf")
+            page = doc[0]
+            pix = page.get_pixmap(dpi=300)
+            return pix.tobytes("jpeg")
+        except ImportError:
+            raise HTTPException(400, "PDF support requires pdf2image or PyMuPDF. Install: pip install pdf2image PyMuPDF")
+
+
+def ensure_image_bytes(raw_bytes: bytes, filename: str = "") -> bytes:
+    """Auto-detect PDF and convert to image bytes if needed."""
+    if raw_bytes[:5] == b"%PDF-" or filename.lower().endswith(".pdf"):
+        return pdf_to_image_bytes(raw_bytes)
+    return raw_bytes
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import Optional, List
@@ -105,15 +133,17 @@ async def detect_deepfake(image: UploadFile = File(None), frameBase64: str = For
 # -- Document Forensics --
 @app.post("/detect/document")
 async def detect_document(image: UploadFile = File(None), frameBase64: str = Form(None)):
-    """Detect document manipulation. Accepts file upload or base64."""
+    """Detect document manipulation. Accepts file upload, base64, or PDF."""
     t0 = time.time()
 
     if image is not None:
-        image_bytes = await image.read()
+        raw_bytes = await image.read()
+        image_bytes = ensure_image_bytes(raw_bytes, image.filename or "")
     elif frameBase64:
         b64 = frameBase64.split(",", 1)[-1] if "," in frameBase64 else frameBase64
         try:
-            image_bytes = base64.b64decode(b64)
+            raw_bytes = base64.b64decode(b64)
+            image_bytes = ensure_image_bytes(raw_bytes)
         except Exception:
             raise HTTPException(400, "Invalid base64")
     else:
