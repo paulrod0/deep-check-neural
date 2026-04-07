@@ -19,23 +19,42 @@ from PIL import Image
 
 
 def pdf_to_image_bytes(pdf_bytes: bytes) -> bytes:
-    """Convert first page of PDF to JPEG bytes."""
+    """Convert ALL pages of PDF to a single vertical JPEG image."""
     try:
-        from pdf2image import convert_from_bytes
-        images = convert_from_bytes(pdf_bytes, first_page=1, last_page=1, dpi=300)
+        import fitz
+        doc = fitz.open(stream=pdf_bytes, filetype="pdf")
+        page_images = []
+        total_width = 0
+        total_height = 0
+
+        for page in doc:
+            pix = page.get_pixmap(dpi=300)
+            img = Image.frombytes("RGB", (pix.width, pix.height), pix.samples)
+            page_images.append(img)
+            total_width = max(total_width, pix.width)
+            total_height += pix.height
+
+        if not page_images:
+            raise HTTPException(400, "PDF has no pages")
+
+        if len(page_images) == 1:
+            buf = io.BytesIO()
+            page_images[0].save(buf, format="JPEG", quality=95)
+            return buf.getvalue()
+
+        # Combine all pages vertically into one image
+        combined = Image.new("RGB", (total_width, total_height), (255, 255, 255))
+        y_offset = 0
+        for img in page_images:
+            combined.paste(img, (0, y_offset))
+            y_offset += img.height
+
         buf = io.BytesIO()
-        images[0].save(buf, format="JPEG", quality=95)
+        combined.save(buf, format="JPEG", quality=95)
+        logger.info(f"PDF converted: {len(page_images)} pages -> {total_width}x{total_height}px")
         return buf.getvalue()
     except ImportError:
-        # Fallback: try fitz (PyMuPDF)
-        try:
-            import fitz
-            doc = fitz.open(stream=pdf_bytes, filetype="pdf")
-            page = doc[0]
-            pix = page.get_pixmap(dpi=300)
-            return pix.tobytes("jpeg")
-        except ImportError:
-            raise HTTPException(400, "PDF support requires pdf2image or PyMuPDF. Install: pip install pdf2image PyMuPDF")
+        raise HTTPException(400, "PDF support requires PyMuPDF. Install: pip install PyMuPDF")
 
 
 def ensure_image_bytes(raw_bytes: bytes, filename: str = "") -> bytes:
