@@ -172,11 +172,94 @@ def ocr_extract(image_bytes):
         return ""
 
 
+# ── Spanish DNI Check Digit ──
+
+DNI_LETTERS = "TRWAGMYFPDXBNJZSQVHLCKE"
+
+def validate_dni_number(dni_str):
+    """Validate Spanish DNI number + letter. Returns (valid, expected_letter)."""
+    import re
+    match = re.match(r'^(\d{8})([A-Z])$', dni_str.upper().strip())
+    if not match:
+        return None, None
+    number = int(match.group(1))
+    letter = match.group(2)
+    expected = DNI_LETTERS[number % 23]
+    return letter == expected, expected
+
+
+# ── Cross-Validation ──
+
+def cross_validate_front_back(front_fields, back_fields):
+    """Cross-validate fields between front and back of document."""
+    issues = []
+
+    # Compare document numbers
+    front_num = front_fields.get("document_number", "")
+    back_num = back_fields.get("document_number", "")
+    if front_num and back_num and front_num != back_num:
+        issues.append(f"CRITICAL: Document number mismatch — front: {front_num}, back: {back_num}")
+
+    # Compare names
+    for field in ["surname", "given_names"]:
+        f = front_fields.get(field, "")
+        b = back_fields.get(field, "")
+        if f and b and f.upper().strip() != b.upper().strip():
+            issues.append(f"Name mismatch ({field}) — front: {f}, back: {b}")
+
+    # Compare DOB
+    front_dob = front_fields.get("date_of_birth", "")
+    back_dob = back_fields.get("date_of_birth", "")
+    if front_dob and back_dob and front_dob != back_dob:
+        issues.append(f"CRITICAL: Date of birth mismatch — front: {front_dob}, back: {back_dob}")
+
+    return issues
+
+
+def cross_validate_mrz_vs_visual(mrz_fields, visual_fields):
+    """Cross-validate MRZ data against visually extracted fields."""
+    issues = []
+
+    # Document number
+    mrz_num = mrz_fields.get("document_number", "")
+    vis_num = visual_fields.get("document_number", "")
+    if mrz_num and vis_num and mrz_num != vis_num:
+        issues.append(f"CRITICAL: MRZ document number ({mrz_num}) does not match visual ({vis_num})")
+
+    # Name
+    mrz_name = (mrz_fields.get("surname", "") + " " + mrz_fields.get("given_names", "")).strip()
+    vis_name = (visual_fields.get("surname", "") + " " + visual_fields.get("given_names", "")).strip()
+    if mrz_name and vis_name and mrz_name.upper() != vis_name.upper():
+        issues.append(f"MRZ name ({mrz_name}) differs from visual ({vis_name})")
+
+    # DOB
+    mrz_dob = mrz_fields.get("date_of_birth", "")
+    vis_dob = visual_fields.get("date_of_birth", "")
+    if mrz_dob and vis_dob and mrz_dob != vis_dob:
+        issues.append(f"CRITICAL: MRZ DOB ({mrz_dob}) does not match visual ({vis_dob})")
+
+    return issues
+
+
 # ── Coherence Checks ──
 
 def check_coherence(fields):
     """Run deterministic coherence checks on extracted fields."""
     issues = []
+
+    # Spanish DNI check digit validation
+    doc_num = fields.get("document_number", "")
+    if doc_num and len(doc_num) == 9 and doc_num[:-1].isdigit() and doc_num[-1].isalpha():
+        valid, expected = validate_dni_number(doc_num)
+        if valid is not None and not valid:
+            issues.append(f"CRITICAL: DNI check digit invalid — {doc_num} should end in '{expected}', not '{doc_num[-1]}'")
+
+    # MRZ vs visual cross-validation (if MRZ was parsed)
+    if fields.get("mrz_detected") and fields.get("mrz_lines"):
+        mrz_parsed = parse_mrz(fields["mrz_lines"])
+        if mrz_parsed:
+            mrz_issues = cross_validate_mrz_vs_visual(mrz_parsed, fields)
+            issues.extend(mrz_issues)
 
     # Check expiry not in the past
     if fields.get("expiry_date"):
@@ -203,12 +286,12 @@ def check_coherence(fields):
         except (ValueError, IndexError):
             pass
 
-    # Check digit validation
+    # MRZ check digit validation
     if fields.get("check_digits_valid") is False:
         failed = [k for k, v in fields.get("checks", {}).items() if not v]
         issues.append(f"MRZ check digit(s) failed: {', '.join(failed)}")
 
-    # Country code validation (basic)
+    # Country code validation
     country = fields.get("country", "")
     if country and len(country) != 3:
         issues.append(f"Invalid country code: {country}")

@@ -163,6 +163,95 @@ def health():
     return {"status": "ok", "llm_engine": llm_engine.__class__.__name__ if llm_engine else "None", "engines": engines}
 
 
+# -- Identity Verification (Front + Back) --
+@app.post("/verify/identity")
+async def verify_identity(front: UploadFile = File(...), back: UploadFile = File(...)):
+    """Full identity document verification with front + back photos.
+
+    Designed for on-premise camera capture flow:
+    1. User takes photo of document FRONT (face side)
+    2. User takes photo of document BACK (MRZ side)
+    3. Both analyzed independently + cross-validated
+
+    Returns combined verdict with cross-validation issues.
+    """
+    from engines.doc_ocr_engine import cross_validate_front_back, validate_dni_number
+    t0 = time.time()
+
+    front_bytes = await front.read()
+    back_bytes = await back.read()
+
+    # Analyze front (face side)
+    front_forensics = doc_forensics.detect(front_bytes)
+    front_analysis = doc_ocr.analyze(front_bytes)
+
+    # Analyze back (MRZ side)
+    back_forensics = doc_forensics.detect(back_bytes)
+    back_analysis = doc_ocr.analyze(back_bytes)
+
+    # Cross-validate front vs back
+    cross_issues = cross_validate_front_back(
+        front_analysis.get("fields", {}),
+        back_analysis.get("fields", {})
+    )
+
+    # DNI check digit (from whichever side has the number)
+    dni_issues = []
+    for side_name, side_data in [("front", front_analysis), ("back", back_analysis)]:
+        doc_num = side_data.get("fields", {}).get("document_number", "")
+        if doc_num and len(doc_num) == 9:
+            valid, expected = validate_dni_number(doc_num)
+            if valid is False:
+                dni_issues.append(f"CRITICAL: DNI number {doc_num} ({side_name}) has invalid check digit — expected '{expected}'")
+            elif valid is True:
+                dni_issues.append(f"DNI check digit valid: {doc_num} ({side_name})")
+
+    # MRZ cross-validation (back side should have MRZ)
+    mrz_data = back_analysis.get("mrz")
+
+    # Combined forensic score (average of both sides)
+    avg_p = (front_forensics["p_tampered"] + back_forensics["p_tampered"]) / 2
+
+    # Severity of cross-validation issues
+    critical_issues = [i for i in cross_issues + dni_issues if "CRITICAL" in i]
+    all_issues = cross_issues + dni_issues + front_analysis.get("coherence_issues", []) + back_analysis.get("coherence_issues", [])
+
+    # Final verdict
+    if critical_issues:
+        verdict = "tampered"
+        confidence = 0.95
+    elif avg_p > 0.5:
+        verdict = "suspicious"
+        confidence = 1 - avg_p
+    elif all_issues:
+        verdict = "review_needed"
+        confidence = 0.6
+    else:
+        verdict = "authentic"
+        confidence = 1 - avg_p
+
+    return {
+        "verdict": verdict,
+        "confidence": round(confidence, 4),
+        "front": {
+            "forensics": front_forensics,
+            "fields": front_analysis.get("fields", {}),
+            "doc_type": front_analysis.get("doc_type", "unknown"),
+        },
+        "back": {
+            "forensics": back_forensics,
+            "fields": back_analysis.get("fields", {}),
+            "mrz": mrz_data,
+        },
+        "cross_validation": {
+            "issues": all_issues,
+            "critical": critical_issues,
+            "dni_check": dni_issues,
+        },
+        "processing_ms": round((time.time() - t0) * 1000, 1),
+    }
+
+
 # -- Deepfake Detection --
 @app.post("/detect/deepfake")
 async def detect_deepfake(image: UploadFile = File(None), frameBase64: str = Form(None)):
