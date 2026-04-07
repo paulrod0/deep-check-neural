@@ -10,7 +10,7 @@ const BACKENDS: Record<string, { url: string; analyzeEndpoint: string }> = {
   },
   aws: {
     url: process.env.AWS_GEMMA_URL || 'http://54.229.204.211:8002',
-    analyzeEndpoint: '/analyze',
+    analyzeEndpoint: '/analyze/document',
   },
 }
 
