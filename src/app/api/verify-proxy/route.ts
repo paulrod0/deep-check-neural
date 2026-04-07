@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 
 export const dynamic = 'force-dynamic'
-export const maxDuration = 120
+export const maxDuration = 300
 
 const BACKENDS: Record<string, { url: string; analyzeEndpoint: string }> = {
   xeon: {
