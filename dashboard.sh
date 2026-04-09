@@ -11,8 +11,8 @@ KEY="$HOME/.ssh/id_ed25519.pub"
 RG="eu-west-1"
 
 # Instances
-declare -A INST=( [v10]="i-07189a89d5f7f254a" [v9]="i-027f26e44cea55363" [doc]="i-0105e7979c9ad73a0" )
-declare -A IPS=( [v10]="18.201.185.119" [v9]="3.251.71.121" [doc]="54.229.204.211" )
+declare -A INST=( [v11]="i-07189a89d5f7f254a" [v9]="i-027f26e44cea55363" [doc]="i-0105e7979c9ad73a0" )
+declare -A IPS=( [v11]="18.201.230.25" [v9]="3.251.71.121" [doc]="54.229.204.211" )
 
 # Colors
 R='\033[0;31m'; G='\033[0;32m'; C='\033[0;36m'; Y='\033[1;33m'
@@ -57,10 +57,10 @@ render() {
     echo ""
 
     # === V10 C-RADIOv4 ===
-    echo -e "${BD}${BG_C}${W} V10 C-RADIOv4-H (653M) ${N}  ${D}g5.12xlarge · 4×A10G · ${IPS[v10]}${N}"
-    local v10m=$(ssh_q v10 "tail -1 /home/ubuntu/training/v10_cradio/metrics.jsonl 2>/dev/null")
-    local v10l=$(ssh_q v10 "tail -1 /home/ubuntu/training/v10_cradio/train.log 2>/dev/null")
-    local v10g=$(ssh_q v10 "nvidia-smi --query-gpu=memory.used,utilization.gpu --format=csv,noheader 2>/dev/null | head -1")
+    echo -e "${BD}${BG_C}${W} V11 SigLIP SO400M + Focal Loss (428M) ${N}  ${D}g5.12xlarge · 4×A10G · ${IPS[v11]}${N}"
+    local v10m=$(ssh_q v11 "tail -1 /home/ubuntu/training/v11_siglip/metrics.jsonl 2>/dev/null")
+    local v10l=$(ssh_q v11 "tail -1 /home/ubuntu/training/v11_siglip/train.log 2>/dev/null")
+    local v10g=$(ssh_q v11 "nvidia-smi --query-gpu=memory.used,utilization.gpu --format=csv,noheader 2>/dev/null | head -1")
 
     if [ -n "$v10m" ] && echo "$v10m" | python3 -c "import json,sys; json.loads(sys.stdin.read())" 2>/dev/null; then
         local ep=$(echo "$v10m"|python3 -c "import json,sys;d=json.loads(sys.stdin.read());print(d['epoch'])" 2>/dev/null)
@@ -120,10 +120,12 @@ render() {
     # === Completed models ===
     echo -e "${D}────────────────────────────────────────────────────────────────────${N}"
     echo -e "${BD} PRODUCTION MODELS${N}"
-    echo -e "  ${G}■${N} Doc Forensics V2b     ${D}auc${N} ${G}0.998${N}  ${D}eer${N} ${G}1.87%${N}  ${D}status${N} ${BG_G}${W} DEPLOYED ${N}"
-    echo -e "  ${G}■${N} Keystroke Biometrics   ${D}auc${N} ${G}0.949${N}  ${D}acc${N} ${G}90.8%${N}  ${D}status${N} ${BG_G}${W} DEPLOYED ${N}"
-    echo -e "  ${Y}■${N} Deepfake V9.4          ${D}auc${N} ${Y}0.945${N}  ${D}eer${N} ${Y}13.0%${N}  ${D}status${N} ${BG_B}${W} IMPROVING ${N}"
-    echo -e "  ${G}■${N} Ensemble V9+V3+TTA     ${D}passes${N} ${G}10${N}           ${D}status${N} ${BG_G}${W} READY ${N}"
+    echo -e "  ${G}■${N} Doc Forensics V2b     ${D}auc${N} ${G}0.998${N}  ${D}eer${N} ${G}1.87%${N}   ${BG_G}${W} DEPLOYED ${N}"
+    echo -e "  ${G}■${N} Doc ICAO IDNet        ${D}auc${N} ${G}0.999${N}  ${D}eer${N} ${G}2.1%${N}    ${BG_G}${W} DEPLOYED ${N}"
+    echo -e "  ${G}■${N} Keystroke Biometrics  ${D}auc${N} ${G}0.949${N}  ${D}acc${N} ${G}90.8%${N}   ${BG_G}${W} DEPLOYED ${N}"
+    echo -e "  ${G}■${N} Gemma 4 E4B           ${D}OCR+MRZ+Coherence${N}  ${BG_G}${W} INTEGRATED ${N}"
+    echo -e "  ${Y}■${N} Deepfake V9 DINOv3    ${D}auc${N} ${Y}0.943${N}  ${D}eer${N} ${Y}13.2%${N}   ${BG_B}${W} BASELINE ${N}"
+    echo -e "  ${G}■${N} Ensemble V9+V3+TTA    ${D}10 passes${N}          ${BG_G}${W} READY ${N}"
     echo ""
     echo -e "${D}────────────────────────────────────────────────────────────────────${N}"
     echo -e "${BD} INFRA${N}  ${D}quota${N} 64 vCPU  ${D}used${N} 56 vCPU  ${D}cost${N} ~\$8.09/h"

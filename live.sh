@@ -7,7 +7,7 @@ AWS=/opt/homebrew/bin/aws
 KEY="$HOME/.ssh/id_ed25519.pub"
 RG="eu-west-1"
 
-V10_I="i-07189a89d5f7f254a"; V10="18.201.185.119"
+V10_I="i-07189a89d5f7f254a"; V10="18.201.230.25"
 V9_I="i-027f26e44cea55363"; V9="3.251.71.121"
 DOC_I="i-0105e7979c9ad73a0"; DOC="54.229.204.211"
 
@@ -25,7 +25,7 @@ push_key() { $AWS ec2-instance-connect send-ssh-public-key --instance-id "$1" --
 stream_v10() {
     while true; do
         push_key $V10_I
-        ssh -o ConnectTimeout=8 -o StrictHostKeyChecking=no -o ServerAliveInterval=5 -o LogLevel=ERROR ubuntu@$V10 "tail -f /home/ubuntu/training/v10_cradio/train.log 2>/dev/null" >> $tmp1 2>/dev/null
+        ssh -o ConnectTimeout=8 -o StrictHostKeyChecking=no -o ServerAliveInterval=5 -o LogLevel=ERROR ubuntu@$V10 "tail -f /home/ubuntu/training/v11_siglip/train.log 2>/dev/null" >> $tmp1 2>/dev/null
         sleep 5
     done
 }
@@ -56,7 +56,7 @@ clear
 
 # Header
 echo -e "${D}══════════════════════════════════════════════════════════════════════════════════════════════════════════════${N}"
-echo -e "${BD}${C}  V10 C-RADIOv4-H 653M 4×A10G       ${G}V9.4 DINOv3+MJ 303M 1×A10G       ${M}DOC ICAO IDNet 304M 1×A10G${N}"
+echo -e "${BD}${C}  V11 SigLIP+FocalLoss 428M 4×A10G       ${G}V9.4 DINOv3+MJ 303M 1×A10G       ${M}DOC ICAO IDNet 304M 1×A10G${N}"
 echo -e "${D}══════════════════════════════════════════════════════════════════════════════════════════════════════════════${N}"
 
 # Track line counts

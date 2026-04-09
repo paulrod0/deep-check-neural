@@ -1,0 +1,123 @@
+{
+  "report_type": "INDUSTRIAL_PAD_BENCHMARK",
+  "standard": "ISO/IEC 30107-3:2023 + NIST FATE PAD methodology",
+  "timestamp": "2026-03-24T09:55:23",
+  "model": "deepfake_pixel_v3",
+  "inference": "Real ONNX inference on real images (not simulated)",
+  "datasets": {
+    "deepfake_test": {
+      "metrics": {
+        "auc": 0.999998,
+        "average_precision": 0.999998,
+        "eer": 0.0003,
+        "eer_threshold": 0.4965,
+        "apcer": 0.0003,
+        "bpcer": 0.0003,
+        "acer": 0.0003,
+        "d_prime": 36.9445,
+        "kl_divergence": 26.6902,
+        "real_mean": 0.010008,
+        "real_std": 0.031242,
+        "fake_mean": 0.994566,
+        "fake_std": 0.02108,
+        "n_real": 10000,
+        "n_fake": 10000,
+        "operating_points": {
+          "FAR@FRR=0.1%": 0.0001,
+          "FAR@FRR=0.5%": 0.0001,
+          "FAR@FRR=1.0%": 0.0001,
+          "FAR@FRR=5.0%": 0.0,
+          "FAR@FRR=10.0%": 0.0,
+          "FRR@FAR=0.1%": 0.0002,
+          "FRR@FAR=1.0%": 0.0,
+          "FRR@FAR=5.0%": 0.0,
+          "FRR@FAR=10.0%": 0.0
+        }
+      },
+      "inference_ms_per_img": 161.9,
+      "ci": {
+        "auc_mean": 0.999998,
+        "auc_lo": 0.999995,
+        "auc_hi": 1.0,
+        "eer_mean": 0.000353,
+        "eer_lo": 0.0001,
+        "eer_hi": 0.00065
+      }
+    }
+  },
+  "robustness": {
+    "original": {
+      "auc": 1.0,
+      "eer": 0.0
+    },
+    "jpeg_q10": {
+      "auc": 0.9986,
+      "eer": 0.022
+    },
+    "jpeg_q30": {
+      "auc": 1.0,
+      "eer": 0.004
+    },
+    "jpeg_q50": {
+      "auc": 1.0,
+      "eer": 0.001
+    },
+    "blur_r3": {
+      "auc": 0.9991,
+      "eer": 0.008
+    },
+    "blur_r5": {
+      "auc": 0.9853,
+      "eer": 0.069
+    },
+    "resize_50%": {
+      "auc": 1.0,
+      "eer": 0.002
+    },
+    "resize_25%": {
+      "auc": 0.9995,
+      "eer": 0.001
+    },
+    "grayscale": {
+      "auc": 0.9801,
+      "eer": 0.072
+    }
+  },
+  "calibration": {
+    "ece": 0.0073,
+    "prob_true": [
+      0.0,
+      0.0079,
+      0.0,
+      0.0,
+      0.2857,
+      0.6667,
+      1.0,
+      1.0,
+      0.9459,
+      1.0
+    ],
+    "prob_pred": [
+      0.007,
+      0.1401,
+      0.2343,
+      0.3371,
+      0.4629,
+      0.5266,
+      0.6476,
+      0.7689,
+      0.8697,
+      0.9957
+    ]
+  },
+  "threshold_stability": [
+    0.4965,
+    {
+      "deepfake_test": {
+        "apcer_global_t": 0.0003,
+        "bpcer_global_t": 0.0003,
+        "acer_global_t": 0.0003
+      }
+    }
+  ]
+}

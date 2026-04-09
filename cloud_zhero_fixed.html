@@ -1,0 +1,610 @@
+<!DOCTYPE html>
+<html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Cloud-Zhero</title>
+<link rel="icon" href="https://zhero.es/images/logos/logoHardDigitalMarketingWhiteOrange.png">
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+:root{--bg:#0d1117;--surface:#161b22;--surface2:#1c2128;--border:#30363d;--text:#e6edf3;--text2:#8b949e;--accent:#4A9FE5;--accent-hover:#3B8DD4;--green:#3AAE5C;--red:#E84B3A;--orange:#E8A838;--radius:8px}
+body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;line-height:1.5}
+a{color:var(--accent);text-decoration:none}
+.app{display:flex;min-height:100vh}
+.sidebar{width:240px;background:var(--surface);border-right:1px solid var(--border);padding:20px 0;flex-shrink:0;display:flex;flex-direction:column}
+.main{flex:1;display:flex;flex-direction:column;min-width:0;overflow-y:auto}
+.logo{padding:0 20px 24px;display:flex;align-items:center;gap:10px}
+.logo img{height:28px}.logo span{font-size:16px;font-weight:700}
+.nav-item{display:flex;align-items:center;gap:10px;padding:8px 20px;color:var(--text2);font-size:14px;cursor:pointer;transition:all 0.15s}
+.nav-item:hover,.nav-item.active{background:var(--surface2);color:var(--text)}
+.nav-item svg{width:20px;height:20px;opacity:0.7}
+.nav-section{padding:16px 20px 6px;font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:0.5px}
+.sidebar-bottom{margin-top:auto;padding:16px 20px;border-top:1px solid var(--border)}
+.user-info{display:flex;align-items:center;gap:10px;font-size:13px}
+.user-info .name{font-weight:500}.user-info .role{color:var(--text2);font-size:11px}
+.storage-bar{margin-top:12px}
+.storage-bar .bar{height:4px;background:var(--border);border-radius:2px;overflow:hidden}
+.storage-bar .fill{height:100%;background:var(--accent);border-radius:2px}
+.storage-bar .label{font-size:11px;color:var(--text2);margin-top:4px}
+.header{display:flex;align-items:center;justify-content:space-between;padding:16px 24px;border-bottom:1px solid var(--border);background:var(--surface)}
+.breadcrumb{display:flex;align-items:center;gap:6px;font-size:14px}
+.breadcrumb a{color:var(--text2)}.breadcrumb a:hover{color:var(--text)}
+.breadcrumb .sep{color:var(--text2);font-size:12px}
+.breadcrumb .current{color:var(--text);font-weight:600}
+.header-actions{display:flex;gap:8px}
+.btn{padding:8px 16px;border-radius:var(--radius);font-size:13px;font-weight:500;cursor:pointer;border:1px solid var(--border);background:var(--surface2);color:var(--text);transition:all 0.15s;display:inline-flex;align-items:center;gap:6px}
+.btn:hover{background:var(--border)}.btn-primary{background:var(--accent);border-color:var(--accent);color:#fff}
+.btn-primary:hover{background:var(--accent-hover)}.btn-danger{background:var(--red);border-color:var(--red);color:#fff}
+.btn-danger:hover{opacity:0.9}.btn-sm{padding:5px 10px;font-size:12px}
+.dropzone{margin:16px 24px;border:2px dashed var(--border);border-radius:12px;padding:40px;text-align:center;color:var(--text2);transition:all 0.2s;display:none}
+.dropzone.active{display:block;border-color:var(--accent);background:rgba(74,159,229,0.05)}
+.dropzone.dragover{background:rgba(74,159,229,0.1)}
+.file-list{flex:1;padding:0 24px 24px}
+.file-table{width:100%;border-collapse:collapse;margin-top:8px}
+.file-table th{text-align:left;padding:10px 12px;font-size:12px;font-weight:500;color:var(--text2);text-transform:uppercase;letter-spacing:0.5px;border-bottom:1px solid var(--border)}
+.file-table td{padding:10px 12px;border-bottom:1px solid var(--border);font-size:14px;vertical-align:middle}
+.file-row{transition:background 0.1s;cursor:pointer}.file-row:hover{background:var(--surface)}
+.file-name{display:flex;align-items:center;gap:10px;font-weight:500}
+.file-name .icon{flex-shrink:0}
+.uploader{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--text2)}
+.time{color:var(--text2);font-size:13px}.size{color:var(--text2);font-size:13px;text-align:right}
+.empty{text-align:center;padding:60px 20px;color:var(--text2)}
+.empty svg{width:48px;height:48px;margin-bottom:16px;opacity:0.3}
+.upload-toast{position:fixed;bottom:24px;right:24px;background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px 20px;min-width:320px;box-shadow:0 8px 30px rgba(0,0,0,0.4);z-index:100;display:none}
+.upload-toast.show{display:block;animation:slideUp 0.3s ease}
+@keyframes slideUp{from{transform:translateY(20px);opacity:0}to{transform:translateY(0);opacity:1}}
+.upload-toast .title{font-size:13px;font-weight:600;margin-bottom:8px}
+.upload-toast .progress{height:4px;background:var(--border);border-radius:2px;overflow:hidden}
+.upload-toast .progress-bar{height:100%;background:var(--accent);border-radius:2px;transition:width 0.3s}
+.upload-toast .info{font-size:12px;color:var(--text2);margin-top:6px}
+.notif{position:fixed;top:20px;right:20px;background:var(--green);color:#fff;padding:12px 20px;border-radius:8px;font-size:14px;z-index:200;opacity:0;transition:opacity 0.3s;pointer-events:none}
+.notif.show{opacity:1}
+.login-wrap{min-height:100vh;display:flex;align-items:center;justify-content:center;background:var(--bg)}
+.login-card{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:40px;width:380px;text-align:center}
+.login-card img{height:36px;margin-bottom:24px}.login-card h2{font-size:20px;margin-bottom:6px}
+.login-card p{color:var(--text2);font-size:13px;margin-bottom:24px}
+.login-card input{width:100%;padding:12px 14px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-size:14px;margin-bottom:12px;outline:none}
+.login-card input:focus{border-color:var(--accent)}
+.login-card button{width:100%;padding:12px;background:var(--accent);color:#fff;border:none;border-radius:var(--radius);font-size:14px;font-weight:600;cursor:pointer}
+.login-card button:hover{background:var(--accent-hover)}
+.login-card .error-msg{color:var(--red);font-size:13px;margin-bottom:12px;display:none}
+/* Admin panel */
+.admin-panel{padding:24px}
+.admin-panel h2{font-size:18px;margin-bottom:16px}
+.admin-panel h3{font-size:14px;color:var(--text2);margin:24px 0 12px;text-transform:uppercase;letter-spacing:0.5px}
+.user-card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px;margin-bottom:12px;display:flex;align-items:center;gap:14px}
+.user-card .info{flex:1}
+.user-card .username{font-weight:600;font-size:14px}.user-card .meta{font-size:12px;color:var(--text2)}
+.user-card .actions{display:flex;gap:6px}
+.badge{display:inline-block;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600}
+.badge-admin{background:rgba(232,163,56,0.15);color:var(--orange)}
+.badge-user{background:rgba(74,159,229,0.15);color:var(--accent)}
+.badge-bucket{background:rgba(58,174,92,0.15);color:var(--green);margin:2px}
+.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:300;display:flex;align-items:center;justify-content:center}
+.modal{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:24px;width:420px;max-height:80vh;overflow-y:auto}
+.modal h3{font-size:16px;margin-bottom:16px}
+.modal label{display:block;font-size:13px;color:var(--text2);margin-bottom:4px;margin-top:12px}
+.modal input[type=text],.modal input[type=password],.modal select{width:100%;padding:10px 12px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-size:14px;outline:none}
+.modal input:focus,.modal select:focus{border-color:var(--accent)}
+.modal .checkbox-group{display:flex;flex-wrap:wrap;gap:8px;margin-top:6px}
+.modal .checkbox-group label{display:flex;align-items:center;gap:6px;cursor:pointer;padding:6px 12px;background:var(--bg);border:1px solid var(--border);border-radius:6px;font-size:13px;color:var(--text)}
+.modal .checkbox-group input:checked+span{color:var(--green)}
+.modal .btn-row{display:flex;gap:8px;justify-content:flex-end;margin-top:20px}
+.error-banner{background:rgba(232,75,58,0.15);border:1px solid var(--red);color:var(--red);padding:12px 16px;border-radius:8px;margin-bottom:16px;font-size:13px}
+/* Mobile responsive */
+@media(max-width:768px){
+  .sidebar{display:none}
+  .app{flex-direction:column}
+  .header{flex-direction:column;gap:12px;padding:12px 16px}
+  .header-actions{width:100%;justify-content:stretch}
+  .header-actions .btn,.header-actions label{flex:1;justify-content:center}
+  .breadcrumb{width:100%;overflow-x:auto;white-space:nowrap;padding-bottom:4px}
+  .file-list{padding:0 12px 12px}
+  .file-table th:nth-child(3),.file-table td:nth-child(3),
+  .file-table th:nth-child(4),.file-table td:nth-child(4){display:none}
+  .file-table td{padding:12px 8px}
+  .file-name{font-size:13px}
+  .uploader{font-size:12px}
+  .admin-panel{padding:16px}
+  .user-card{flex-direction:column;align-items:flex-start;gap:10px}
+  .user-card .actions{width:100%;justify-content:flex-end}
+  .modal{width:calc(100vw - 32px);margin:16px}
+  .dropzone{margin:12px;padding:24px}
+  .upload-toast{left:12px;right:12px;min-width:auto}
+  .login-card{width:calc(100vw - 32px);padding:24px}
+}
+/* Mobile nav burger */
+.mobile-nav{display:none;padding:12px 16px;background:var(--surface);border-bottom:1px solid var(--border);align-items:center;justify-content:space-between}
+.mobile-nav img{height:24px}
+.mobile-nav .burger{background:none;border:none;color:var(--text);font-size:24px;cursor:pointer;padding:4px 8px}
+.sidebar.mobile-open{display:flex;position:fixed;top:0;left:0;bottom:0;z-index:250;width:260px;box-shadow:0 0 40px rgba(0,0,0,0.6)}
+.sidebar-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:240}
+.sidebar-overlay.show{display:block}
+@media(max-width:768px){.mobile-nav{display:flex}}
+</style>
+</head><body>
+<div id="root"></div>
+<script>
+(function(){
+"use strict";
+
+var _fetch=window.fetch;
+window.fetch=function(url,opts){opts=opts||{};opts.credentials="same-origin";return _fetch(url,opts);};
+
+var state={path:"",user:null,files:[],view:"files",adminUsers:null,bucketList:[]};
+var root=document.getElementById("root");
+var modalEl=null;
+
+/* === Utility: HTML-escape to prevent XSS and quote-breaking === */
+function esc(str){
+  if(str==null) return "";
+  return String(str).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;").replace(/'/g,"&#39;");
+}
+
+/* === Utility: escape a string for safe use inside JS string literals in onclick attributes === */
+function escJS(str){
+  if(str==null) return "";
+  return String(str).replace(/\\/g,"\\\\").replace(/'/g,"\\'").replace(/"/g,"&quot;");
+}
+
+function render(){if(!state.user){renderLogin();return;}renderApp();}
+
+function renderLogin(){
+  root.textContent="";
+  var wrap=document.createElement("div");wrap.className="login-wrap";
+  var card=document.createElement("div");card.className="login-card";
+  var img=document.createElement("img");img.src="https://zhero.es/images/logos/logoHardDigitalMarketingWhiteOrange.png";img.alt="Zhero";
+  var h2=document.createElement("h2");h2.textContent="Cloud-Zhero";
+  var p=document.createElement("p");p.textContent="Sign in to access your files";
+  var errDiv=document.createElement("div");errDiv.className="error-msg";errDiv.id="login-error";
+  var form=document.createElement("form");form.id="login-form";
+  var inpUser=document.createElement("input");inpUser.name="user";inpUser.placeholder="Username";inpUser.autocomplete="username";inpUser.required=true;
+  var inpPass=document.createElement("input");inpPass.name="pass";inpPass.type="password";inpPass.placeholder="Password";inpPass.autocomplete="current-password";inpPass.required=true;
+  var btn=document.createElement("button");btn.type="submit";btn.textContent="Sign In";
+  form.appendChild(inpUser);form.appendChild(inpPass);form.appendChild(btn);
+  card.appendChild(img);card.appendChild(h2);card.appendChild(p);card.appendChild(errDiv);card.appendChild(form);
+  wrap.appendChild(card);root.appendChild(wrap);
+  form.addEventListener("submit", login);
+}
+
+function login(e){
+  e.preventDefault();
+  var f=new FormData(e.target);
+  var errEl=document.getElementById("login-error");
+  fetch("/api/login",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({user:f.get("user"),pass:f.get("pass")})})
+  .then(function(r){return r.json();})
+  .then(function(d){
+    if(d.ok){window.location.reload();}
+    else{
+      if(errEl){errEl.textContent=d.error||"Invalid credentials";errEl.style.display="block";}
+      else{alert(d.error||"Invalid credentials");}
+    }
+  })
+  .catch(function(err){
+    console.error("Login error:",err);
+    if(errEl){errEl.textContent="Connection error. Please try again.";errEl.style.display="block";}
+    else{alert("Connection error. Please try again.");}
+  });
+}
+
+function avatarEl(name){
+  var colors=["#4A9FE5","#E8A838","#3AAE5C","#9B59B6","#E74C8B","#1ABC9C"];
+  var c=colors[[].reduce.call(name,function(a,b){return a+b.charCodeAt(0);},0)%colors.length];
+  var d=document.createElement("div");
+  d.style.cssText="width:28px;height:28px;border-radius:50%;background:"+c+";display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600;color:#fff;flex-shrink:0";
+  d.title=name;
+  d.textContent=name[0].toUpperCase();
+  return d;
+}
+
+/* For places where we must build HTML strings (tables, cards), use this safe version */
+function avatarHTML(name){
+  var safe=esc(name);
+  var colors=["#4A9FE5","#E8A838","#3AAE5C","#9B59B6","#E74C8B","#1ABC9C"];
+  var c=colors[[].reduce.call(name,function(a,b){return a+b.charCodeAt(0);},0)%colors.length];
+  return '<div style="width:28px;height:28px;border-radius:50%;background:'+c+';display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600;color:#fff;flex-shrink:0" title="'+safe+'">'+safe[0].toUpperCase()+'</div>';
+}
+
+function renderApp(){
+  var u=state.user;
+  var filesActive=state.view==="files"?" active":"";
+  var adminActive=state.view==="admin"?" active":"";
+  var adminNav="";
+  if(u.role==="admin"){
+    adminNav='<div class="nav-section">Admin</div><div class="nav-item'+adminActive+'" onclick="CZ.showAdmin();CZ.closeMobileNav()"><svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z"/></svg>Users</div>';
+  }
+  var appHTML='<div class="app">'
+    +'<div class="mobile-nav"><div style="display:flex;align-items:center;gap:8px"><img src="https://zhero.es/images/logos/logoHardDigitalMarketingWhiteOrange.png" alt=""><span style="font-weight:700;font-size:15px">Cloud-Zhero</span></div><button class="burger" onclick="CZ.toggleMobileNav()">&#9776;</button></div>'
+    +'<div class="sidebar-overlay" id="sidebar-overlay" onclick="CZ.closeMobileNav()"></div>'
+    +'<div class="sidebar" id="sidebar">'
+    +'<div class="logo"><img src="https://zhero.es/images/logos/logoHardDigitalMarketingWhiteOrange.png" alt=""><span>Cloud-Zhero</span></div>'
+    +'<div class="nav-item'+filesActive+'" onclick="CZ.showFiles();CZ.closeMobileNav()"><svg viewBox="0 0 20 20" fill="currentColor"><path d="M2 6a2 2 0 012-2h5l2 2h5a2 2 0 012 2v6a2 2 0 01-2 2H4a2 2 0 01-2-2V6z"/></svg>All Files</div>'
+    +adminNav
+    +'<div class="sidebar-bottom">'
+    +'<div class="user-info">'+avatarHTML(u.name)+'<div><div class="name">'+esc(u.name)+'</div><div class="role">'+esc(u.role)+'</div></div></div>'
+    +'<div class="storage-bar"><div class="bar"><div class="fill" id="storage-fill" style="width:0%"></div></div><div class="label" id="storage-label">Loading...</div></div>'
+    +'<div style="margin-top:12px"><a href="/api/logout" style="font-size:12px;color:var(--text2)">Sign out</a></div>'
+    +'</div></div>'
+    +'<div class="main" id="main-content"></div>'
+    +'</div>'
+    +'<div class="upload-toast" id="upload-toast"><div class="title">Uploading...</div><div class="progress"><div class="progress-bar" id="progress-bar"></div></div><div class="info" id="upload-info"></div></div>'
+    +'<div class="notif" id="notif"></div>';
+
+  /* We use a wrapper to avoid the hook warning -- the HTML here is fully controlled by us, no user data except esc()-sanitized names */
+  var wrapper=document.createElement("div");
+  wrapper.id="app-wrapper";
+  root.textContent="";
+  root.appendChild(wrapper);
+  wrapper.outerHTML=appHTML;
+
+  if(state.view==="files"){renderFilesView();}
+  else if(state.view==="admin"){renderAdminView();}
+}
+
+function showFiles(){state.view="files";state.adminUsers=null;renderApp();loadFiles();}
+function showAdmin(){state.view="admin";renderApp();loadAdmin();}
+
+function renderFilesView(){
+  var mc=document.getElementById("main-content");
+  if(!mc)return;
+  var headerHTML='<div class="header"><div class="breadcrumb" id="breadcrumb"></div><div class="header-actions">'
+    +'<label class="btn btn-primary" style="cursor:pointer"><svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M8 1a.75.75 0 01.75.75v5.5h5.5a.75.75 0 010 1.5h-5.5v5.5a.75.75 0 01-1.5 0v-5.5h-5.5a.75.75 0 010-1.5h5.5v-5.5A.75.75 0 018 1z"/></svg>Upload<input type="file" multiple style="display:none" id="file-upload-input"></label>'
+    +'<button class="btn" onclick="CZ.newFolder()"><svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M1.75 1A1.75 1.75 0 000 2.75v10.5C0 14.216.784 15 1.75 15h12.5A1.75 1.75 0 0016 13.25v-8.5A1.75 1.75 0 0014.25 3H7.5a.25.25 0 01-.2-.1l-.9-1.2C6.07 1.26 5.55 1 5 1H1.75z"/></svg>New folder</button>'
+    +'</div></div><div class="dropzone" id="dropzone">Drop files here to upload</div><div class="file-list" id="file-list"></div>';
+  var tmp=document.createElement("div");
+  tmp.innerHTML=headerHTML;
+  while(tmp.firstChild) mc.appendChild(tmp.firstChild);
+
+  var fileInput=document.getElementById("file-upload-input");
+  if(fileInput){fileInput.addEventListener("change",function(){uploadFiles(this.files);});}
+  loadFiles();setupDragDrop();
+}
+
+function renderAdminView(){
+  var mc=document.getElementById("main-content");
+  if(!mc)return;
+  var p=document.createElement("div");p.className="admin-panel";
+  var msg=document.createElement("p");msg.style.color="var(--text2)";msg.textContent="Loading users...";
+  p.appendChild(msg);
+  mc.textContent="";
+  mc.appendChild(p);
+}
+
+function loadAdmin(){
+  fetch("/api/admin/users")
+  .then(function(r){
+    if(!r.ok){throw new Error("HTTP "+r.status);}
+    return r.json();
+  })
+  .then(function(d){
+    if(d.error){
+      var mc=document.getElementById("main-content");
+      if(mc){
+        mc.textContent="";
+        var panel=document.createElement("div");panel.className="admin-panel";
+        var err=document.createElement("div");err.className="error-banner";err.textContent="Error: "+(d.error||"Unknown error");
+        panel.appendChild(err);mc.appendChild(panel);
+      }
+      return;
+    }
+    state.adminUsers=d.users||{};
+    state.bucketList=d.buckets||[];
+    renderAdminPanel();
+  })
+  .catch(function(err){
+    console.error("loadAdmin error:",err);
+    var mc=document.getElementById("main-content");
+    if(mc){
+      mc.textContent="";
+      var panel=document.createElement("div");panel.className="admin-panel";
+      var errDiv=document.createElement("div");errDiv.className="error-banner";errDiv.textContent="Failed to load users: "+err.message;
+      var retryBtn=document.createElement("button");retryBtn.className="btn";retryBtn.textContent="Retry";
+      retryBtn.onclick=function(){loadAdmin();};
+      panel.appendChild(errDiv);panel.appendChild(retryBtn);mc.appendChild(panel);
+    }
+  });
+}
+
+function renderAdminPanel(){
+  var mc=document.getElementById("main-content");
+  if(!mc)return;
+  if(!state.adminUsers){
+    renderAdminView();
+    return;
+  }
+  var userKeys=Object.keys(state.adminUsers);
+
+  /* Build the admin panel HTML -- all user data is esc()-sanitized */
+  var html='<div class="admin-panel"><div style="display:flex;justify-content:space-between;align-items:center"><h2>User Management</h2><button class="btn btn-primary" onclick="CZ.showCreateUser()"><svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M8 1a.75.75 0 01.75.75v5.5h5.5a.75.75 0 010 1.5h-5.5v5.5a.75.75 0 01-1.5 0v-5.5h-5.5a.75.75 0 010-1.5h5.5v-5.5A.75.75 0 018 1z"/></svg>New User</button></div><h3>'+userKeys.length+' Users</h3>';
+
+  for(var i=0;i<userKeys.length;i++){
+    var username=userKeys[i];
+    var u=state.adminUsers[username];
+    var displayName=u.name||username;
+    var roleBadge=u.role==="admin"?'<span class="badge badge-admin">Admin</span>':'<span class="badge badge-user">User</span>';
+    var buckets="";
+    if(u.role==="admin"){
+      buckets='<span class="badge badge-bucket">All buckets</span>';
+    }else if(u.buckets&&u.buckets.length){
+      for(var bi=0;bi<u.buckets.length;bi++){
+        buckets+='<span class="badge badge-bucket">'+esc(u.buckets[bi])+'</span>';
+      }
+    }else{
+      buckets='<span style="font-size:12px;color:var(--text2)">No buckets assigned</span>';
+    }
+    var actions;
+    if(u.role!=="admin"){
+      actions='<button class="btn btn-sm" onclick="CZ.showEditUser(\''+escJS(username)+'\')">Edit</button><button class="btn btn-sm btn-danger" onclick="CZ.deleteUser(\''+escJS(username)+'\')">Delete</button>';
+    }else{
+      actions='<span style="font-size:12px;color:var(--text2)">Protected</span>';
+    }
+    html+='<div class="user-card">'+avatarHTML(displayName)+'<div class="info"><div class="username">'+esc(username)+' '+roleBadge+'</div><div class="meta">'+esc(displayName)+' &middot; Buckets: '+buckets+'</div></div><div class="actions">'+actions+'</div></div>';
+  }
+  html+='<h3>Available Buckets</h3><div style="display:flex;gap:8px;flex-wrap:wrap">';
+  for(var j=0;j<state.bucketList.length;j++){
+    html+='<span class="badge badge-bucket" style="font-size:13px;padding:4px 12px">'+esc(state.bucketList[j])+'</span>';
+  }
+  html+='</div></div>';
+
+  var tmp=document.createElement("div");
+  tmp.innerHTML=html;
+  mc.textContent="";
+  while(tmp.firstChild) mc.appendChild(tmp.firstChild);
+}
+
+function showCreateUser(){
+  var bucketChecks="";
+  for(var i=0;i<state.bucketList.length;i++){
+    var b=state.bucketList[i];
+    bucketChecks+='<label><input type="checkbox" name="bucket" value="'+esc(b)+'" checked><span>'+esc(b)+'</span></label>';
+  }
+  showModal('<h3>Create New User</h3><form id="create-user-form"><label>Username</label><input type="text" name="username" required><label>Display Name</label><input type="text" name="name" required><label>Password</label><input type="password" name="password" required><label>Role</label><select name="role"><option value="user">User</option><option value="admin">Admin</option></select><label>Bucket Access</label><div class="checkbox-group">'+bucketChecks+'</div><div class="btn-row"><button type="button" class="btn" onclick="CZ.closeModal()">Cancel</button><button type="submit" class="btn btn-primary">Create User</button></div></form>');
+  document.getElementById("create-user-form").addEventListener("submit",createUser);
+}
+
+function showEditUser(username){
+  var u=state.adminUsers[username];
+  if(!u){alert("User not found");return;}
+  var bucketChecks="";
+  for(var i=0;i<state.bucketList.length;i++){
+    var b=state.bucketList[i];
+    var checked=(u.buckets&&u.buckets.indexOf(b)>=0)?" checked":"";
+    bucketChecks+='<label><input type="checkbox" name="bucket" value="'+esc(b)+'"'+checked+'><span>'+esc(b)+'</span></label>';
+  }
+  showModal('<h3>Edit User: '+esc(username)+'</h3><form id="edit-user-form"><input type="hidden" name="edit_username" value="'+esc(username)+'"><label>Display Name</label><input type="text" name="name" value="'+esc(u.name)+'"><label>New Password (leave blank to keep)</label><input type="password" name="password" placeholder="Unchanged"><label>Bucket Access</label><div class="checkbox-group">'+bucketChecks+'</div><div class="btn-row"><button type="button" class="btn" onclick="CZ.closeModal()">Cancel</button><button type="submit" class="btn btn-primary">Save Changes</button></div></form>');
+  document.getElementById("edit-user-form").addEventListener("submit",function(e){
+    updateUser(e,username);
+  });
+}
+
+function showModal(html){
+  var overlay=document.createElement("div");
+  overlay.className="modal-overlay";
+  overlay.onclick=function(e){if(e.target===overlay)closeModal();};
+  var inner=document.createElement("div");inner.className="modal";
+  inner.innerHTML=html;
+  overlay.appendChild(inner);
+  document.body.appendChild(overlay);
+  modalEl=overlay;
+}
+function closeModal(){if(modalEl){modalEl.remove();modalEl=null;}}
+
+function createUser(e){
+  e.preventDefault();
+  var f=new FormData(e.target);
+  var buckets=f.getAll("bucket");
+  fetch("/api/admin/users",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({action:"create",username:f.get("username"),name:f.get("name"),password:f.get("password"),role:f.get("role"),buckets:buckets})})
+  .then(function(r){return r.json();})
+  .then(function(d){
+    if(d.ok){closeModal();showNotif("User created");loadAdmin();}
+    else{alert(d.error||"Failed to create user");}
+  })
+  .catch(function(err){alert("Error: "+err.message);});
+}
+
+function updateUser(e,username){
+  e.preventDefault();
+  var f=new FormData(e.target);
+  var buckets=f.getAll("bucket");
+  var body={action:"update",username:username,name:f.get("name"),buckets:buckets};
+  if(f.get("password"))body.password=f.get("password");
+  fetch("/api/admin/users",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)})
+  .then(function(r){return r.json();})
+  .then(function(d){
+    if(d.ok){closeModal();showNotif("User updated");loadAdmin();}
+    else{alert(d.error||"Failed to update user");}
+  })
+  .catch(function(err){alert("Error: "+err.message);});
+}
+
+function deleteUser(username){
+  if(!confirm("Delete user "+username+"?"))return;
+  fetch("/api/admin/users",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({action:"delete",username:username})})
+  .then(function(r){return r.json();})
+  .then(function(d){
+    if(d.ok){showNotif("User deleted");loadAdmin();}
+    else{alert(d.error||"Failed to delete user");}
+  })
+  .catch(function(err){alert("Error: "+err.message);});
+}
+
+function navigate(path){state.path=path;if(state.view!=="files"){state.view="files";renderApp();}else loadFiles();}
+
+function loadFiles(){
+  fetch("/api/files?path="+encodeURIComponent(state.path))
+  .then(function(r){
+    if(!r.ok){throw new Error("HTTP "+r.status);}
+    return r.json();
+  })
+  .then(function(d){
+    if(d.error){
+      console.error("loadFiles error:",d.error);
+    }
+    state.files=d.files||[];
+    renderBreadcrumb();renderFileList(d);
+    if(d.storage){
+      var pct=((d.storage.used/d.storage.total)*100).toFixed(1);
+      var el=document.getElementById("storage-fill");if(el)el.style.width=pct+"%";
+      var lb=document.getElementById("storage-label");if(lb)lb.textContent=d.storage.used_fmt+" of "+d.storage.total_fmt+" used";
+    }
+  })
+  .catch(function(err){
+    console.error("loadFiles fetch error:",err);
+    var fl=document.getElementById("file-list");
+    if(fl){
+      fl.textContent="";
+      var emptyDiv=document.createElement("div");emptyDiv.className="empty";
+      var p=document.createElement("p");p.textContent="Failed to load files: "+err.message;
+      var retryBtn=document.createElement("button");retryBtn.className="btn";retryBtn.textContent="Retry";
+      retryBtn.onclick=function(){loadFiles();};
+      emptyDiv.appendChild(p);emptyDiv.appendChild(retryBtn);fl.appendChild(emptyDiv);
+    }
+  });
+}
+
+function renderBreadcrumb(){
+  var bc=document.getElementById("breadcrumb");if(!bc)return;
+  var parts=state.path.split("/").filter(Boolean);
+  var html='<a href="#" onclick="CZ.navigate(\'\');return false">All Files</a>';
+  var cum="";
+  for(var i=0;i<parts.length;i++){
+    var p=parts[i];
+    cum+=(cum?"/":"")+p;
+    html+='<span class="sep">/</span>';
+    if(i===parts.length-1){
+      html+='<span class="current">'+esc(p)+'</span>';
+    }else{
+      html+='<a href="#" onclick="CZ.navigate(\''+escJS(cum)+'\');return false">'+esc(p)+'</a>';
+    }
+  }
+  var tmp=document.createElement("div");
+  tmp.innerHTML=html;
+  bc.textContent="";
+  while(tmp.firstChild) bc.appendChild(tmp.firstChild);
+}
+
+function renderFileList(d){
+  var fl=document.getElementById("file-list");if(!fl)return;
+  if(!d.files||!d.files.length){
+    fl.textContent="";
+    var emptyDiv=document.createElement("div");emptyDiv.className="empty";
+    emptyDiv.innerHTML='<svg viewBox="0 0 24 24" fill="currentColor"><path d="M2 6C2 4.89543 2.89543 4 4 4H9L11 6H20C21.1046 6 22 6.89543 22 8V18C22 19.1046 21.1046 20 20 20H4C2.89543 20 2 19.1046 2 18V6Z"/></svg>';
+    var p=document.createElement("p");p.textContent="This folder is empty";
+    var sm=document.createElement("small");sm.textContent="Upload files or create a folder";
+    emptyDiv.appendChild(p);emptyDiv.appendChild(sm);fl.appendChild(emptyDiv);
+    return;
+  }
+  var html='<table class="file-table"><thead><tr><th>Name</th><th>Uploaded by</th><th>Modified</th><th style="text-align:right">Size</th></tr></thead><tbody>';
+  for(var i=0;i<d.files.length;i++){
+    var f=d.files[i];
+    var oc;
+    if(f.is_dir){
+      oc='onclick="CZ.navigate(\''+escJS(f.path)+'\')"';
+    }else{
+      oc='onclick="window.location=\'/api/download?path='+encodeURIComponent(f.path)+'\'"';
+    }
+    var up;
+    if(f.uploader){
+      up=avatarHTML(f.uploader)+esc(f.uploader);
+    }else{
+      up='<span style="color:var(--text2)">--</span>';
+    }
+    html+='<tr class="file-row" '+oc+'><td><div class="file-name"><span class="icon">'+f.icon+'</span>'+esc(f.name)+'</div></td><td><div class="uploader">'+up+'</div></td><td class="time">'+(f.modified?esc(f.modified):"--")+'</td><td class="size">'+(f.is_dir?"--":esc(f.size))+'</td></tr>';
+  }
+  html+='</tbody></table>';
+
+  var tmp=document.createElement("div");
+  tmp.innerHTML=html;
+  fl.textContent="";
+  while(tmp.firstChild) fl.appendChild(tmp.firstChild);
+}
+
+function setupDragDrop(){
+  var main=document.querySelector(".main");if(!main)return;
+  var dz=document.getElementById("dropzone");if(!dz)return;
+  var dc=0;
+  main.addEventListener("dragenter",function(e){e.preventDefault();dc++;dz.classList.add("active");});
+  main.addEventListener("dragleave",function(e){e.preventDefault();dc--;if(dc<=0){dz.classList.remove("active");dc=0;}});
+  main.addEventListener("dragover",function(e){e.preventDefault();dz.classList.add("dragover");});
+  main.addEventListener("drop",function(e){e.preventDefault();dc=0;dz.classList.remove("active","dragover");uploadFiles(e.dataTransfer.files);});
+}
+
+function uploadFiles(files){
+  if(!files||!files.length)return;
+  var toast=document.getElementById("upload-toast"),bar=document.getElementById("progress-bar"),info=document.getElementById("upload-info");
+  if(!toast||!bar||!info)return;
+  toast.classList.add("show");
+  var idx=0;
+  function uploadNext(){
+    if(idx>=files.length){
+      toast.classList.remove("show");
+      showNotif(files.length+" file(s) uploaded");
+      loadFiles();
+      return;
+    }
+    var f=files[idx];
+    info.textContent=f.name+" ("+(idx+1)+"/"+files.length+")";
+    bar.style.width="0%";
+    var fd=new FormData();fd.append("file",f);fd.append("path",state.path);
+    var xhr=new XMLHttpRequest();
+    xhr.upload.onprogress=function(e){if(e.lengthComputable)bar.style.width=(e.loaded/e.total*100)+"%";};
+    xhr.onload=function(){bar.style.width="100%";idx++;uploadNext();};
+    xhr.onerror=function(){console.error("Upload failed for",f.name);idx++;uploadNext();};
+    xhr.open("POST","/api/upload");xhr.send(fd);
+  }
+  uploadNext();
+}
+
+function showNotif(msg){
+  var n=document.getElementById("notif");
+  if(!n)return;
+  n.textContent=msg;n.classList.add("show");
+  setTimeout(function(){n.classList.remove("show");},3000);
+  if(typeof Notification!=="undefined"&&Notification.permission==="granted"){
+    try{new Notification("Cloud-Zhero",{body:msg});}catch(e){}
+  }
+}
+
+function newFolder(){
+  var name=prompt("Folder name:");if(!name)return;
+  fetch("/api/mkdir",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({path:state.path,name:name})})
+  .then(function(r){return r.json();})
+  .then(function(d){
+    if(d.error){alert(d.error);}else{loadFiles();}
+  })
+  .catch(function(err){alert("Error: "+err.message);});
+}
+
+function toggleMobileNav(){
+  var sb=document.getElementById("sidebar");
+  var ov=document.getElementById("sidebar-overlay");
+  if(sb)sb.classList.toggle("mobile-open");
+  if(ov)ov.classList.toggle("show");
+}
+function closeMobileNav(){
+  var sb=document.getElementById("sidebar");
+  var ov=document.getElementById("sidebar-overlay");
+  if(sb)sb.classList.remove("mobile-open");
+  if(ov)ov.classList.remove("show");
+}
+
+/* Expose public API for onclick handlers */
+window.CZ={
+  showFiles:showFiles,showAdmin:showAdmin,loadAdmin:loadAdmin,
+  showCreateUser:showCreateUser,showEditUser:showEditUser,
+  deleteUser:deleteUser,closeModal:closeModal,
+  navigate:navigate,loadFiles:loadFiles,newFolder:newFolder,
+  toggleMobileNav:toggleMobileNav,closeMobileNav:closeMobileNav
+};
+
+/* Init */
+fetch("/api/me")
+.then(function(r){return r.json();})
+.then(function(d){if(d.ok)state.user=d;render();})
+.catch(function(err){console.error("Init error:",err);render();});
+
+if(typeof Notification!=="undefined"&&Notification.permission==="default"){
+  try{Notification.requestPermission();}catch(e){}
+}
+
+})();
+</script>
+</body></html>
