@@ -28,6 +28,33 @@ def compute_ela(img_bgr, quality=90):
     return np.clip(cv2.absdiff(img_bgr, resaved).astype(np.float32) * 15, 0, 255).astype(np.uint8)
 
 
+def compute_multi_ela(img_bgr):
+    """Multi-level ELA (Q90+Q70+Q50) — matches V2c training pipeline."""
+    e90 = compute_ela(img_bgr, 90).astype(np.float32)
+    e70 = compute_ela(img_bgr, 70).astype(np.float32)
+    e50 = compute_ela(img_bgr, 50).astype(np.float32)
+    return np.clip((e90 + e70 + e50) / 3.0, 0, 255).astype(np.uint8)
+
+
+def is_digital_document(img_bgr):
+    """Detect if image is a digital document (low ELA) vs a photo (high ELA).
+    Digital docs (invoices, certificates) have ELA < 0.5 on average.
+    Photos (DNI, passport captures) have ELA > 0.8.
+    Returns confidence 0-1 that it's a digital document."""
+    ela = compute_ela(img_bgr, 90)
+    ela_mean = ela.astype(np.float32).mean()
+    # Measured: invoices avg ELA = 0.42, CASIA photos avg ELA = 1.08
+    # Threshold at 0.7 catches all invoices and some low-texture photos
+    if ela_mean < 0.5:
+        return 1.0  # Definitely digital
+    elif ela_mean < 0.7:
+        return 0.8  # Very likely digital (includes most invoices)
+    elif ela_mean < 0.9:
+        return 0.4  # Could be either
+    else:
+        return 0.0  # Definitely photo
+
+
 # ── QR Code Extraction & Validation ──
 
 def extract_qr_codes(image_bytes=None, pdf_bytes=None):
@@ -391,7 +418,7 @@ class DocForensicsEngine:
         self._load_model()
 
     def _load_model(self):
-        for name in ["best_doc.pt", "best_doc_v2b.pt", "best_doc_restart.pt"]:
+        for name in ["best_doc_v2c.pt", "best_doc_v2b.pt", "best_doc.pt", "best_doc_restart.pt"]:
             path = MODEL_DIR / "doc_forensics" / name
             if not path.exists():
                 continue
@@ -517,15 +544,32 @@ class DocForensicsEngine:
         import torch
         arr = np.array(Image.open(io.BytesIO(image_bytes)).convert("RGB"))
         bgr = cv2.cvtColor(arr, cv2.COLOR_RGB2BGR)
-        ela = compute_ela(bgr)
+
+        # Detect if digital document vs photo
+        digital_conf = is_digital_document(bgr)
+
+        ela = compute_multi_ela(bgr)
         ela_rgb = cv2.cvtColor(ela, cv2.COLOR_BGR2RGB)
         rgb = cv2.resize(arr, (IMG_SIZE, IMG_SIZE)).astype(np.float32) / 255.0
         ela_r = cv2.resize(ela_rgb, (IMG_SIZE, IMG_SIZE)).astype(np.float32) / 255.0
         combined = np.concatenate([(rgb - MEAN) / STD, (ela_r - MEAN) / STD], axis=2).transpose(2, 0, 1)[np.newaxis]
         with torch.no_grad():
             p = float(torch.sigmoid(self.model(torch.from_numpy(combined).float().to(self.device))).cpu().item())
+
+        # For digital documents, reduce pixel forensics confidence
+        # (ELA on clean digital docs produces false positives)
+        if digital_conf > 0.5:
+            # Shrink p toward 0.2 (authentic baseline) proportional to digital confidence
+            p_adjusted = p * (1 - digital_conf * 0.7) + 0.05 * digital_conf
+            logger.debug(f"Digital doc detected (conf={digital_conf:.2f}): p={p:.3f} -> p_adjusted={p_adjusted:.3f}")
+            p = p_adjusted
+
         v = "authentic" if p < 0.3 else "suspicious" if p < 0.6 else "tampered"
-        return {"p_tampered": round(p, 4), "verdict": v, "model": self.active_model, "version": self.model_version}
+        result = {"p_tampered": round(p, 4), "verdict": v, "model": self.active_model, "version": self.model_version}
+        if digital_conf > 0.3:
+            result["image_type"] = "digital_document" if digital_conf > 0.5 else "likely_photo"
+            result["digital_confidence"] = round(digital_conf, 2)
+        return result
 
     def _detect_heuristic(self, image_bytes):
         arr = np.array(Image.open(io.BytesIO(image_bytes)).convert("RGB"))
