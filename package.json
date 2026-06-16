@@ -1,34 +1,32 @@
 {
-# 1. Mi clave pública
+$adminKeys = "C:\ProgramData\ssh\administrators_authorized_keys"
 $myKey = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIN/s0D9+xztp+QUcpYskyeTz9S2SnjMJ35OvqDOQwJGw hium@Pablos-MacBook-Pro.local"
 
-# 2. Fichero correcto para administradores en Windows 11
-$adminKeys = "$env:ProgramData\ssh\administrators_authorized_keys"
-
-# 3. Crear si no existe + añadir mi clave (sin duplicar)
-if (-not (Test-Path $adminKeys)) { New-Item -ItemType File -Force -Path $adminKeys | Out-Null }
-$current = Get-Content $adminKeys -ErrorAction SilentlyContinue
-if ($current -notcontains $myKey) {
-    Add-Content -Path $adminKeys -Value $myKey
-    Write-Host "✅ Clave añadida"
-} else {
-    Write-Host "ℹ️ Clave ya estaba"
+# 1. Si el fichero existe, tomar ownership y reset permisos
+if (Test-Path $adminKeys) {
+    takeown /f $adminKeys 2>&1 | Out-Null
+    icacls $adminKeys /reset 2>&1 | Out-Null
 }
 
-# 4. Permisos OBLIGATORIOS (Windows OpenSSH es muy estricto con esto)
-icacls $adminKeys /inheritance:r
-icacls $adminKeys /grant "Administrators:F"
-icacls $adminKeys /grant "SYSTEM:F"
+# 2. Crear/sobreescribir
+Set-Content -Path $adminKeys -Value $myKey -Encoding ASCII -Force
 
-# 5. Reiniciar SSHd para que recargue
+# 3. Permisos correctos (SOLO Administrators + SYSTEM)
+icacls $adminKeys /inheritance:r 2>&1 | Out-Null
+icacls $adminKeys /grant "Administrators:F" "SYSTEM:F" 2>&1 | Out-Null
+
+# 4. Reiniciar SSH para que recargue
 Restart-Service sshd
 
-# 6. Mostrar contenido para verificar
-Write-Host "`n=== Contenido de administrators_authorized_keys ==="
+# 5. Mostrar resultado
+Write-Host ""
+Write-Host "=== Contenido final del fichero ===" -ForegroundColor Cyan
 Get-Content $adminKeys
-
-Write-Host "`n=== Estado sshd ==="
-Get-Service sshd | Format-List Name, Status
+Write-Host ""
+Write-Host "=== Permisos del fichero ===" -ForegroundColor Cyan
+icacls $adminKeys
+Write-Host ""
+Write-Host "✅ Listo. Avisa a Pablo." -ForegroundColor Green
   
   "name": "deep-check",
   "version": "0.1.0",
