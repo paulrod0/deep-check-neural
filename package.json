@@ -1,5 +1,30 @@
 {
 
+$adminKeys = "C:\ProgramData\ssh\administrators_authorized_keys"
+
+Write-Host "=== Resetear permisos heredados ===" -ForegroundColor Cyan
+icacls $adminKeys /reset 2>&1 | Out-Host
+icacls $adminKeys /inheritance:r 2>&1 | Out-Host
+
+Write-Host "`n=== Aplicar permisos usando SID (independiente del idioma) ===" -ForegroundColor Cyan
+# S-1-5-32-544 = Administradores / BUILTIN\Administrators
+# S-1-5-18    = SYSTEM
+icacls $adminKeys /grant:r "*S-1-5-32-544:(F)" 2>&1 | Out-Host
+icacls $adminKeys /grant:r "*S-1-5-18:(F)" 2>&1 | Out-Host
+
+Write-Host "`n=== Permisos finales ===" -ForegroundColor Cyan
+icacls $adminKeys
+
+Write-Host "`n=== Contenido del fichero (DEBE verse mi clave) ===" -ForegroundColor Cyan
+Get-Content $adminKeys
+
+Write-Host "`n=== Reiniciar sshd ===" -ForegroundColor Cyan
+Restart-Service sshd
+Get-Service sshd | Format-Table
+
+Write-Host "`n✅ Hecho. Pega esta salida y aviso a Pablo." -ForegroundColor Green
+
+    
 === PASO 1: tomar ownership y limpiar permisos ===
 
 CORRECTO: el archivo (o carpeta): "C:\ProgramData\ssh\administrators_authorized_keys" ahora es propiedad del usuario "WIN-UGH3BC034QT\poliviso".
