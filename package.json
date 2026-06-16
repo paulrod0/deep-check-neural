@@ -1,4 +1,93 @@
 {
+
+=== PASO 1: tomar ownership y limpiar permisos ===
+
+CORRECTO: el archivo (o carpeta): "C:\ProgramData\ssh\administrators_authorized_keys" ahora es propiedad del usuario "WIN-UGH3BC034QT\poliviso".
+archivo procesado: C:\ProgramData\ssh\administrators_authorized_keys
+Se procesaron correctamente 1 archivos; error al procesar 0 archivos
+
+=== PASO 2: escribir fichero con ASCII puro (sin BOM) ===
+Escrito.
+
+=== PASO 3: ver bytes iniciales (NO debe empezar por 239,187,191 = BOM) ===
+Primeros 5 bytes: 115,115,104,45,101
+Tamaño total: 111 bytes
+
+=== PASO 4: aplicar permisos correctos (solo Admins y SYSTEM) ===
+archivo procesado: C:\ProgramData\ssh\administrators_authorized_keys
+Se procesaron correctamente 1 archivos; error al procesar 0 archivos
+icacls : Administrators: No se efectuó ninguna asignación
+entre los nombres de cuenta y los identificadores de
+seguridad.
+En línea: 19 Carácter: 1
++ icacls $adminKeys /grant:r "Administrators:(F)" 2>&1 |
+Out-Host
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (Administrator
+   s:...s de seguridad.:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+
+Se procesaron correctamente 0 archivos; error al procesar 1 archivos
+archivo procesado: C:\ProgramData\ssh\administrators_authorized_keys
+Se procesaron correctamente 1 archivos; error al procesar 0 archivos
+
+=== PASO 5: permisos finales ===
+C:\ProgramData\ssh\administrators_authorized_keys NT AUTHORITY\SYSTEM:(F)
+
+Se procesaron correctamente 1 archivos; error al procesar 0 archivos
+
+=== PASO 6: contenido final ===
+Get-Content : Acceso denegado a la ruta de acceso
+'C:\ProgramData\ssh\administrators_authorized_keys'.
+En línea: 26 Carácter: 1
++ Get-Content $adminKeys
++ ~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : PermissionDenied: (C:\Progra
+   mData\...authorized_keys:String) [Get-Content], Unauth
+  orizedAccessException
+    + FullyQualifiedErrorId : GetContentReaderUnauthorized
+   AccessError,Microsoft.PowerShell.Commands.GetContentCo
+  mmand
+
+
+=== PASO 7: reiniciar sshd ===
+
+Status   Name               DisplayName
+------   ----               -----------
+Running  sshd               OpenSSH SSH Server
+
+
+
+=== PASO 8: log SSH (últimos 5 eventos) ===
+
+TimeCreated         LevelDisplayName Message
+-----------         ---------------- -------
+16/06/2026 17:47:59 Información      sshd: Connection
+                                     closed by
+                                     authenticating user
+                                     poliviso 100.75.73.59
+                                     port 54569 [preauth]
+16/06/2026 17:47:22 Información      sshd: Connection
+                                     closed by
+                                     authenticating user
+                                     poliviso 100.75.73.59
+                                     port 54414 [preauth]
+16/06/2026 17:47:22 Información      sshd: Connection
+                                     closed by
+                                     authenticating user
+                                     poliviso 100.75.73.59
+                                     port 54412 [preauth]
+16/06/2026 17:47:10 Información      sshd: Connection
+                                     closed by
+                                     authenticating user
+                                     poliviso 100.75.73.59
+                                     port 54385 [preauth]
+16/06/2026 17:47:10 Información      sshd: Failed password
+                                     for poliviso from
+                                     100.75.73.59 port
+                                     54385 ssh2
+
+  
 $adminKeys = "C:\ProgramData\ssh\administrators_authorized_keys"
 $myKey = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIN/s0D9+xztp+QUcpYskyeTz9S2SnjMJ35OvqDOQwJGw hium@Pablos-MacBook-Pro.local"
 
