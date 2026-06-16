@@ -1,6 +1,21 @@
 {
   & "C:\Program Files\Tailscale\tailscale.exe" up --ssh
   & "$env:ProgramFiles\Tailscale\tailscale.exe" up --ssh
+
+  echo "=== ¿Está mi clave en authorized_keys de poliviso? ==="
+Get-Content "$env:USERPROFILE\.ssh\authorized_keys" 2>$null
+
+echo ""
+echo "=== ¿poliviso es administrador? ==="
+whoami /groups | findstr "Administrators"
+
+echo ""
+echo "=== ¿Está mi clave en administrators_authorized_keys? ==="
+Get-Content "$env:ProgramData\ssh\administrators_authorized_keys" 2>$null
+
+echo ""
+echo "=== Estado del servicio SSH ==="
+Get-Service sshd | Format-List Name, Status, StartType
   
   "name": "deep-check",
   "version": "0.1.0",
