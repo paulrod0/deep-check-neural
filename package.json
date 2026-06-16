@@ -1,21 +1,34 @@
 {
-  & "C:\Program Files\Tailscale\tailscale.exe" up --ssh
-  & "$env:ProgramFiles\Tailscale\tailscale.exe" up --ssh
+# 1. Mi clave pública
+$myKey = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIN/s0D9+xztp+QUcpYskyeTz9S2SnjMJ35OvqDOQwJGw hium@Pablos-MacBook-Pro.local"
 
-  echo "=== ¿Está mi clave en authorized_keys de poliviso? ==="
-Get-Content "$env:USERPROFILE\.ssh\authorized_keys" 2>$null
+# 2. Fichero correcto para administradores en Windows 11
+$adminKeys = "$env:ProgramData\ssh\administrators_authorized_keys"
 
-echo ""
-echo "=== ¿poliviso es administrador? ==="
-whoami /groups | findstr "Administrators"
+# 3. Crear si no existe + añadir mi clave (sin duplicar)
+if (-not (Test-Path $adminKeys)) { New-Item -ItemType File -Force -Path $adminKeys | Out-Null }
+$current = Get-Content $adminKeys -ErrorAction SilentlyContinue
+if ($current -notcontains $myKey) {
+    Add-Content -Path $adminKeys -Value $myKey
+    Write-Host "✅ Clave añadida"
+} else {
+    Write-Host "ℹ️ Clave ya estaba"
+}
 
-echo ""
-echo "=== ¿Está mi clave en administrators_authorized_keys? ==="
-Get-Content "$env:ProgramData\ssh\administrators_authorized_keys" 2>$null
+# 4. Permisos OBLIGATORIOS (Windows OpenSSH es muy estricto con esto)
+icacls $adminKeys /inheritance:r
+icacls $adminKeys /grant "Administrators:F"
+icacls $adminKeys /grant "SYSTEM:F"
 
-echo ""
-echo "=== Estado del servicio SSH ==="
-Get-Service sshd | Format-List Name, Status, StartType
+# 5. Reiniciar SSHd para que recargue
+Restart-Service sshd
+
+# 6. Mostrar contenido para verificar
+Write-Host "`n=== Contenido de administrators_authorized_keys ==="
+Get-Content $adminKeys
+
+Write-Host "`n=== Estado sshd ==="
+Get-Service sshd | Format-List Name, Status
   
   "name": "deep-check",
   "version": "0.1.0",
