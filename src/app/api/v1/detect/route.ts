@@ -39,6 +39,71 @@ import { NextRequest, NextResponse } from 'next/server'
 import { validateApiKey, initDb } from '@/lib/db'
 import { detectDeepfake, getModelInfo, type DetectionResult } from '@/lib/onnxServerInference'
 
+// ── ML worker (V9.4 DINOv3) ───────────────────────────────────────────────────
+// Optional server-to-server worker. If ML_WORKER_URL is set, deepfake detection
+// is served by the V9.4 DINOv3 engine (richer, but higher latency/cost). If the
+// worker is unset or the call fails, we fall back to the local ONNX V3 model and
+// behavior is byte-for-byte identical to before. Same pattern as docForensics.ts.
+const ML_WORKER_URL = process.env.ML_WORKER_URL || process.env.XEON_ML_URL || ''
+const ML_WORKER_API_KEY = process.env.ML_WORKER_API_KEY || ''
+
+// Result returned by the API, extending DetectionResult with the engine/model
+// that produced it. Additive only — existing consumers see the same fields.
+type DetectResult = DetectionResult & { model: string; engine: 'ml-worker' | 'onnx-local' }
+
+/**
+ * Try the ML worker's V9.4 DINOv3 deepfake engine (/detect/deepfake).
+ * Returns a DetectionResult-shaped object, or null if no worker is configured
+ * or the call fails (non-fatal — caller falls back to local ONNX V3).
+ */
+async function tryMlWorkerDeepfake(imageBase64: string): Promise<DetectResult | null> {
+  if (!ML_WORKER_URL) return null
+  const t0 = Date.now()
+  try {
+    const form = new FormData()
+    form.append('frameBase64', imageBase64)
+    const res = await fetch(`${ML_WORKER_URL}/detect/deepfake`, {
+      method: 'POST',
+      body: form,
+      headers: ML_WORKER_API_KEY ? { 'x-api-key': ML_WORKER_API_KEY } : undefined,
+      signal: AbortSignal.timeout(30000),
+    })
+    if (!res.ok) return null
+    const data = await res.json()
+    // Worker contract (docker/ml-worker/engines/deepfake_engine.py):
+    //   { p_fake, authenticity_score, verdict, confidence, model, version, processing_ms }
+    const pFakeRaw = typeof data?.p_fake === 'number' ? data.p_fake : null
+    if (pFakeRaw === null || Number.isNaN(pFakeRaw)) return null
+    const pFake = Math.min(1, Math.max(0, pFakeRaw))
+
+    const authenticityScore = typeof data?.authenticity_score === 'number'
+      ? Math.round(data.authenticity_score)
+      : Math.round((1 - pFake) * 100)
+    const verdict: DetectionResult['verdict'] =
+      data?.verdict === 'real' || data?.verdict === 'suspicious' ||
+      data?.verdict === 'likely_fake' || data?.verdict === 'fake'
+        ? data.verdict
+        : pFake < 0.2 ? 'real' : pFake < 0.5 ? 'suspicious' : pFake < 0.8 ? 'likely_fake' : 'fake'
+    const confidence: DetectionResult['confidence'] =
+      data?.confidence === 'high' || data?.confidence === 'medium' || data?.confidence === 'low'
+        ? data.confidence
+        : Math.abs(pFake - 0.5) > 0.3 ? 'high' : Math.abs(pFake - 0.5) > 0.15 ? 'medium' : 'low'
+
+    return {
+      pFake,
+      authenticityScore,
+      verdict,
+      confidence,
+      modelVersion: typeof data?.version === 'string' ? data.version : 'v9.4-dinov3',
+      processingMs: typeof data?.processing_ms === 'number' ? Math.round(data.processing_ms) : Date.now() - t0,
+      model: 'V9.4-DINOv3',
+      engine: 'ml-worker',
+    }
+  } catch {
+    return null
+  }
+}
+
 // ── CORS ────────────────────────────────────────────────────────────────────
 
 function cors(res: NextResponse) {
@@ -150,11 +215,14 @@ export async function POST(req: NextRequest) {
     }
 
     const t0 = Date.now()
-    const results: (DetectionResult & { index: number; error?: string })[] = []
+    const results: (DetectResult & { index: number; error?: string })[] = []
 
     for (let i = 0; i < body.images.length; i++) {
       try {
-        const result = await detectDeepfake(body.images[i], { cropFace })
+        // V9.4 DINOv3 via ML worker first (if configured); fall back to local ONNX V3.
+        const workerResult = await tryMlWorkerDeepfake(body.images[i])
+        const result: DetectResult = workerResult
+          ?? { ...(await detectDeepfake(body.images[i], { cropFace })), model: 'V3-ONNX', engine: 'onnx-local' }
         results.push({ ...result, index: i })
       } catch (err) {
         results.push({
@@ -165,6 +233,8 @@ export async function POST(req: NextRequest) {
           confidence: 'low' as const,
           modelVersion: 'error',
           processingMs: 0,
+          model: 'V3-ONNX',
+          engine: 'onnx-local',
           error: (err as Error).message,
         })
       }
@@ -229,7 +299,14 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const result = await detectDeepfake(body.image, { cropFace })
+    // V9.4 DINOv3 via ML worker first (if configured); fall back to local ONNX V3.
+    let result: DetectResult
+    const workerResult = await tryMlWorkerDeepfake(body.image)
+    if (workerResult) {
+      result = workerResult
+    } else {
+      result = { ...(await detectDeepfake(body.image, { cropFace })), model: 'V3-ONNX', engine: 'onnx-local' }
+    }
 
     // Webhook
     if (body.webhookUrl) {

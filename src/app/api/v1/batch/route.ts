@@ -16,7 +16,7 @@
  * Authentication: Bearer token via API key (requires 'write' permission)
  */
 
-import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest, NextResponse, after } from 'next/server'
 import { createClient } from '@insforge/sdk'
 import { parseMRZ } from '@/lib/mrzParser'
 import { autoValidateDocument, getCountryByCode } from '@/lib/countryValidators'
@@ -41,7 +41,7 @@ function getSupabase() {
   })
 }
 
-// ── In-memory job store (replaced by DB in production) ──────────────────────
+// ── Job types (persisted in dc_batch_jobs — see migration 009) ──────────────
 
 interface BatchDocument {
   documentFront: string
@@ -78,11 +78,12 @@ interface BatchJob {
   results: BatchResult[]
   verdicts: { authentic: number; suspicious: number; tampered: number }
   webhookUrl?: string
-  apiKeyId: string
+  // Tenant scope (org of the validated API key). Used for IDOR-safe polling.
+  orgId: string | null
+  // Documents to process — carried in-process to processBatch via after();
+  // never persisted to the DB row (avoids storing raw document images).
+  documents: BatchDocument[]
 }
-
-// In-memory store for active jobs (would use Redis/DB in production)
-const jobStore = new Map<string, BatchJob>()
 
 // ── CORS ────────────────────────────────────────────────────────────────────────
 
@@ -225,29 +226,45 @@ async function processDocument(doc: BatchDocument, index: number): Promise<Batch
 
 // ── Process batch with concurrency control ───────────────────────────────────
 
-async function processBatch(job: BatchJob, documents: BatchDocument[]) {
+async function processBatch(job: BatchJob) {
+  const documents = job.documents
   const results: BatchResult[] = []
   const verdicts = { authentic: 0, suspicious: 0, tampered: 0 }
 
-  // Process in chunks of CONCURRENCY
-  for (let i = 0; i < documents.length; i += CONCURRENCY) {
-    const chunk = documents.slice(i, i + CONCURRENCY)
-    const chunkResults = await Promise.all(
-      chunk.map((doc, j) => processDocument(doc, i + j))
-    )
+  try {
+    // Process in chunks of CONCURRENCY
+    for (let i = 0; i < documents.length; i += CONCURRENCY) {
+      const chunk = documents.slice(i, i + CONCURRENCY)
+      const chunkResults = await Promise.all(
+        chunk.map((doc, j) => processDocument(doc, i + j))
+      )
 
-    for (const result of chunkResults) {
-      results.push(result)
-      if (result.verdict in verdicts) {
-        verdicts[result.verdict as keyof typeof verdicts]++
+      for (const result of chunkResults) {
+        results.push(result)
+        if (result.verdict in verdicts) {
+          verdicts[result.verdict as keyof typeof verdicts]++
+        }
+        job.processedDocuments++
       }
-      job.processedDocuments++
-    }
 
-    // Update job in store
-    job.results = results
-    job.verdicts = verdicts
-    jobStore.set(job.jobId, { ...job })
+      // Persist progress to dc_batch_jobs so polling (a different lambda) sees it.
+      await updateJobRow(job.jobId, {
+        processed_documents: job.processedDocuments,
+        results,
+        verdicts,
+      })
+    }
+  } catch (err) {
+    // Mark failed in the DB and stop — the GET poller will report status.
+    await updateJobRow(job.jobId, {
+      status: 'failed',
+      completed_at: new Date().toISOString(),
+      processed_documents: job.processedDocuments,
+      results,
+      verdicts,
+    })
+    console.error(`[batch] Job ${job.jobId} failed:`, (err as Error).message)
+    return
   }
 
   // Mark complete
@@ -255,9 +272,16 @@ async function processBatch(job: BatchJob, documents: BatchDocument[]) {
   job.completedAt = new Date().toISOString()
   job.results = results
   job.verdicts = verdicts
-  jobStore.set(job.jobId, { ...job })
+  await updateJobRow(job.jobId, {
+    status: 'completed',
+    completed_at: job.completedAt,
+    processed_documents: job.processedDocuments,
+    results,
+    verdicts,
+  })
 
-  // Save job summary to DB
+  // Save job summary to DB (org-scoped — dc_document_analyses.org_id added in
+  // migration 002 and backfilled in 008).
   const supabase = getSupabase()
   if (supabase) {
     try {
@@ -265,6 +289,7 @@ async function processBatch(job: BatchJob, documents: BatchDocument[]) {
         .from('dc_document_analyses')
         .insert({
           filename: `batch_summary_${job.jobId}`,
+          org_id: job.orgId,
           risk_score: 0,
           risk_level: 'clean',
           ela_score: 0, exif_score: 0, noise_score: 0,
@@ -310,10 +335,66 @@ async function processBatch(job: BatchJob, documents: BatchDocument[]) {
     } catch { /* fire-and-forget */ }
   }
 
-  // Auto-cleanup: remove completed jobs after 1 hour
-  setTimeout(() => {
-    jobStore.delete(job.jobId)
-  }, 3600_000)
+  // Rows are intentionally retained — pruning completed jobs by TTL/age is a
+  // separate cron task, not done here.
+}
+
+// ── dc_batch_jobs persistence helpers ─────────────────────────────────────────
+
+/** Insert the initial job row (status='processing'). Throws on failure so the
+ *  POST can surface a 500 rather than returning a jobId no GET can ever read. */
+async function insertJobRow(job: BatchJob): Promise<void> {
+  const supabase = getSupabase()
+  if (!supabase) throw new Error('batch job store unavailable (no DB configured)')
+  const { error } = await supabase.database
+    .from('dc_batch_jobs')
+    .insert({
+      job_id: job.jobId,
+      org_id: job.orgId,
+      status: job.status,
+      total_documents: job.totalDocuments,
+      processed_documents: job.processedDocuments,
+      verdicts: job.verdicts,
+      results: job.results,
+      webhook_url: job.webhookUrl ?? null,
+      external_ref: job.documents[0]?.externalRef ?? null,
+      created_at: job.createdAt,
+      completed_at: job.completedAt,
+    })
+  if (error) throw new Error(`[batch] insertJobRow: ${error.message}`)
+}
+
+/** Patch an existing job row by job_id (progress / terminal state). Non-fatal:
+ *  a failed update just means the next poll sees slightly staler progress. */
+async function updateJobRow(jobId: string, patch: Record<string, unknown>): Promise<void> {
+  const supabase = getSupabase()
+  if (!supabase) return
+  try {
+    await supabase.database
+      .from('dc_batch_jobs')
+      .update(patch)
+      .eq('job_id', jobId)
+  } catch { /* non-fatal */ }
+}
+
+/** Read a job row, scoped to the caller's org (IDOR guard). Returns null when
+ *  the job does not exist OR belongs to a different tenant. */
+async function getJobRow(
+  jobId: string,
+  orgId: string | null,
+): Promise<Record<string, unknown> | null> {
+  const supabase = getSupabase()
+  if (!supabase) return null
+  // No org scope -> no tenant context -> fail closed (never cross-tenant read).
+  if (!orgId) return null
+  const { data, error } = await supabase.database
+    .from('dc_batch_jobs')
+    .select('*')
+    .eq('job_id', jobId)
+    .eq('org_id', orgId)
+    .maybeSingle()
+  if (error || !data) return null
+  return data as Record<string, unknown>
 }
 
 // ── POST: Create batch job ──────────────────────────────────────────────────
@@ -384,18 +465,31 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     results: [],
     verdicts: { authentic: 0, suspicious: 0, tampered: 0 },
     webhookUrl: body.webhookUrl,
-    apiKeyId: keyRecord.key,
+    orgId: keyRecord.orgId,
+    documents: body.documents,
   }
 
-  jobStore.set(jobId, job)
+  // Persist the job row (status='processing') BEFORE responding, so the GET
+  // poller — which may hit a different serverless invocation — can read it.
+  try {
+    await insertJobRow(job)
+  } catch (err) {
+    console.error(`[batch] Failed to create job ${jobId}:`, (err as Error).message)
+    return cors(NextResponse.json(
+      { success: false, error: 'Failed to create batch job' },
+      { status: 500 },
+    ))
+  }
 
-  // Start processing in background (non-blocking)
-  processBatch(job, body.documents).catch(err => {
-    job.status = 'failed'
-    job.completedAt = new Date().toISOString()
-    jobStore.set(jobId, { ...job })
+  // Run processing AFTER the response is sent. next/server `after()` keeps the
+  // work alive on Vercel serverless (fire-and-forget would be frozen).
+  after(() => processBatch(job).catch(async err => {
+    await updateJobRow(jobId, {
+      status: 'failed',
+      completed_at: new Date().toISOString(),
+    })
     console.error(`[batch] Job ${jobId} failed:`, err)
-  })
+  }))
 
   return cors(NextResponse.json({
     success: true,
@@ -437,37 +531,37 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     ))
   }
 
-  const job = jobStore.get(jobId)
-  if (!job) {
-    return cors(NextResponse.json(
-      { success: false, error: 'Job not found or expired (jobs expire after 1 hour)' },
-      { status: 404 },
-    ))
-  }
-
-  // Only allow the owner to check their job
-  if (job.apiKeyId !== keyRecord.key) {
+  // Read the job from dc_batch_jobs, scoped to the caller's org. A job owned by
+  // another tenant (or a non-existent job) returns null -> 404 (IDOR guard).
+  const row = await getJobRow(jobId, keyRecord.orgId)
+  if (!row) {
     return cors(NextResponse.json(
       { success: false, error: 'Job not found' },
       { status: 404 },
     ))
   }
 
+  const status = (row.status as BatchJob['status']) ?? 'processing'
+  const totalDocuments = (row.total_documents as number) ?? 0
+  const processedDocuments = (row.processed_documents as number) ?? 0
+  const results = Array.isArray(row.results) ? (row.results as BatchResult[]) : []
+  const verdicts = (row.verdicts as BatchJob['verdicts']) ?? { authentic: 0, suspicious: 0, tampered: 0 }
+
   return cors(NextResponse.json({
     success: true,
     data: {
-      jobId: job.jobId,
-      status: job.status,
-      createdAt: job.createdAt,
-      completedAt: job.completedAt,
-      totalDocuments: job.totalDocuments,
-      processedDocuments: job.processedDocuments,
-      progress: job.totalDocuments > 0
-        ? Math.round((job.processedDocuments / job.totalDocuments) * 100)
+      jobId: row.job_id as string,
+      status,
+      createdAt: row.created_at as string,
+      completedAt: (row.completed_at as string | null) ?? null,
+      totalDocuments,
+      processedDocuments,
+      progress: totalDocuments > 0
+        ? Math.round((processedDocuments / totalDocuments) * 100)
         : 0,
-      verdicts: job.verdicts,
+      verdicts,
       // Only include full results when completed
-      results: job.status === 'completed' ? job.results : undefined,
+      results: status === 'completed' ? results : undefined,
     },
   }))
 }
