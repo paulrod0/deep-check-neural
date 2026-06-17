@@ -28,9 +28,15 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
 
     const keyRecord = await validateApiKey(apiKey)
     if (!keyRecord || !keyRecord.permissions.includes('read')) return unauthorized()
+    // IDOR guard: a key with no organization has no tenant scope.
+    if (!keyRecord.orgId) {
+        return cors(NextResponse.json({ success: false, error: 'Session not found' }, { status: 404 }))
+    }
 
     const { id } = await params
-    const assessment = await getAssessmentById(id)
+    // Scope lookup to the key's organization — cross-tenant access returns 404
+    // (not 403) so we never leak whether a session id exists in another tenant.
+    const assessment = await getAssessmentById(id, keyRecord.orgId)
     if (!assessment) {
         return cors(NextResponse.json({ success: false, error: 'Session not found' }, { status: 404 }))
     }
@@ -52,9 +58,15 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
     const keyRecord = await validateApiKey(apiKey)
     if (!keyRecord || !keyRecord.permissions.includes('write')) return unauthorized()
+    // IDOR guard: a key with no organization has no tenant scope.
+    if (!keyRecord.orgId) {
+        return cors(NextResponse.json({ success: false, error: 'Session not found' }, { status: 404 }))
+    }
 
     const { id } = await params
-    const assessment = await getAssessmentById(id)
+    // Scope lookup to the key's organization — cross-tenant PATCH returns 404
+    // (not 403) so we never leak existence of another tenant's session.
+    const assessment = await getAssessmentById(id, keyRecord.orgId)
     if (!assessment) {
         return cors(NextResponse.json({ success: false, error: 'Session not found' }, { status: 404 }))
     }

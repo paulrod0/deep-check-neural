@@ -18,16 +18,18 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
+import { createClient } from '@insforge/sdk'
 import { parseMRZ } from '@/lib/mrzParser'
 import { autoValidateDocument, getCountryByCode, getCoverageStats, type ValidationResult } from '@/lib/countryValidators'
 import { transliterateName } from '@/lib/mrzTransliteration'
 import type { ForensicsReport } from '@/lib/imageForensics'
 
 function getClient() {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL!
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY ?? process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-  return createClient(url, key, { auth: { persistSession: false } })
+  return createClient({
+    baseUrl: process.env.NEXT_PUBLIC_INSFORGE_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    anonKey: process.env.INSFORGE_SERVICE_KEY ?? process.env.SUPABASE_SERVICE_ROLE_KEY ?? process.env.NEXT_PUBLIC_INSFORGE_ANON_KEY ?? process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    isServerMode: true,
+  })
 }
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -176,7 +178,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       ...mrzResult.alerts.map(a => ({ code: a.field, label: a.field, detail: a.detail, severity: 'high' as const })),
     ]
 
-    const { data } = await supabase
+    const { data } = await supabase.database
       .from('dc_document_analyses')
       .insert({
         filename:          `${documentType}_kyc_${Date.now()}`,

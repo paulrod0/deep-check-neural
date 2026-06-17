@@ -5,14 +5,15 @@
  * PATCH  /api/documents/[id]  — update notes/caseRef
  */
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
+import { createClient } from '@insforge/sdk'
 import { validateAdminSession } from '@/lib/adminAuth'
 
 function getClient() {
-    const url = process.env.NEXT_PUBLIC_SUPABASE_URL!
-    const key = process.env.SUPABASE_SERVICE_ROLE_KEY
-        ?? process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-    return createClient(url, key, { auth: { persistSession: false } })
+    return createClient({
+        baseUrl: process.env.NEXT_PUBLIC_INSFORGE_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        anonKey: process.env.INSFORGE_SERVICE_KEY ?? process.env.SUPABASE_SERVICE_ROLE_KEY ?? process.env.NEXT_PUBLIC_INSFORGE_ANON_KEY ?? process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+        isServerMode: true,
+    })
 }
 
 type Params = { params: Promise<{ id: string }> }
@@ -23,7 +24,7 @@ export async function GET(req: NextRequest, { params }: Params) {
     }
     const { id } = await params
     const sb = getClient()
-    const { data, error } = await sb
+    const { data, error } = await sb.database
         .from('dc_document_analyses')
         .select('*')
         .eq('id', id)
@@ -51,7 +52,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     }
 
     const sb = getClient()
-    const { error } = await sb
+    const { error } = await sb.database
         .from('dc_document_analyses')
         .update(updates)
         .eq('id', id)
@@ -66,7 +67,7 @@ export async function DELETE(req: NextRequest, { params }: Params) {
     }
     const { id } = await params
     const sb = getClient()
-    const { error } = await sb
+    const { error } = await sb.database
         .from('dc_document_analyses')
         .delete()
         .eq('id', id)

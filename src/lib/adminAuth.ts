@@ -7,14 +7,14 @@
  */
 
 import { NextRequest } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
+import { createClient } from '@insforge/sdk'
 
 function getClient() {
-    return createClient(
-        process.env.NEXT_PUBLIC_SUPABASE_URL!,
-        process.env.SUPABASE_SERVICE_ROLE_KEY ?? process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-        { auth: { persistSession: false } }
-    )
+    return createClient({
+        baseUrl: process.env.NEXT_PUBLIC_INSFORGE_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        anonKey: process.env.INSFORGE_SERVICE_KEY ?? process.env.SUPABASE_SERVICE_ROLE_KEY ?? process.env.NEXT_PUBLIC_INSFORGE_ANON_KEY ?? process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+        isServerMode: true,
+    })
 }
 
 /**
@@ -27,7 +27,7 @@ export async function validateAdminSession(req: NextRequest): Promise<boolean> {
 
     try {
         const sb = getClient()
-        const { data } = await sb
+        const { data } = await sb.database
             .from('dc_admin_sessions')
             .select('expires_at')
             .eq('token', token)

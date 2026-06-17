@@ -1,9 +1,10 @@
-import { createClient } from '@supabase/supabase-js'
+import { createClient } from '@insforge/sdk'
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY ?? process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-)
+const supabase = createClient({
+  baseUrl: process.env.NEXT_PUBLIC_INSFORGE_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  anonKey: process.env.INSFORGE_SERVICE_KEY ?? process.env.SUPABASE_SERVICE_ROLE_KEY ?? process.env.NEXT_PUBLIC_INSFORGE_ANON_KEY ?? process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+  isServerMode: true,
+})
 
 // ─── Plan definitions ────────────────────────────────────────────────────────
 
@@ -46,7 +47,7 @@ export interface Organization {
 export async function checkSessionLimit(
   orgId: string
 ): Promise<{ allowed: boolean; used: number; limit: number; plan: PlanTier }> {
-  const { data: org } = await supabase
+  const { data: org } = await supabase.database
     .from('dc_organizations')
     .select('plan, sessions_used, period_reset, plan_status')
     .eq('id', orgId)
@@ -56,7 +57,7 @@ export async function checkSessionLimit(
 
   // Auto-reset if period has passed
   if (new Date(org.period_reset) < new Date()) {
-    await supabase
+    await supabase.database
       .from('dc_organizations')
       .update({
         sessions_used: 0,
@@ -82,7 +83,7 @@ export async function checkSessionLimit(
 export async function checkDocLimit(
   orgId: string
 ): Promise<{ allowed: boolean; used: number; limit: number; plan: PlanTier }> {
-  const { data: org } = await supabase
+  const { data: org } = await supabase.database
     .from('dc_organizations')
     .select('plan, docs_used, period_reset')
     .eq('id', orgId)
@@ -99,19 +100,19 @@ export async function checkDocLimit(
 
 /** Increments session usage counter */
 export async function incrementSessionUsage(orgId: string): Promise<void> {
-  await supabase.rpc('dc_increment_sessions', { org_id: orgId })
+  await supabase.database.rpc('dc_increment_sessions', { org_id: orgId })
 }
 
 /** Increments document analysis usage counter */
 export async function incrementDocUsage(orgId: string): Promise<void> {
-  await supabase.rpc('dc_increment_docs', { org_id: orgId })
+  await supabase.database.rpc('dc_increment_docs', { org_id: orgId })
 }
 
 /** Get org by API key (for API v1 endpoints) */
 export async function getOrgByApiKey(
   key: string
 ): Promise<Organization | null> {
-  const { data: apiKey } = await supabase
+  const { data: apiKey } = await supabase.database
     .from('dc_api_keys')
     .select('org_id, is_active')
     .eq('key', key)
@@ -119,7 +120,7 @@ export async function getOrgByApiKey(
 
   if (!apiKey?.is_active || !apiKey.org_id) return null
 
-  const { data: org } = await supabase
+  const { data: org } = await supabase.database
     .from('dc_organizations')
     .select('*')
     .eq('id', apiKey.org_id)
@@ -140,7 +141,7 @@ export async function getPlanUsage(orgId: string): Promise<{
   hasApi: boolean
   upgradeNeeded: boolean
 } | null> {
-  const { data: org } = await supabase
+  const { data: org } = await supabase.database
     .from('dc_organizations')
     .select('plan, sessions_used, docs_used, period_reset')
     .eq('id', orgId)
@@ -149,7 +150,7 @@ export async function getPlanUsage(orgId: string): Promise<{
   if (!org) return null
 
   const plan   = (org.plan || 'free') as PlanTier
-  const limits = PLAN_LIMITS[plan]
+  const limits = PLAN_LIMITS[plan] ?? PLAN_LIMITS.free
 
   return {
     plan,

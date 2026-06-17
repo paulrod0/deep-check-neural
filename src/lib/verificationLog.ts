@@ -8,16 +8,20 @@
  *   - Train future ML models with labeled ground truth
  */
 
-import { createClient } from '@supabase/supabase-js'
+import { createClient } from '@insforge/sdk'
 import crypto from 'crypto'
 
 // ── Supabase client ─────────────────────────────────────────────────────────
 
 function getClient() {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY ?? process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+  const url = process.env.NEXT_PUBLIC_INSFORGE_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL
+  const key = process.env.INSFORGE_SERVICE_KEY ?? process.env.SUPABASE_SERVICE_ROLE_KEY ?? process.env.NEXT_PUBLIC_INSFORGE_ANON_KEY ?? process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
   if (!url || !key) return null
-  return createClient(url, key, { auth: { persistSession: false } })
+  return createClient({
+    baseUrl: url,
+    anonKey: key,
+    isServerMode: true,
+  })
 }
 
 // ── Types ───────────────────────────────────────────────────────────────────
@@ -71,7 +75,7 @@ export async function logVerification(entry: VerificationLogEntry): Promise<stri
   }
 
   try {
-    const { data, error } = await sb
+    const { data, error } = await sb.database
       .from('dc_admissions_verifications')
       .insert({
         document_type:       entry.documentType,
@@ -127,7 +131,7 @@ export async function submitFeedback(
   if (!sb) return false
 
   try {
-    const { error } = await sb
+    const { error } = await sb.database
       .from('dc_admissions_verifications')
       .update({
         feedback_correct:  correct,
@@ -164,7 +168,7 @@ export async function getLearningStats(): Promise<LearningStats | null> {
   if (!sb) return null
 
   try {
-    const { data, error } = await sb
+    const { data, error } = await sb.database
       .from('dc_admissions_verifications')
       .select('document_type, authenticity_score, verdict, ghost_score, feedback_correct, feedback_expected')
 

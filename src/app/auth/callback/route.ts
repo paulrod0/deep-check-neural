@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
+import { createClient } from '@insforge/sdk'
 import { getOrCreateOrg } from '@/lib/auth'
 
 export async function GET(req: NextRequest) {
@@ -11,19 +11,26 @@ export async function GET(req: NextRequest) {
     return NextResponse.redirect(`${origin}/auth/login?error=missing_code`)
   }
 
-  const supabase = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-  )
+  const supabase = createClient({
+    baseUrl: process.env.NEXT_PUBLIC_INSFORGE_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    anonKey: process.env.NEXT_PUBLIC_INSFORGE_ANON_KEY ?? process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    isServerMode: true,
+  })
 
-  const { data, error } = await supabase.auth.exchangeCodeForSession(code)
+  const { data, error } = await supabase.auth.exchangeOAuthCode(code)
 
-  if (error || !data.session) {
+  if (error || !data) {
     console.error('[auth/callback] error:', error?.message)
     return NextResponse.redirect(`${origin}/auth/login?error=invalid_link`)
   }
 
-  const { user, access_token, refresh_token } = data.session
+  const access_token = data.accessToken ?? ''
+  const refresh_token = data.refreshToken ?? ''
+  const user = data.user
+
+  if (!user) {
+    return NextResponse.redirect(`${origin}/auth/login?error=no_user`)
+  }
 
   // Ensure org exists for this user
   await getOrCreateOrg(user.id, user.email!)

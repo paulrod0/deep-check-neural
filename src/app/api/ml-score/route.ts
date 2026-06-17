@@ -15,7 +15,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
-import { getProfileById, getProfileByEmail, KeystrokeProfile } from '@/lib/db'
+import { getProfileById, getProfileByEmailUnscoped, KeystrokeProfile } from '@/lib/db'
 import { writeAuditLog, extractIP } from '@/lib/auditLog'
 import path from 'path'
 
@@ -200,7 +200,7 @@ export async function POST(req: NextRequest) {
         const profile = enrollmentProfileId
             ? await getProfileById(enrollmentProfileId)
             : enrollmentEmail
-                ? await getProfileByEmail(enrollmentEmail)
+                ? await getProfileByEmailUnscoped(enrollmentEmail)
                 : null
 
         if (profile) {

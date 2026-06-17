@@ -1,31 +1,46 @@
 /**
  * Deep-Check · Database layer
- * Backed by Supabase (schema: deepcheck)
+ * Backed by InsForge (migrated from Supabase)
  * All server-side — never import this from client components.
  */
 
-import { createClient } from '@supabase/supabase-js'
+import { createClient } from '@insforge/sdk'
 import crypto from 'crypto'
 
-// ─── Supabase client (server-side only) ───────────────────────────────────────
+// ─── InsForge client (server-side only) ──────────────────────────────────────
 
-const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!
-const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY
+const INSFORGE_URL = process.env.NEXT_PUBLIC_INSFORGE_URL
+    ?? process.env.NEXT_PUBLIC_SUPABASE_URL! // fallback for transition
+const INSFORGE_KEY = process.env.INSFORGE_SERVICE_KEY
+    ?? process.env.SUPABASE_SERVICE_ROLE_KEY
+    ?? process.env.NEXT_PUBLIC_INSFORGE_ANON_KEY
     ?? process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 
+let _client: ReturnType<typeof createClient> | null = null
+
 function getClient() {
-    if (!SUPABASE_URL || !SUPABASE_KEY) {
-        throw new Error('Missing Supabase env vars: NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY')
+    if (_client) return _client
+    if (!INSFORGE_URL) {
+        throw new Error('Missing InsForge env vars: NEXT_PUBLIC_INSFORGE_URL')
     }
-    return createClient(SUPABASE_URL, SUPABASE_KEY, {
-        auth: { persistSession: false },
+    _client = createClient({
+        baseUrl: INSFORGE_URL,
+        anonKey: INSFORGE_KEY,
+        isServerMode: true,
     })
+    return _client
+}
+
+/** Convenience: get the database query builder (replaces supabase.from()) */
+export function db() {
+    return getClient().database
 }
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 export interface Assessment {
     id: string
+    orgId?: string | null
     candidateName: string
     role: string
     date: string
@@ -68,6 +83,7 @@ export interface KeystrokeProfile {
 
 export interface EnrollmentProfile {
     id: string
+    orgId?: string | null
     candidateName: string
     candidateEmail: string
     context: EnrollmentContext
@@ -79,6 +95,7 @@ export interface EnrollmentProfile {
 
 export interface ApiKey {
     key: string
+    orgId: string | null
     name: string
     createdAt: string
     lastUsed?: string
@@ -92,6 +109,7 @@ export interface ApiKey {
 function rowToAssessment(row: Record<string, unknown>): Assessment {
     return {
         id:                   row.id as string,
+        orgId:                row.org_id != null ? row.org_id as string : null,
         candidateName:        row.candidate_name as string,
         role:                 row.role as string,
         date:                 typeof row.date === 'string' ? row.date : new Date(row.date as string | number).toISOString().split('T')[0],
@@ -118,6 +136,7 @@ function rowToAssessment(row: Record<string, unknown>): Assessment {
 function assessmentToRow(a: Assessment) {
     return {
         id:                     a.id,
+        org_id:                 a.orgId ?? null,
         candidate_name:         a.candidateName,
         role:                   a.role,
         date:                   a.date,
@@ -144,6 +163,7 @@ function assessmentToRow(a: Assessment) {
 function rowToProfile(row: Record<string, unknown>): EnrollmentProfile {
     return {
         id:               row.id as string,
+        orgId:            row.org_id != null ? row.org_id as string : null,
         candidateName:    row.candidate_name as string,
         candidateEmail:   row.candidate_email as string,
         context:          row.context as EnrollmentContext,
@@ -157,6 +177,7 @@ function rowToProfile(row: Record<string, unknown>): EnrollmentProfile {
 function profileToRow(ep: EnrollmentProfile) {
     return {
         id:               ep.id,
+        org_id:           ep.orgId ?? null,
         candidate_name:   ep.candidateName,
         candidate_email:  ep.candidateEmail,
         context:          ep.context,
@@ -170,6 +191,7 @@ function profileToRow(ep: EnrollmentProfile) {
 function rowToApiKey(row: Record<string, unknown>): ApiKey {
     return {
         key:         row.key as string,
+        orgId:       row.org_id != null ? row.org_id as string : null,
         name:        row.name as string,
         createdAt:   row.created_at as string,
         lastUsed:    row.last_used != null ? row.last_used as string : undefined,
@@ -181,31 +203,35 @@ function rowToApiKey(row: Record<string, unknown>): ApiKey {
 
 // ─── Assessments ──────────────────────────────────────────────────────────────
 
-export async function getAssessments(): Promise<Assessment[]> {
-    const sb = getClient()
-    const { data, error } = await sb
+export async function getAssessments(orgId?: string | null): Promise<Assessment[]> {
+    // IDOR guard: a caller without an associated org has no tenant scope and
+    // must never receive cross-tenant data.
+    if (!orgId) return []
+    const { data, error } = await db()
         .from('dc_assessments')
         .select('*')
+        .eq('org_id', orgId)
         .order('created_at', { ascending: false })
     if (error) { console.error('[db] getAssessments:', error.message); return [] }
     return (data ?? []).map(rowToAssessment)
 }
 
-export async function getAssessmentById(id: string): Promise<Assessment | null> {
-    const sb = getClient()
-    const { data, error } = await sb
+export async function getAssessmentById(id: string, orgId?: string | null): Promise<Assessment | null> {
+    // IDOR guard: a caller without an associated org has no tenant scope.
+    if (!orgId) return null
+    const { data, error } = await db()
         .from('dc_assessments')
         .select('*')
         .eq('id', id)
+        .eq('org_id', orgId)
         .single()
     if (error) return null
     return data ? rowToAssessment(data) : null
 }
 
 export async function saveAssessment(assessment: Assessment): Promise<void> {
-    const sb = getClient()
     const row = assessmentToRow(assessment)
-    const { error } = await sb
+    const { error } = await db()
         .from('dc_assessments')
         .upsert(row, { onConflict: 'id' })
     if (error) throw new Error(`[db] saveAssessment: ${error.message}`)
@@ -214,16 +240,14 @@ export async function saveAssessment(assessment: Assessment): Promise<void> {
 // ─── Enrollment Profiles ──────────────────────────────────────────────────────
 
 export async function saveEnrollmentProfile(ep: EnrollmentProfile): Promise<void> {
-    const sb = getClient()
-    const { error } = await sb
+    const { error } = await db()
         .from('dc_enrollment_profiles')
         .upsert(profileToRow(ep), { onConflict: 'id' })
     if (error) throw new Error(`[db] saveEnrollmentProfile: ${error.message}`)
 }
 
 export async function getProfileById(id: string): Promise<EnrollmentProfile | null> {
-    const sb = getClient()
-    const { data, error } = await sb
+    const { data, error } = await db()
         .from('dc_enrollment_profiles')
         .select('*')
         .eq('id', id)
@@ -232,9 +256,51 @@ export async function getProfileById(id: string): Promise<EnrollmentProfile | nu
     return data ? rowToProfile(data) : null
 }
 
-export async function getProfileByEmail(email: string): Promise<EnrollmentProfile | null> {
-    const sb = getClient()
-    const { data, error } = await sb
+export async function getProfileByEmail(email: string, orgId?: string | null): Promise<EnrollmentProfile | null> {
+    // IDOR guard: a caller without an associated org has no tenant scope.
+    if (!orgId) return null
+    const { data, error } = await db()
+        .from('dc_enrollment_profiles')
+        .select('*')
+        .eq('candidate_email', email)
+        .eq('org_id', orgId)
+        .gt('expires_at', new Date().toISOString())
+        .order('created_at', { ascending: false })
+        .limit(1)
+    if (error) return null
+    return data && data.length > 0 ? rowToProfile(data[0]) : null
+}
+
+// ─── Intentionally UNSCOPED accessors ─────────────────────────────────────────
+// These cross organization boundaries on purpose and must ONLY be used from
+// trusted/public paths — never from a tenant API-key path:
+//   • getAssessmentByIdUnscoped: public certificate verification by ID, and the
+//     admin dashboard (validateAdminSession — a trusted operator sees all orgs).
+//   • getProfileByEmailUnscoped: internal keystroke scoring (no org context).
+// Naming them explicitly prevents accidental cross-tenant reads via a missing
+// orgId argument.
+
+export async function getAssessmentsUnscoped(): Promise<Assessment[]> {
+    const { data, error } = await db()
+        .from('dc_assessments')
+        .select('*')
+        .order('created_at', { ascending: false })
+    if (error) { console.error('[db] getAssessmentsUnscoped:', error.message); return [] }
+    return (data ?? []).map(rowToAssessment)
+}
+
+export async function getAssessmentByIdUnscoped(id: string): Promise<Assessment | null> {
+    const { data, error } = await db()
+        .from('dc_assessments')
+        .select('*')
+        .eq('id', id)
+        .single()
+    if (error) return null
+    return data ? rowToAssessment(data) : null
+}
+
+export async function getProfileByEmailUnscoped(email: string): Promise<EnrollmentProfile | null> {
+    const { data, error } = await db()
         .from('dc_enrollment_profiles')
         .select('*')
         .eq('candidate_email', email)
@@ -243,6 +309,18 @@ export async function getProfileByEmail(email: string): Promise<EnrollmentProfil
         .limit(1)
     if (error) return null
     return data && data.length > 0 ? rowToProfile(data[0]) : null
+}
+
+// Default org (oldest = primary account owner). Used to assign newly created
+// API keys to a tenant when the admin does not specify one (single-tenant).
+export async function getDefaultOrgId(): Promise<string | null> {
+    const { data, error } = await db()
+        .from('dc_organizations')
+        .select('id')
+        .order('created_at', { ascending: true })
+        .limit(1)
+    if (error) return null
+    return data && data.length > 0 ? (data[0].id as string) : null
 }
 
 // ─── Identity Match Score ─────────────────────────────────────────────────────
@@ -313,8 +391,7 @@ export function computeSessionHash(
 // ─── API Keys ─────────────────────────────────────────────────────────────────
 
 export async function validateApiKey(key: string): Promise<ApiKey | null> {
-    const sb = getClient()
-    const { data, error } = await sb
+    const { data, error } = await db()
         .from('dc_api_keys')
         .select('*')
         .eq('key', key)
@@ -323,7 +400,7 @@ export async function validateApiKey(key: string): Promise<ApiKey | null> {
     if (error || !data) return null
 
     // Update last_used (fire and forget)
-    sb.from('dc_api_keys').update({ last_used: new Date().toISOString() }).eq('key', key)
+    db().from('dc_api_keys').update({ last_used: new Date().toISOString() }).eq('key', key)
 
     return rowToApiKey(data)
 }
@@ -331,19 +408,21 @@ export async function validateApiKey(key: string): Promise<ApiKey | null> {
 export async function createApiKey(
     name: string,
     permissions: ApiKey['permissions'],
-    webhookUrl?: string
+    webhookUrl?: string,
+    orgId?: string | null
 ): Promise<ApiKey> {
-    const sb = getClient()
     const newKey: ApiKey = {
         key:         `dc_live_${crypto.randomBytes(24).toString('hex')}`,
+        orgId:       orgId ?? null,
         name,
         createdAt:   new Date().toISOString(),
         active:      true,
         permissions,
         webhookUrl,
     }
-    const { error } = await sb.from('dc_api_keys').insert({
+    const { error } = await db().from('dc_api_keys').insert({
         key:         newKey.key,
+        org_id:      newKey.orgId,
         name:        newKey.name,
         created_at:  newKey.createdAt,
         active:      newKey.active,
@@ -355,8 +434,7 @@ export async function createApiKey(
 }
 
 export async function getApiKeysList(): Promise<ApiKey[]> {
-    const sb = getClient()
-    const { data, error } = await sb
+    const { data, error } = await db()
         .from('dc_api_keys')
         .select('*')
         .order('created_at', { ascending: false })
@@ -364,8 +442,8 @@ export async function getApiKeysList(): Promise<ApiKey[]> {
     return (data ?? []).map(rowToApiKey)
 }
 
-// ─── initDb (no-op — schema managed via migrations) ──────────────────────────
+// ─── initDb (no-op — schema managed via InsForge migrations) ─────────────────
 
 export async function initDb(): Promise<void> {
-    // Tables are managed by Supabase migrations. Nothing to do here.
+    // Tables are managed by InsForge SQL Editor. Nothing to do here.
 }

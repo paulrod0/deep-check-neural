@@ -14,13 +14,15 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
+import { createClient } from '@insforge/sdk'
 import { validateAdminSession } from '@/lib/adminAuth'
 
 function getClient() {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL!
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY ?? process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-  return createClient(url, key, { auth: { persistSession: false } })
+  return createClient({
+    baseUrl: process.env.NEXT_PUBLIC_INSFORGE_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    anonKey: process.env.INSFORGE_SERVICE_KEY ?? process.env.SUPABASE_SERVICE_ROLE_KEY ?? process.env.NEXT_PUBLIC_INSFORGE_ANON_KEY ?? process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    isServerMode: true,
+  })
 }
 
 export async function GET(req: NextRequest): Promise<NextResponse> {
@@ -35,7 +37,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     const since = new Date(Date.now() - days * 86400_000).toISOString()
 
     // Fetch all KYC verifications in the period
-    const { data: analyses, error } = await supabase
+    const { data: analyses, error } = await supabase.database
       .from('dc_document_analyses')
       .select('id, created_at, risk_score, risk_level, findings, alerts')
       .eq('case_ref', 'identity_verification')

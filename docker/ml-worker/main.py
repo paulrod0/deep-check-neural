@@ -10,11 +10,13 @@ Endpoints:
   GET  /models/status       -- Model versions and metrics
   POST /models/reload       -- Hot-reload models from disk
 """
-import os, io, base64, logging, time
+import os, io, base64, logging, time, secrets
 from pathlib import Path
+from collections import deque, defaultdict
 
 import uvicorn
-from fastapi import FastAPI, HTTPException, UploadFile, File, Form
+from fastapi import FastAPI, HTTPException, UploadFile, File, Form, Request
+from fastapi.responses import JSONResponse
 from PIL import Image
 
 
@@ -95,6 +97,25 @@ PORT = int(os.getenv("PORT", 8001))
 GEMMA_ENABLED = os.getenv("GEMMA_ENABLED", "0") == "1"
 OLLAMA_ENABLED = os.getenv("OLLAMA_ENABLED", "0") == "1"
 
+# ── Security config ──────────────────────────────────────────────────────────
+# API key gate: if ML_WORKER_API_KEY is set, every endpoint except /health
+# requires header `X-API-Key`. If unset, the worker runs UNAUTHENTICATED (dev
+# only) and logs a loud warning. Set it before exposing beyond localhost.
+ML_WORKER_API_KEY = os.getenv("ML_WORKER_API_KEY", "").strip()
+AUTH_ENABLED = bool(ML_WORKER_API_KEY)
+# CORS: comma-separated allowed origins. Default empty = no cross-origin (the
+# worker is server-to-server). Set e.g. "https://app.example.com" only if a
+# browser must call it directly.
+_cors_raw = os.getenv("ML_WORKER_CORS_ORIGINS", "").strip()
+CORS_ORIGINS = [o.strip() for o in _cors_raw.split(",") if o.strip()]
+# Per-IP rate limit (requests/minute). 0 disables. Meaningful because the worker
+# is reachable directly over the network (Tailscale / AWS IP), not only behind nginx.
+RATE_LIMIT = int(os.getenv("ML_WORKER_RATE_LIMIT", "120"))
+# Max request body (MB). Pre-filtered via Content-Length and re-checked per handler.
+MAX_UPLOAD_MB = int(os.getenv("MAX_UPLOAD_MB", "15"))
+PUBLIC_PATHS = {"/health"}
+_rate_buckets: dict = defaultdict(deque)
+
 # Download models on startup if missing
 logger.info("Checking models...")
 ensure_models_exist()
@@ -127,7 +148,49 @@ logger.info("All engines initialized")
 # FastAPI
 app = FastAPI(title="Deep-Check ML Worker", version="3.0.0",
               description="Unified verification API: deepfake + document forensics + keystroke biometrics")
-app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
+app.add_middleware(CORSMiddleware, allow_origins=CORS_ORIGINS, allow_methods=["*"], allow_headers=["*"])
+
+if AUTH_ENABLED:
+    logger.info("Auth ENABLED — endpoints (except /health) require X-API-Key header")
+else:
+    logger.warning("=" * 64)
+    logger.warning("ML_WORKER_API_KEY not set — worker is UNAUTHENTICATED.")
+    logger.warning("Any client that can reach this port can run inference and")
+    logger.warning("trigger model reloads. Set ML_WORKER_API_KEY before exposing")
+    logger.warning("beyond localhost (required for any OEM / third-party deploy).")
+    logger.warning("=" * 64)
+
+
+@app.middleware("http")
+async def security_gate(request: Request, call_next):
+    """Single gate for size pre-filter, API-key auth, and per-IP rate limiting."""
+    path = request.url.path
+
+    # 1. Reject oversized payloads early (cheap, before reading body)
+    cl = request.headers.get("content-length")
+    if cl and cl.isdigit() and int(cl) > MAX_UPLOAD_MB * 1024 * 1024:
+        return JSONResponse({"error": f"Payload too large (max {MAX_UPLOAD_MB}MB)"}, status_code=413)
+
+    is_public = path in PUBLIC_PATHS or request.method == "OPTIONS"
+
+    # 2. API-key auth (constant-time compare) — skip /health and CORS preflight
+    if AUTH_ENABLED and not is_public:
+        provided = request.headers.get("x-api-key", "")
+        if not provided or not secrets.compare_digest(provided, ML_WORKER_API_KEY):
+            return JSONResponse({"error": "Unauthorized"}, status_code=401)
+
+    # 3. Per-IP sliding-window rate limit
+    if RATE_LIMIT > 0 and not is_public:
+        ip = request.client.host if request.client else "unknown"
+        now = time.time()
+        bucket = _rate_buckets[ip]
+        while bucket and now - bucket[0] > 60:
+            bucket.popleft()
+        if len(bucket) >= RATE_LIMIT:
+            return JSONResponse({"error": "Rate limit exceeded"}, status_code=429)
+        bucket.append(now)
+
+    return await call_next(request)
 
 
 # -- Schemas --
@@ -436,9 +499,15 @@ async def analyze_mrz(image: UploadFile = File(None), frameBase64: str = Form(No
         image_bytes = ensure_image_bytes(raw_bytes, image.filename or "")
     elif frameBase64:
         b64 = frameBase64.split(",", 1)[-1] if "," in frameBase64 else frameBase64
-        image_bytes = base64.b64decode(b64)
+        try:
+            image_bytes = base64.b64decode(b64)
+        except Exception:
+            raise HTTPException(400, "Invalid base64")
     else:
         raise HTTPException(400, "Provide 'image' file or 'frameBase64'")
+
+    if len(image_bytes) > MAX_UPLOAD_MB * 1024 * 1024:
+        raise HTTPException(413, f"Image too large (max {MAX_UPLOAD_MB}MB)")
 
     # Base MRZ (always works)
     base_mrz = doc_ocr.extract_mrz(image_bytes)
@@ -464,9 +533,15 @@ async def explain_detection(image: UploadFile = File(None), frameBase64: str = F
         image_bytes = await image.read()
     elif frameBase64:
         b64 = frameBase64.split(",", 1)[-1] if "," in frameBase64 else frameBase64
-        image_bytes = base64.b64decode(b64)
+        try:
+            image_bytes = base64.b64decode(b64)
+        except Exception:
+            raise HTTPException(400, "Invalid base64")
     else:
         raise HTTPException(400, "Provide 'image' file or 'frameBase64'")
+
+    if len(image_bytes) > MAX_UPLOAD_MB * 1024 * 1024:
+        raise HTTPException(413, f"Image too large (max {MAX_UPLOAD_MB}MB)")
 
     if gemma_doc is None:
         raise HTTPException(503, "No LLM engine enabled. Set GEMMA_ENABLED=1 or OLLAMA_ENABLED=1")
@@ -514,16 +589,16 @@ def models_reload():
     deepfake.reload()
     doc_forensics.reload()
     keystroke.reload()
-    gemma_doc.reload()
-    return {
-        "status": "reloaded",
-        "engines": {
-            "deepfake": deepfake.status(),
-            "doc_forensics": doc_forensics.status(),
-            "keystroke": keystroke.status(),
-            "gemma_doc": gemma_doc.status(),
-        },
+    if gemma_doc is not None:
+        gemma_doc.reload()
+    engines = {
+        "deepfake": deepfake.status(),
+        "doc_forensics": doc_forensics.status(),
+        "keystroke": keystroke.status(),
     }
+    if gemma_doc is not None:
+        engines["gemma_doc"] = gemma_doc.status()
+    return {"status": "reloaded", "engines": engines}
 
 
 @app.post("/models/update")

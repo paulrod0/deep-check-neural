@@ -16,20 +16,31 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { getRetrainStatus, triggerRetraining, getModelHistory } from '@/lib/continuousLearning'
-import { createClient } from '@supabase/supabase-js'
+import { createClient } from '@insforge/sdk'
+import { validateAdminSession } from '@/lib/adminAuth'
 
 const RETRAIN_SECRET = process.env.ML_RETRAIN_SECRET || process.env.ML_WEBHOOK_SECRET || ''
 
 function getSupabase() {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL || ''
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
+  const url = process.env.NEXT_PUBLIC_INSFORGE_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL ?? process.env.SUPABASE_URL ?? ''
+  const key = process.env.INSFORGE_SERVICE_KEY ?? process.env.SUPABASE_SERVICE_ROLE_KEY ?? process.env.NEXT_PUBLIC_INSFORGE_ANON_KEY ?? process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? ''
   if (!url || !key) return null
-  return createClient(url, key)
+  return createClient({
+    baseUrl: url,
+    anonKey: key,
+    isServerMode: true,
+  })
 }
 
 // ── GET: Check retrain status ───────────────────────────────────────────────────
 
 export async function GET(req: NextRequest): Promise<NextResponse> {
+  // Auth: retrain status exposes feedback volume and model metrics — admin only.
+  const isAdmin = await validateAdminSession(req)
+  if (!isAdmin) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+
   const orgId = req.nextUrl.searchParams.get('org') || 'global'
 
   try {
@@ -69,10 +80,10 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     authHeader === `Bearer ${RETRAIN_SECRET}`
   )
 
-  // Also check for admin cookie (for dashboard-triggered retraining)
+  // Also accept a validated admin session (for dashboard-triggered retraining)
   if (!isAuthed) {
-    const adminCookie = req.cookies.get('admin_session')?.value
-    if (!adminCookie) {
+    const isAdmin = await validateAdminSession(req)
+    if (!isAdmin) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
   }
@@ -111,7 +122,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   // Log the retrain trigger
   const supabase = getSupabase()
   if (supabase && result.jobName) {
-    await supabase.from('dc_ml_training_jobs').update({
+    await supabase.database.from('dc_ml_training_jobs').update({
       status: 'running',
       started_at: new Date().toISOString(),
     }).eq('job_name', result.jobName)

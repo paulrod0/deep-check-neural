@@ -7,7 +7,7 @@
  */
 
 import { NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
+import { createClient } from '@insforge/sdk'
 import { cookies } from 'next/headers'
 
 export async function POST(): Promise<NextResponse> {
@@ -17,11 +17,12 @@ export async function POST(): Promise<NextResponse> {
 
     // Sign out from Supabase Auth server-side
     if (accessToken) {
-      const supabase = createClient(
-        process.env.NEXT_PUBLIC_SUPABASE_URL!,
-        process.env.SUPABASE_SERVICE_ROLE_KEY ?? process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-      )
-      await supabase.auth.admin.signOut(accessToken).catch(() => {
+      const supabase = createClient({
+        baseUrl: process.env.NEXT_PUBLIC_INSFORGE_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        anonKey: process.env.INSFORGE_SERVICE_KEY ?? process.env.SUPABASE_SERVICE_ROLE_KEY ?? process.env.NEXT_PUBLIC_INSFORGE_ANON_KEY ?? process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+        isServerMode: true,
+      })
+      await supabase.auth.signOut().catch(() => {
         // Non-fatal — token might already be expired
       })
     }

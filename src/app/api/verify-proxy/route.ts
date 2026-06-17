@@ -33,10 +33,12 @@ export async function POST(req: NextRequest) {
     const proxyForm = new FormData()
     proxyForm.append('image', image)
 
+    const mlKey = process.env.ML_WORKER_API_KEY || ''
     const t0 = Date.now()
     const res = await fetch(`${config.url}${config.analyzeEndpoint}`, {
       method: 'POST',
       body: proxyForm,
+      headers: mlKey ? { 'x-api-key': mlKey } : undefined,
     })
 
     if (!res.ok) {

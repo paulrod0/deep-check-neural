@@ -20,7 +20,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
+import { createClient } from '@insforge/sdk'
 import { parseMRZ } from '@/lib/mrzParser'
 import { autoValidateDocument, getCountryByCode } from '@/lib/countryValidators'
 import { validateApiKey, initDb } from '@/lib/db'
@@ -30,11 +30,47 @@ import { validateApiKey, initDb } from '@/lib/db'
 const IS_ONPREMISE = process.env.DEPLOY_MODE === 'onpremise'
 const HAS_AWS = !IS_ONPREMISE && Boolean(process.env.AWS_ACCESS_KEY_ID)
 
+// ML worker for server-side document forensics (DINOv2 + ELA). Optional:
+// if no worker is configured, forensics is skipped (riskScore stays 0) and
+// behavior is identical to before — zero change where no worker exists.
+const ML_WORKER_URL = process.env.ML_WORKER_URL || process.env.XEON_ML_URL || ''
+const ML_WORKER_API_KEY = process.env.ML_WORKER_API_KEY || ''
+
+/**
+ * Run server-side document forensics via the ML worker (/detect/document).
+ * Returns p_tampered in [0,1], or null if no worker is configured or the
+ * call fails (non-fatal — verification continues without forensics).
+ */
+async function runDocForensics(documentBase64: string): Promise<number | null> {
+  if (!ML_WORKER_URL) return null
+  try {
+    const form = new FormData()
+    form.append('frameBase64', documentBase64)
+    const res = await fetch(`${ML_WORKER_URL}/detect/document`, {
+      method: 'POST',
+      body: form,
+      headers: ML_WORKER_API_KEY ? { 'x-api-key': ML_WORKER_API_KEY } : undefined,
+      signal: AbortSignal.timeout(30000),
+    })
+    if (!res.ok) return null
+    const data = await res.json()
+    const p = typeof data?.p_tampered === 'number' ? data.p_tampered : null
+    if (p === null || Number.isNaN(p)) return null
+    return Math.min(1, Math.max(0, p))
+  } catch {
+    return null
+  }
+}
+
 function getSupabase() {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL || ''
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
+  const url = process.env.NEXT_PUBLIC_INSFORGE_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL ?? ''
+  const key = process.env.INSFORGE_SERVICE_KEY ?? process.env.SUPABASE_SERVICE_ROLE_KEY ?? process.env.NEXT_PUBLIC_INSFORGE_ANON_KEY ?? process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? ''
   if (!url || !key) return null
-  return createClient(url, key, { auth: { persistSession: false } })
+  return createClient({
+    baseUrl: url,
+    anonKey: key,
+    isServerMode: true,
+  })
 }
 
 // ── Types ───────────────────────────────────────────────────────────────────────
@@ -71,6 +107,12 @@ interface VerifyDocumentResult {
     alerts: { field: string; detail: string }[]
   }
   forensics: {
+    /**
+     * Whether server-side pixel-level forensics (DINOv2 + ELA) actually ran.
+     * false means no ML worker was configured or the call failed, so
+     * riskScore/riskLevel reflect "not checked" rather than "genuinely clean".
+     */
+    available: boolean
     riskScore: number
     riskLevel: string
   }
@@ -157,12 +199,20 @@ async function verifyDocument(doc: VerifyDocumentRequest): Promise<VerifyDocumen
   }
   const countryInfo = natCode ? getCountryByCode(natCode) : undefined
 
-  // 3. Compute verdict
-  const riskScore = 0 // Client-side forensics not available via API
+  // 2c. Server-side document forensics (DINOv2 + ELA via ML worker, if configured)
+  const pTampered = await runDocForensics(doc.documentFront)
+  const riskScore = pTampered === null ? 0 : Math.round(pTampered * 100)
+
+  // 3. Compute verdict — combine MRZ checksums + face quality + forensics
   let verdict: 'authentic' | 'suspicious' | 'tampered' = 'authentic'
   if (mrzResult.checksumsFailed > 0) verdict = 'suspicious'
   if (mrzResult.checksumsFailed >= 2) verdict = 'tampered'
   if (faceSuspicious) verdict = 'suspicious'
+  // Forensics escalation — only applies when the worker actually ran
+  if (pTampered !== null) {
+    if (pTampered >= 0.7) verdict = 'tampered'
+    else if (pTampered >= 0.5 && verdict === 'authentic') verdict = 'suspicious'
+  }
 
   // 4. Save to database
   let certificateId = `cert_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
@@ -170,7 +220,7 @@ async function verifyDocument(doc: VerifyDocumentRequest): Promise<VerifyDocumen
   const supabase = getSupabase()
   if (supabase) {
     try {
-      const { data } = await supabase
+      const { data } = await supabase.database
         .from('dc_document_analyses')
         .insert({
           filename: `api_${doc.documentType}_${Date.now()}`,
@@ -182,11 +232,12 @@ async function verifyDocument(doc: VerifyDocumentRequest): Promise<VerifyDocumen
           dct_score: 0,
           chroma_score: 0,
           edge_score: 0,
-          manipulation_prob: 0,
+          manipulation_prob: pTampered ?? 0,
           alerts: mrzResult.alerts,
           findings: {
             verdict,
             documentType: doc.documentType,
+            forensicsAvailable: pTampered !== null,
             mrzValid: mrzResult.valid,
             mrzFields: mrzResult.fields,
             mrzAlerts: mrzResult.alerts,
@@ -226,6 +277,7 @@ async function verifyDocument(doc: VerifyDocumentRequest): Promise<VerifyDocumen
       alerts: mrzResult.alerts,
     },
     forensics: {
+      available: pTampered !== null,
       riskScore,
       riskLevel: verdict === 'authentic' ? 'clean' : verdict,
     },

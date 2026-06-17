@@ -13,9 +13,10 @@
  */
 import { NextRequest, NextResponse } from 'next/server'
 import { createHmac } from 'crypto'
-import { createClient } from '@supabase/supabase-js'
+import { createClient } from '@insforge/sdk'
 import { writeAuditLog, extractIP } from '@/lib/auditLog'
 import { getOrgFromSession } from '@/lib/auth'
+import { isUrlSafe, SAFE_FETCH_OPTIONS } from '@/lib/ssrfGuard'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -43,17 +44,21 @@ const webhookStore = new Map<string, WebhookRegistration>()
 // ─── Supabase persistence (best-effort) ──────────────────────────────────────
 
 function getSupabase() {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY ?? process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+  const url = process.env.NEXT_PUBLIC_INSFORGE_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL
+  const key = process.env.INSFORGE_SERVICE_KEY ?? process.env.SUPABASE_SERVICE_ROLE_KEY ?? process.env.NEXT_PUBLIC_INSFORGE_ANON_KEY ?? process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
   if (!url || !key) return null
-  return createClient(url, key, { auth: { persistSession: false } })
+  return createClient({
+    baseUrl: url,
+    anonKey: key,
+    isServerMode: true,
+  })
 }
 
 async function persistWebhook(wh: WebhookRegistration): Promise<void> {
   try {
     const sb = getSupabase()
     if (!sb) return
-    await sb.from('dc_osint_webhooks').upsert({
+    await sb.database.from('dc_osint_webhooks').upsert({
       id:         wh.id,
       url:        wh.url,
       secret:     wh.secret,
@@ -71,7 +76,7 @@ async function deleteWebhookFromDb(id: string): Promise<void> {
   try {
     const sb = getSupabase()
     if (!sb) return
-    await sb.from('dc_osint_webhooks').delete().eq('id', id)
+    await sb.database.from('dc_osint_webhooks').delete().eq('id', id)
   } catch {
     // Ignore
   }
@@ -81,7 +86,7 @@ async function loadWebhooksFromDb(): Promise<void> {
   try {
     const sb = getSupabase()
     if (!sb) return
-    const { data } = await sb.from('dc_osint_webhooks').select('*').limit(500)
+    const { data } = await sb.database.from('dc_osint_webhooks').select('*').limit(500)
     if (!data) return
     for (const row of data) {
       if (!webhookStore.has(row.id)) {
@@ -127,8 +132,14 @@ export async function pushWebhook(event: WebhookEvent, data: unknown): Promise<v
   await Promise.allSettled(
     deliveries.map(async (wh) => {
       try {
+        // SSRF protection: skip webhooks pointing at private/internal targets
+        if (!(await isUrlSafe(wh.url))) {
+          console.warn(`[osint/webhook] Skipping unsafe webhook URL for ${wh.id}`)
+          return
+        }
         const sig = signPayload(payload, wh.secret)
         const resp = await fetch(wh.url, {
+          ...SAFE_FETCH_OPTIONS,
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -176,16 +187,25 @@ const VALID_EVENTS: WebhookEvent[] = [
 
 export async function GET(req: NextRequest) {
   const ip = extractIP(req.headers)
+
+  const org = await getOrgFromSession(req)
+  if (!org) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+
   await loadWebhooksFromDb()
 
-  const webhooks = Array.from(webhookStore.values()).map(wh => ({
-    id:             wh.id,
-    url:            wh.url.replace(/^(https?:\/\/[^/]+).*$/, '$1/***'),
-    events:         wh.events,
-    createdAt:      wh.createdAt,
-    failCount:      wh.failCount,
-    lastDeliveryAt: wh.lastDeliveryAt ?? null,
-  }))
+  // Scope to the caller's organization only — never expose other tenants' webhooks
+  const webhooks = Array.from(webhookStore.values())
+    .filter(wh => wh.orgId === org.id)
+    .map(wh => ({
+      id:             wh.id,
+      url:            wh.url.replace(/^(https?:\/\/[^/]+).*$/, '$1/***'),
+      events:         wh.events,
+      createdAt:      wh.createdAt,
+      failCount:      wh.failCount,
+      lastDeliveryAt: wh.lastDeliveryAt ?? null,
+    }))
 
   void writeAuditLog({
     eventType: 'data_access',
@@ -206,16 +226,19 @@ export async function POST(req: NextRequest) {
   try {
     const { pathname } = new URL(req.url)
     const org = await getOrgFromSession(req)
+    if (!org) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
 
     // Route: POST /api/osint/webhook/test/:id
     const testMatch = pathname.match(/\/api\/osint\/webhook\/test\/([^/]+)/)
     if (testMatch) {
-      return handleTest(testMatch[1], ip, t0)
+      return handleTest(testMatch[1], org.id, ip, t0)
     }
 
     // Route: POST /api/osint/webhook/register
     if (pathname.endsWith('/register') || pathname.endsWith('/webhook')) {
-      return handleRegister(req, org?.id, ip, t0)
+      return handleRegister(req, org.id, ip, t0)
     }
 
     return NextResponse.json({ error: 'Not found' }, { status: 404 })
@@ -228,6 +251,12 @@ export async function POST(req: NextRequest) {
 export async function DELETE(req: NextRequest) {
   const t0 = Date.now()
   const ip = extractIP(req.headers)
+
+  const org = await getOrgFromSession(req)
+  if (!org) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+
   const { searchParams, pathname } = new URL(req.url)
 
   // Support both path param (/webhook/:id) and query param (?id=xxx)
@@ -239,7 +268,14 @@ export async function DELETE(req: NextRequest) {
     return NextResponse.json({ error: 'Webhook ID required' }, { status: 400 })
   }
 
+  // Hydrate store so cross-tenant ownership can be verified against persisted rows
   if (!webhookStore.has(id)) {
+    await loadWebhooksFromDb()
+  }
+
+  const wh = webhookStore.get(id)
+  // Scope to caller's org — never delete another tenant's webhook
+  if (!wh || wh.orgId !== org.id) {
     return NextResponse.json({ error: 'Webhook not found' }, { status: 404 })
   }
 
@@ -263,7 +299,7 @@ export async function DELETE(req: NextRequest) {
 
 async function handleRegister(
   req: NextRequest,
-  orgId: string | undefined,
+  orgId: string,
   ip: string,
   t0: number
 ): Promise<NextResponse> {
@@ -276,6 +312,11 @@ async function handleRegister(
 
   if (!url || !url.startsWith('http')) {
     return NextResponse.json({ error: 'Valid https URL required' }, { status: 400 })
+  }
+
+  // SSRF protection: reject private/internal/metadata webhook targets at registration
+  if (!(await isUrlSafe(url))) {
+    return NextResponse.json({ error: 'Unsafe URL' }, { status: 400 })
   }
 
   const resolvedEvents: WebhookEvent[] = Array.isArray(events)
@@ -316,15 +357,21 @@ async function handleRegister(
   return NextResponse.json({ webhookId: id, secret: webhookSecret, events: resolvedEvents }, { status: 201 })
 }
 
-async function handleTest(id: string, ip: string, t0: number): Promise<NextResponse> {
+async function handleTest(id: string, orgId: string, ip: string, t0: number): Promise<NextResponse> {
   if (!webhookStore.has(id)) {
     // Try loading from DB first
     await loadWebhooksFromDb()
   }
 
   const wh = webhookStore.get(id)
-  if (!wh) {
+  // Scope to caller's org — do not reveal or test other tenants' webhooks
+  if (!wh || wh.orgId !== orgId) {
     return NextResponse.json({ error: 'Webhook not found' }, { status: 404 })
+  }
+
+  // SSRF protection: never fire a test against a private/internal target
+  if (!(await isUrlSafe(wh.url))) {
+    return NextResponse.json({ error: 'Unsafe URL' }, { status: 400 })
   }
 
   const testPayload = JSON.stringify({
@@ -346,6 +393,7 @@ async function handleTest(id: string, ip: string, t0: number): Promise<NextRespo
   try {
     const sig = signPayload(testPayload, wh.secret)
     const resp = await fetch(wh.url, {
+      ...SAFE_FETCH_OPTIONS,
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

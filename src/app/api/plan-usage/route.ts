@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getOrgFromSession, validateLegacyAdmin } from '@/lib/auth'
 import { getPlanUsage } from '@/lib/planLimits'
-import { createClient } from '@supabase/supabase-js'
+import { createClient } from '@insforge/sdk'
 import { cookies } from 'next/headers'
 
 export async function GET(req: NextRequest) {

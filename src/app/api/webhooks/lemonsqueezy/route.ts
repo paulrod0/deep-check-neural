@@ -1,11 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
 import crypto from 'crypto'
-import { createClient } from '@supabase/supabase-js'
+import { createClient } from '@insforge/sdk'
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY ?? process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-)
+const supabase = createClient({
+  baseUrl: process.env.NEXT_PUBLIC_INSFORGE_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  anonKey: process.env.INSFORGE_SERVICE_KEY ?? process.env.SUPABASE_SERVICE_ROLE_KEY ?? process.env.NEXT_PUBLIC_INSFORGE_ANON_KEY ?? process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+  isServerMode: true,
+})
 
 // ─── Signature verification ───────────────────────────────────────────────────
 
@@ -62,7 +63,7 @@ export async function POST(req: NextRequest) {
   const variantId = String(attrs.variant_id ?? '')
   const status    = String(attrs.status ?? 'active')
 
-  console.log(`[ls-webhook] ${eventName} | sub=${lsSubId} email=${email}`)
+  console.log(`[ls-webhook] ${eventName} | sub=${lsSubId} cust=${custId}`)
 
   switch (eventName) {
     // ── New subscription created ───────────────────────────────────────────
@@ -70,14 +71,14 @@ export async function POST(req: NextRequest) {
       const plan = variantToPlan(variantId)
 
       // Upsert organization
-      const { data: existingOrg } = await supabase
+      const { data: existingOrg } = await supabase.database
         .from('dc_organizations')
         .select('id')
         .eq('owner_email', email)
         .single()
 
       if (existingOrg) {
-        await supabase
+        await supabase.database
           .from('dc_organizations')
           .update({
             plan,
@@ -88,7 +89,7 @@ export async function POST(req: NextRequest) {
           })
           .eq('id', existingOrg.id)
       } else {
-        await supabase.from('dc_organizations').insert({
+        await supabase.database.from('dc_organizations').insert({
           owner_email:        email,
           name:               email.split('@')[0],
           plan,
@@ -108,7 +109,7 @@ export async function POST(req: NextRequest) {
         ? 'active'
         : status === 'paused' ? 'paused' : 'cancelled'
 
-      await supabase
+      await supabase.database
         .from('dc_organizations')
         .update({
           plan,
@@ -122,7 +123,7 @@ export async function POST(req: NextRequest) {
 
     // ── Subscription cancelled (access until period end) ──────────────────
     case 'subscription_cancelled': {
-      await supabase
+      await supabase.database
         .from('dc_organizations')
         .update({ plan_status: 'cancelled' })
         .eq('ls_subscription_id', lsSubId)
@@ -131,7 +132,7 @@ export async function POST(req: NextRequest) {
 
     // ── Subscription expired (downgrade to free) ──────────────────────────
     case 'subscription_expired': {
-      await supabase
+      await supabase.database
         .from('dc_organizations')
         .update({ plan: 'free', plan_status: 'expired', ls_subscription_id: null })
         .eq('ls_subscription_id', lsSubId)
@@ -140,7 +141,7 @@ export async function POST(req: NextRequest) {
 
     // ── Payment failed (warn but keep access temporarily) ─────────────────
     case 'subscription_payment_failed': {
-      await supabase
+      await supabase.database
         .from('dc_organizations')
         .update({ plan_status: 'paused' })
         .eq('ls_subscription_id', lsSubId)

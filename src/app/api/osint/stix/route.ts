@@ -6,7 +6,7 @@
  * POST /api/osint/stix                  — convert posted analysis JSON to STIX bundle
  */
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
+import { createClient } from '@insforge/sdk'
 import { writeAuditLog, extractIP } from '@/lib/auditLog'
 import { getOrgFromSession } from '@/lib/auth'
 import { getOrgByApiKey } from '@/lib/planLimits'
@@ -24,9 +24,11 @@ async function resolveAuth(req: NextRequest) {
 // ─── Supabase client ──────────────────────────────────────────────────────────
 
 function getSupabase() {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL!
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY ?? process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-  return createClient(url, key, { auth: { persistSession: false } })
+  return createClient({
+    baseUrl: process.env.NEXT_PUBLIC_INSFORGE_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    anonKey: process.env.INSFORGE_SERVICE_KEY ?? process.env.SUPABASE_SERVICE_ROLE_KEY ?? process.env.NEXT_PUBLIC_INSFORGE_ANON_KEY ?? process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    isServerMode: true,
+  })
 }
 
 // ─── STIX object types ────────────────────────────────────────────────────────
@@ -242,10 +244,11 @@ export async function GET(req: NextRequest) {
     let rows: AnalysisRow[] = []
 
     if (analysisId) {
-      const { data, error } = await sb
+      const { data, error } = await sb.database
         .from('dc_document_analyses')
         .select('id, created_at, filename, file_size, mime_type, risk_score, risk_level, ela_score, exif_score, noise_score, alerts, findings, case_ref')
         .eq('id', analysisId)
+        .eq('org_id', org.id)   // IDOR guard: never export another tenant's evidence
         .single()
 
       if (error || !data) {
@@ -258,9 +261,10 @@ export async function GET(req: NextRequest) {
         return NextResponse.json({ error: 'Invalid since date' }, { status: 400 })
       }
 
-      const { data, error } = await sb
+      const { data, error } = await sb.database
         .from('dc_document_analyses')
         .select('id, created_at, filename, file_size, mime_type, risk_score, risk_level, ela_score, exif_score, noise_score, alerts, findings, case_ref')
+        .eq('org_id', org.id)   // IDOR guard: scope export to caller's tenant
         .gte('created_at', sinceDate.toISOString())
         .order('created_at', { ascending: true })
         .limit(1000)
