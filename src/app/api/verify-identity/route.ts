@@ -3,10 +3,15 @@ import { NextRequest, NextResponse } from 'next/server'
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
 
-const ML_URL = process.env.XEON_ML_URL || 'http://100.116.188.12:8001'
+// Worker URL from env (fail-closed — no hardcoded IP). Use HTTPS or a private
+// network: identity documents (PII) transit here.
+const ML_URL = process.env.XEON_ML_URL || ''
 const ML_KEY = process.env.ML_WORKER_API_KEY || ''
 
 export async function POST(req: NextRequest) {
+  if (!ML_URL) {
+    return NextResponse.json({ error: 'ML backend not configured (set XEON_ML_URL)' }, { status: 503 })
+  }
   try {
     const formData = await req.formData()
     const front = formData.get('front') as File
