@@ -1,6 +1,6 @@
 import React from 'react'
 import Link from 'next/link'
-import { createClient } from '@supabase/supabase-js'
+import { createClient } from '@insforge/sdk'
 import { riskLevelColor, riskLevelLabel, type RiskLevel } from '@/lib/imageForensics'
 import ForensicPdfButton from './ForensicPdfButton'
 import styles from './page.module.css'
@@ -51,12 +51,12 @@ interface DocumentAnalysis {
 // ─── Data fetching ────────────────────────────────────────────────────────────
 
 async function getAnalysis(id: string): Promise<DocumentAnalysis | null> {
-    const sb = createClient(
-        process.env.NEXT_PUBLIC_SUPABASE_URL!,
-        process.env.SUPABASE_SERVICE_ROLE_KEY ?? process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-        { auth: { persistSession: false } }
-    )
-    const { data } = await sb
+    const sb = createClient({
+        baseUrl: process.env.NEXT_PUBLIC_INSFORGE_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        anonKey: process.env.INSFORGE_SERVICE_KEY ?? process.env.SUPABASE_SERVICE_ROLE_KEY ?? process.env.NEXT_PUBLIC_INSFORGE_ANON_KEY ?? process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+        isServerMode: true,
+    })
+    const { data } = await sb.database
         .from('dc_document_analyses')
         .select('*')
         .eq('id', id)

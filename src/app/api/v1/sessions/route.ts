@@ -39,7 +39,7 @@ export async function GET(req: NextRequest) {
     if (!keyRecord || !keyRecord.permissions.includes('read')) return unauthorized()
 
     await initDb()
-    const all = await getAssessments()
+    const all = await getAssessments(keyRecord.orgId)
 
     // Pagination
     const url = new URL(req.url)

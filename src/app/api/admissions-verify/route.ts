@@ -1145,7 +1145,7 @@ export async function POST(req: NextRequest): Promise<NextResponse<AdmissionsVer
       null,  // pass null for MRZ to force OCR-based extraction (visual text)
       frontKvPairs,
     )
-    console.log(`[admissions-verify] Cross-val inputs — MRZ name: "${mrzAnalysis.fields.surname}, ${mrzAnalysis.fields.givenNames}" | Visual name: "${visualFields.fullName}"`)
+    console.log(`[admissions-verify] Cross-val inputs prepared — mrzNamePresent=${Boolean(mrzAnalysis.fields.surname || mrzAnalysis.fields.givenNames)} visualNamePresent=${Boolean(visualFields.fullName)}`)
 
     crossValidationResult = crossValidateMRZvsOCR(
       {
@@ -1170,7 +1170,7 @@ export async function POST(req: NextRequest): Promise<NextResponse<AdmissionsVer
     )
     console.log(`[admissions-verify] Cross-validation: ${crossValidationResult.fieldsMatched}/${crossValidationResult.fieldsCompared} matched, score=${crossValidationResult.crossScore}`)
     if (crossValidationResult.alerts.length > 0) {
-      console.log(`[admissions-verify] Cross-validation ALERTS:`, crossValidationResult.alerts.map(a => `${a.field}: MRZ="${a.mrzValue}" vs OCR="${a.ocrValue}"`))
+      console.log(`[admissions-verify] Cross-validation ALERTS on fields:`, crossValidationResult.alerts.map(a => a.field))
     }
   }
 

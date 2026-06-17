@@ -17,10 +17,11 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
+import { createClient } from '@insforge/sdk'
 import { parseMRZ } from '@/lib/mrzParser'
 import { autoValidateDocument, getCountryByCode } from '@/lib/countryValidators'
 import { validateApiKey, initDb } from '@/lib/db'
+import { runDocForensics } from '@/lib/docForensics'
 
 // ── Config ──────────────────────────────────────────────────────────────────────
 
@@ -30,10 +31,14 @@ const MAX_BATCH_SIZE = 100
 const CONCURRENCY = 5
 
 function getSupabase() {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL || ''
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
+  const url = process.env.NEXT_PUBLIC_INSFORGE_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL ?? ''
+  const key = process.env.INSFORGE_SERVICE_KEY ?? process.env.SUPABASE_SERVICE_ROLE_KEY ?? process.env.NEXT_PUBLIC_INSFORGE_ANON_KEY ?? process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? ''
   if (!url || !key) return null
-  return createClient(url, key, { auth: { persistSession: false } })
+  return createClient({
+    baseUrl: url,
+    anonKey: key,
+    isServerMode: true,
+  })
 }
 
 // ── In-memory job store (replaced by DB in production) ──────────────────────
@@ -128,30 +133,40 @@ async function processDocument(doc: BatchDocument, index: number): Promise<Batch
       }
     }
 
-    // 3. Verdict
+    // 3. Server-side document forensics (DINOv2 + ELA via ML worker, if configured).
+    //    null => no worker / call failed => behave exactly as before (riskScore 0).
+    const pTampered = await runDocForensics(doc.documentFront)
+    const riskScore = pTampered === null ? 0 : Math.round(pTampered * 100)
+
+    // 4. Verdict — combine MRZ checksums + forensics (only when forensics ran)
     let verdict: 'authentic' | 'suspicious' | 'tampered' = 'authentic'
     if (mrzResult.checksumsFailed > 0) verdict = 'suspicious'
     if (mrzResult.checksumsFailed >= 2) verdict = 'tampered'
+    if (pTampered !== null) {
+      if (pTampered >= 0.7) verdict = 'tampered'
+      else if (pTampered >= 0.5 && verdict === 'authentic') verdict = 'suspicious'
+    }
 
-    // 4. Save to DB
+    // 5. Save to DB
     let certificateId = `cert_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
     const supabase = getSupabase()
     if (supabase) {
       try {
         const countryInfo = natCode ? getCountryByCode(natCode) : undefined
-        const { data } = await supabase
+        const { data } = await supabase.database
           .from('dc_document_analyses')
           .insert({
             filename: `batch_${doc.documentType}_${Date.now()}_${index}`,
-            risk_score: 0,
+            risk_score: riskScore,
             risk_level: verdict === 'authentic' ? 'clean' : verdict,
             ela_score: 0, exif_score: 0, noise_score: 0,
             dct_score: 0, chroma_score: 0, edge_score: 0,
-            manipulation_prob: 0,
+            manipulation_prob: pTampered ?? 0,
             alerts: mrzResult.alerts,
             findings: {
               verdict,
               documentType: doc.documentType,
+              forensicsAvailable: pTampered !== null,
               mrzValid: mrzResult.valid,
               mrzFields: fields,
               batchVerification: true,
@@ -182,7 +197,7 @@ async function processDocument(doc: BatchDocument, index: number): Promise<Batch
       nationality: fields.nationality || null,
       docNumber: fields.docNumber || null,
       mrzValid: mrzResult.valid,
-      riskScore: 0,
+      riskScore,
       countryValidation,
       verifyUrl: `${baseUrl}/verify/${certificateId}`,
       externalRef: doc.externalRef,
@@ -246,7 +261,7 @@ async function processBatch(job: BatchJob, documents: BatchDocument[]) {
   const supabase = getSupabase()
   if (supabase) {
     try {
-      await supabase
+      await supabase.database
         .from('dc_document_analyses')
         .insert({
           filename: `batch_summary_${job.jobId}`,

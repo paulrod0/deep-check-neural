@@ -13,18 +13,35 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { getRetrainStatus, getModelHistory } from '@/lib/continuousLearning'
-import { createClient } from '@supabase/supabase-js'
+import { createClient } from '@insforge/sdk'
+import { getOrgFromSession } from '@/lib/auth'
+import { validateAdminSession } from '@/lib/adminAuth'
 
 function getSupabase() {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL || ''
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
+  const url = process.env.NEXT_PUBLIC_INSFORGE_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL ?? process.env.SUPABASE_URL ?? ''
+  const key = process.env.INSFORGE_SERVICE_KEY ?? process.env.SUPABASE_SERVICE_ROLE_KEY ?? process.env.NEXT_PUBLIC_INSFORGE_ANON_KEY ?? process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? ''
   if (!url || !key) return null
-  return createClient(url, key)
+  return createClient({
+    baseUrl: url,
+    anonKey: key,
+    isServerMode: true,
+  })
 }
 
 export async function GET(req: NextRequest): Promise<NextResponse> {
-  // Get orgId from query param or use 'global'
-  const orgId = req.nextUrl.searchParams.get('org') || 'global'
+  // ── Auth gate ───────────────────────────────────────────────────────────────
+  // Status exposes per-org training jobs, feedback stats and operational config.
+  // A session caller may only view their own org; the cross-org 'global'
+  // aggregate is admin-only.
+  const org = await getOrgFromSession(req)
+  let orgId: string
+  if (org) {
+    orgId = org.id
+  } else {
+    const isAdmin = await validateAdminSession(req)
+    if (!isAdmin) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    orgId = req.nextUrl.searchParams.get('org') || 'global'
+  }
 
   try {
     const [retrainStatus, modelHistory] = await Promise.all([
@@ -39,7 +56,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
 
     if (supabase) {
       // Training jobs
-      const { data: jobs } = await supabase
+      const { data: jobs } = await supabase.database
         .from('dc_ml_training_jobs')
         .select('*')
         .eq('org_id', orgId)
@@ -49,19 +66,19 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
       trainingJobs = jobs || []
 
       // Feedback stats
-      const { count: totalFeedback } = await supabase
+      const { count: totalFeedback } = await supabase.database
         .from('dc_ml_feedback')
         .select('*', { count: 'exact', head: true })
         .eq('org_id', orgId)
 
-      const { count: usedFeedback } = await supabase
+      const { count: usedFeedback } = await supabase.database
         .from('dc_ml_feedback')
         .select('*', { count: 'exact', head: true })
         .eq('org_id', orgId)
         .eq('used_in_training', true)
 
       // Count corrections (where predicted != actual)
-      const { data: corrections } = await supabase
+      const { data: corrections } = await supabase.database
         .from('dc_ml_feedback')
         .select('predicted_label, actual_label')
         .eq('org_id', orgId)

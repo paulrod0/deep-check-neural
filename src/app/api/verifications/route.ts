@@ -14,13 +14,15 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
+import { createClient } from '@insforge/sdk'
 import { validateAdminSession } from '@/lib/adminAuth'
 
 function getClient() {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL!
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY ?? process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-  return createClient(url, key, { auth: { persistSession: false } })
+  return createClient({
+    baseUrl: process.env.NEXT_PUBLIC_INSFORGE_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    anonKey: process.env.INSFORGE_SERVICE_KEY ?? process.env.SUPABASE_SERVICE_ROLE_KEY ?? process.env.NEXT_PUBLIC_INSFORGE_ANON_KEY ?? process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    isServerMode: true,
+  })
 }
 
 export async function GET(req: NextRequest): Promise<NextResponse> {
@@ -42,7 +44,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   try {
     const supabase = getClient()
 
-    let query = supabase
+    let query = supabase.database
       .from('dc_document_analyses')
       .select('id, created_at, filename, risk_score, risk_level, findings, alerts, case_ref', { count: 'exact' })
       .eq('case_ref', 'identity_verification')

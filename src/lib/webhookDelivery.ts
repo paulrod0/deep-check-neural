@@ -10,12 +10,13 @@
  */
 
 import crypto from 'crypto'
-import { createClient } from '@supabase/supabase-js'
+import { createClient } from '@insforge/sdk'
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY ?? process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-)
+const supabase = createClient({
+  baseUrl: process.env.NEXT_PUBLIC_INSFORGE_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  anonKey: process.env.INSFORGE_SERVICE_KEY ?? process.env.SUPABASE_SERVICE_ROLE_KEY ?? process.env.NEXT_PUBLIC_INSFORGE_ANON_KEY ?? process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+  isServerMode: true,
+})
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -68,7 +69,7 @@ export async function deliverWebhook(options: {
   const payloadStr = JSON.stringify(payload)
 
   // Create delivery record
-  const { data: delivery, error: insertErr } = await supabase
+  const { data: delivery, error: insertErr } = await supabase.database
     .from('dc_webhook_deliveries')
     .insert({
       org_id: options.orgId,
@@ -131,7 +132,7 @@ async function attemptDelivery(
 
     if (response.ok) {
       // Success
-      await supabase
+      await supabase.database
         .from('dc_webhook_deliveries')
         .update({
           status: 'delivered',
@@ -168,7 +169,7 @@ async function handleFailure(
 
   if (attempt >= maxAttempts) {
     // All retries exhausted
-    await supabase
+    await supabase.database
       .from('dc_webhook_deliveries')
       .update({
         status: 'failed',
@@ -187,7 +188,7 @@ async function handleFailure(
   const backoffMs = 30000 * Math.pow(4, attempt - 1)
   const nextRetry = new Date(Date.now() + backoffMs).toISOString()
 
-  await supabase
+  await supabase.database
     .from('dc_webhook_deliveries')
     .update({
       status: 'retrying',
@@ -210,7 +211,7 @@ export async function processRetryQueue(): Promise<{
   delivered: number
   failed: number
 }> {
-  const { data: pending } = await supabase
+  const { data: pending } = await supabase.database
     .from('dc_webhook_deliveries')
     .select('id, webhook_url, payload, attempts')
     .in('status', ['pending', 'retrying'])
@@ -255,7 +256,7 @@ export async function getDeliveryHistory(
   createdAt: string
   deliveredAt: string | null
 }>> {
-  let query = supabase
+  let query = supabase.database
     .from('dc_webhook_deliveries')
     .select('id, event_type, webhook_url, status, attempts, response_status, created_at, delivered_at')
     .eq('org_id', orgId)

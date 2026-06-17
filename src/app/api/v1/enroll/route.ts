@@ -40,7 +40,7 @@ export async function GET(req: NextRequest) {
         return cors(NextResponse.json({ success: false, error: 'email query param required' }, { status: 400 }))
     }
 
-    const profile = await getProfileByEmail(email)
+    const profile = await getProfileByEmail(email, keyRecord.orgId)
     if (!profile) {
         return cors(NextResponse.json({ success: false, error: 'No active enrollment profile found' }, { status: 404 }))
     }

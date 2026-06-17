@@ -6,7 +6,7 @@
  * DELETE /api/auth/dashboard — revoke session (logout)
  */
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
+import { createClient } from '@insforge/sdk'
 import crypto from 'crypto'
 
 // ADMIN_PASSWORD must be set as an env var — no hardcoded fallback.
@@ -14,11 +14,11 @@ import crypto from 'crypto'
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || null
 
 function getClient() {
-    return createClient(
-        process.env.NEXT_PUBLIC_SUPABASE_URL!,
-        process.env.SUPABASE_SERVICE_ROLE_KEY ?? process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-        { auth: { persistSession: false } }
-    )
+    return createClient({
+        baseUrl: process.env.NEXT_PUBLIC_INSFORGE_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        anonKey: process.env.INSFORGE_SERVICE_KEY ?? process.env.SUPABASE_SERVICE_ROLE_KEY ?? process.env.NEXT_PUBLIC_INSFORGE_ANON_KEY ?? process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+        isServerMode: true,
+    })
 }
 
 function hashIP(ip: string): string {
@@ -64,7 +64,7 @@ export async function POST(req: NextRequest) {
 
         // Persist session
         const sb = getClient()
-        await sb.from('dc_admin_sessions').insert({
+        await sb.database.from('dc_admin_sessions').insert({
             token,
             expires_at: expiresAt.toISOString(),
             ip_hash: ipHash,
@@ -97,7 +97,7 @@ export async function DELETE(req: NextRequest) {
 
     if (token) {
         const sb = getClient()
-        await sb.from('dc_admin_sessions').delete().eq('token', token)
+        await sb.database.from('dc_admin_sessions').delete().eq('token', token)
         await writeAuditLog('auth_logout', '/api/auth/dashboard', 'DELETE', hashIP(ip), 200)
     }
 
@@ -114,7 +114,7 @@ async function writeAuditLog(
 ) {
     try {
         const sb = getClient()
-        await sb.from('dc_audit_logs').insert({
+        await sb.database.from('dc_audit_logs').insert({
             event_type:  eventType,
             endpoint,
             method,

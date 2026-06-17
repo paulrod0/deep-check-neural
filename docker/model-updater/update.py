@@ -10,6 +10,7 @@ S3_BUCKET = os.getenv("S3_BUCKET", "deep-check-models")
 S3_PREFIX = os.getenv("S3_PREFIX", "approved")
 CHECK_INTERVAL = int(os.getenv("CHECK_INTERVAL", "21600"))  # 6 hours
 ML_WORKER_URL = os.getenv("ML_WORKER_URL", "http://ml-worker:8001")
+ML_WORKER_API_KEY = os.getenv("ML_WORKER_API_KEY", "").strip()
 VERSIONS_FILE = MODEL_DIR / "versions.json"
 
 ENGINES = ["deepfake", "doc_forensics", "keystroke"]
@@ -39,6 +40,8 @@ def notify_worker():
     try:
         import urllib.request
         req = urllib.request.Request(f"{ML_WORKER_URL}/models/reload", method="POST")
+        if ML_WORKER_API_KEY:
+            req.add_header("x-api-key", ML_WORKER_API_KEY)
         urllib.request.urlopen(req, timeout=30)
         log.info("ML worker notified to reload")
     except Exception as e:

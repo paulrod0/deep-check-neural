@@ -4,6 +4,7 @@ export const dynamic = 'force-dynamic'
 export const maxDuration = 60
 
 const ML_URL = process.env.XEON_ML_URL || 'http://100.116.188.12:8001'
+const ML_KEY = process.env.ML_WORKER_API_KEY || ''
 
 export async function POST(req: NextRequest) {
   try {
@@ -22,6 +23,7 @@ export async function POST(req: NextRequest) {
     const res = await fetch(`${ML_URL}/verify/identity`, {
       method: 'POST',
       body: proxyForm,
+      headers: ML_KEY ? { 'x-api-key': ML_KEY } : undefined,
     })
 
     if (!res.ok) {

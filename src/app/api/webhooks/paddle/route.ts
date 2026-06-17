@@ -12,12 +12,13 @@
  */
 import { NextRequest, NextResponse } from 'next/server'
 import crypto from 'crypto'
-import { createClient } from '@supabase/supabase-js'
+import { createClient } from '@insforge/sdk'
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY ?? process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-)
+const supabase = createClient({
+  baseUrl: process.env.NEXT_PUBLIC_INSFORGE_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  anonKey: process.env.INSFORGE_SERVICE_KEY ?? process.env.SUPABASE_SERVICE_ROLE_KEY ?? process.env.NEXT_PUBLIC_INSFORGE_ANON_KEY ?? process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+  isServerMode: true,
+})
 
 // ─── Signature verification ───────────────────────────────────────────────────
 
@@ -108,13 +109,13 @@ export async function POST(req: NextRequest) {
 
       // Try to find org by org_id from custom_data first, then by email
       const { data: existingOrg } = orgId
-        ? await supabase.from('dc_organizations').select('id').eq('id', orgId).single()
+        ? await supabase.database.from('dc_organizations').select('id').eq('id', orgId).single()
         : email
-          ? await supabase.from('dc_organizations').select('id').eq('owner_email', email).single()
+          ? await supabase.database.from('dc_organizations').select('id').eq('owner_email', email).single()
           : { data: null }
 
       if (existingOrg) {
-        await supabase
+        await supabase.database
           .from('dc_organizations')
           .update({
             plan,
@@ -125,7 +126,7 @@ export async function POST(req: NextRequest) {
           })
           .eq('id', existingOrg.id)
       } else if (email) {
-        await supabase.from('dc_organizations').insert({
+        await supabase.database.from('dc_organizations').insert({
           owner_email:            email,
           name:                   email.split('@')[0],
           plan,
@@ -148,7 +149,7 @@ export async function POST(req: NextRequest) {
         status === 'past_due' ? 'active'    :  // keep access while past_due
         status === 'paused'   ? 'paused'    : 'cancelled'
 
-      await supabase
+      await supabase.database
         .from('dc_organizations')
         .update({
           plan,
@@ -161,7 +162,7 @@ export async function POST(req: NextRequest) {
 
     // ── Subscription cancelled (keeps access until period end) ───────────────
     case 'subscription.canceled': {
-      await supabase
+      await supabase.database
         .from('dc_organizations')
         .update({ plan_status: 'cancelled' })
         .eq('paddle_subscription_id', subId)
@@ -170,7 +171,7 @@ export async function POST(req: NextRequest) {
 
     // ── Subscription paused (payment failed + grace period expired) ──────────
     case 'subscription.paused': {
-      await supabase
+      await supabase.database
         .from('dc_organizations')
         .update({ plan_status: 'paused' })
         .eq('paddle_subscription_id', subId)
@@ -179,7 +180,7 @@ export async function POST(req: NextRequest) {
 
     // ── Subscription resumed after pause ────────────────────────────────────
     case 'subscription.resumed': {
-      await supabase
+      await supabase.database
         .from('dc_organizations')
         .update({ plan_status: 'active' })
         .eq('paddle_subscription_id', subId)
@@ -191,7 +192,7 @@ export async function POST(req: NextRequest) {
       const txSubId = String(
         (data.subscription_id ?? subId) || ''
       )
-      await supabase
+      await supabase.database
         .from('dc_organizations')
         .update({ plan_status: 'paused' })
         .eq('paddle_subscription_id', txSubId)

@@ -22,7 +22,7 @@
  *   → On-premise installations keep all data local
  */
 
-import { createClient } from '@supabase/supabase-js'
+import { createClient } from '@insforge/sdk'
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -76,10 +76,14 @@ const MIN_AUC_FOR_DEPLOY = parseFloat(process.env.ML_MIN_AUC || '0.80')
 // ── Supabase Client ────────────────────────────────────────────────────────────
 
 function getSupabase() {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL || ''
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
+  const url = process.env.NEXT_PUBLIC_INSFORGE_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL ?? process.env.SUPABASE_URL ?? ''
+  const key = process.env.INSFORGE_SERVICE_KEY ?? process.env.SUPABASE_SERVICE_ROLE_KEY ?? process.env.NEXT_PUBLIC_INSFORGE_ANON_KEY ?? process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? ''
   if (!url || !key) return null
-  return createClient(url, key)
+  return createClient({
+    baseUrl: url,
+    anonKey: key,
+    isServerMode: true,
+  })
 }
 
 // ── Feedback Collection ────────────────────────────────────────────────────────
@@ -95,7 +99,7 @@ export async function submitFeedback(feedback: MLFeedback): Promise<{ success: b
   }
 
   try {
-    const { error } = await supabase
+    const { error } = await supabase.database
       .from('dc_ml_feedback')
       .insert({
         org_id: feedback.org_id,
@@ -144,14 +148,14 @@ export async function getRetrainStatus(orgId: string): Promise<RetrainStatus> {
 
   try {
     // Count unused feedback
-    const { count: pendingCount } = await supabase
+    const { count: pendingCount } = await supabase.database
       .from('dc_ml_feedback')
       .select('*', { count: 'exact', head: true })
       .eq('org_id', orgId)
       .eq('used_in_training', false)
 
     // Get latest model version
-    const { data: latestModel } = await supabase
+    const { data: latestModel } = await supabase.database
       .from('dc_ml_models')
       .select('*')
       .eq('org_id', orgId)
@@ -160,7 +164,7 @@ export async function getRetrainStatus(orgId: string): Promise<RetrainStatus> {
       .single()
 
     // Total feedback count
-    const { count: totalCount } = await supabase
+    const { count: totalCount } = await supabase.database
       .from('dc_ml_feedback')
       .select('*', { count: 'exact', head: true })
       .eq('org_id', orgId)
@@ -214,7 +218,7 @@ export async function triggerRetraining(orgId: string): Promise<{
 
   try {
     // Mark feedback as being used in training
-    const { data: feedbackData } = await supabase
+    const { data: feedbackData } = await supabase.database
       .from('dc_ml_feedback')
       .select('*')
       .eq('org_id', orgId)
@@ -257,7 +261,7 @@ export async function triggerRetraining(orgId: string): Promise<{
     // }))
 
     // Record the retraining job
-    await supabase.from('dc_ml_training_jobs').insert({
+    await supabase.database.from('dc_ml_training_jobs').insert({
       org_id: orgId,
       job_name: jobName,
       status: 'pending',
@@ -267,7 +271,7 @@ export async function triggerRetraining(orgId: string): Promise<{
 
     // Mark feedback as used
     const feedbackIds = feedbackData.map(f => f.id)
-    await supabase
+    await supabase.database
       .from('dc_ml_feedback')
       .update({ used_in_training: true, training_job: jobName })
       .in('id', feedbackIds)
@@ -304,7 +308,7 @@ export async function deployModel(
 
   try {
     // Check if new model is better than current
-    const { data: currentModel } = await supabase
+    const { data: currentModel } = await supabase.database
       .from('dc_ml_models')
       .select('auc')
       .eq('org_id', orgId)
@@ -320,7 +324,7 @@ export async function deployModel(
     }
 
     // Undeploy current model
-    await supabase
+    await supabase.database
       .from('dc_ml_models')
       .update({ deployed: false })
       .eq('org_id', orgId)
@@ -328,7 +332,7 @@ export async function deployModel(
 
     // Deploy new model
     const modelPath = `s3://${S3_BUCKET}/models/${orgId}/${jobName}/efficientnet_doc_fraud.onnx`
-    const { error } = await supabase.from('dc_ml_models').insert({
+    const { error } = await supabase.database.from('dc_ml_models').insert({
       org_id: orgId,
       training_job: jobName,
       auc: metrics.auc,
@@ -344,7 +348,7 @@ export async function deployModel(
     }
 
     // Update training job status
-    await supabase
+    await supabase.database
       .from('dc_ml_training_jobs')
       .update({ status: 'deployed', completed_at: new Date().toISOString() })
       .eq('job_name', jobName)
@@ -365,7 +369,7 @@ export async function getModelHistory(orgId: string): Promise<ModelVersion[]> {
   if (!supabase) return []
 
   try {
-    const { data } = await supabase
+    const { data } = await supabase.database
       .from('dc_ml_models')
       .select('*')
       .eq('org_id', orgId)

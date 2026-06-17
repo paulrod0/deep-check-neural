@@ -23,7 +23,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
 
   const supabase = createServerClient()
 
-  const { data: requests, error } = await supabase
+  const { data: requests, error } = await supabase.database
     .from('dc_gdpr_requests')
     .select('*')
     .eq('org_id', org.id)
@@ -75,7 +75,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   const supabase = createServerClient()
 
   // Check for pending request of same type
-  const { data: existing } = await supabase
+  const { data: existing } = await supabase.database
     .from('dc_gdpr_requests')
     .select('id')
     .eq('org_id', org.id)
@@ -91,7 +91,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   }
 
   // Create request
-  const { data: gdprReq, error: insertErr } = await supabase
+  const { data: gdprReq, error: insertErr } = await supabase.database
     .from('dc_gdpr_requests')
     .insert({
       org_id: org.id,
@@ -151,7 +151,7 @@ async function processExportRequest(orgId: string, requestId: string): Promise<v
   const supabase = createServerClient()
 
   // Mark as processing
-  await supabase
+  await supabase.database
     .from('dc_gdpr_requests')
     .update({ status: 'processing' })
     .eq('id', requestId)
@@ -159,12 +159,12 @@ async function processExportRequest(orgId: string, requestId: string): Promise<v
   try {
     // Gather all org data
     const [assessments, documents, feedback, apiKeys, members, auditLogs] = await Promise.all([
-      supabase.from('dc_assessments').select('*').eq('org_id', orgId),
-      supabase.from('dc_document_analyses').select('*').eq('org_id', orgId),
-      supabase.from('dc_ml_feedback').select('*').eq('org_id', orgId),
-      supabase.from('dc_api_keys').select('id, name, permissions, created_at, last_used_at').eq('org_id', orgId),
-      supabase.from('dc_org_members').select('*').eq('org_id', orgId),
-      supabase.from('dc_audit_log').select('*').eq('org_id', orgId).limit(10000),
+      supabase.database.from('dc_assessments').select('*').eq('org_id', orgId),
+      supabase.database.from('dc_document_analyses').select('*').eq('org_id', orgId),
+      supabase.database.from('dc_ml_feedback').select('*').eq('org_id', orgId),
+      supabase.database.from('dc_api_keys').select('id, name, permissions, created_at, last_used_at').eq('org_id', orgId),
+      supabase.database.from('dc_org_members').select('*').eq('org_id', orgId),
+      supabase.database.from('dc_audit_log').select('*').eq('org_id', orgId).limit(10000),
     ])
 
     const exportData = {
@@ -186,7 +186,7 @@ async function processExportRequest(orgId: string, requestId: string): Promise<v
     const dataUrl = `data:application/json;base64,${exportBlob.toString('base64')}`
 
     // Mark as completed
-    await supabase
+    await supabase.database
       .from('dc_gdpr_requests')
       .update({
         status: 'completed',
@@ -198,7 +198,7 @@ async function processExportRequest(orgId: string, requestId: string): Promise<v
 
   } catch (err) {
     console.error('[gdpr] Export failed:', err)
-    await supabase
+    await supabase.database
       .from('dc_gdpr_requests')
       .update({ status: 'failed' })
       .eq('id', requestId)

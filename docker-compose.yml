@@ -79,6 +79,8 @@ services:
       # ML Lambda (optional — can run local inference)
       LSTM_LAMBDA_URL: ${LSTM_LAMBDA_URL:-}
       LSTM_LAMBDA_SECRET: ${LSTM_LAMBDA_SECRET:-}
+      # ML worker API key (sent as X-API-Key when proxying to the ML worker)
+      ML_WORKER_API_KEY: ${ML_WORKER_API_KEY:-}
       # On-premise flag
       DEPLOY_MODE: onpremise
       NODE_ENV: production
@@ -110,6 +112,12 @@ services:
       AWS_DEFAULT_REGION: ${AWS_DEFAULT_REGION:-eu-west-1}
       AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
       AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
+      # Security — set ML_WORKER_API_KEY in .env to require X-API-Key on all
+      # endpoints (except /health). Unset = UNAUTHENTICATED (dev only).
+      ML_WORKER_API_KEY: ${ML_WORKER_API_KEY:-}
+      ML_WORKER_CORS_ORIGINS: ${ML_WORKER_CORS_ORIGINS:-}
+      ML_WORKER_RATE_LIMIT: ${ML_WORKER_RATE_LIMIT:-120}
+      MAX_UPLOAD_MB: ${MAX_UPLOAD_MB:-15}
     volumes:
       - models_data:/app/models
     ports:
@@ -137,6 +145,7 @@ services:
       S3_PREFIX: ${S3_PREFIX:-approved}
       CHECK_INTERVAL: ${MODEL_CHECK_INTERVAL:-21600}
       ML_WORKER_URL: http://ml-worker:8001
+      ML_WORKER_API_KEY: ${ML_WORKER_API_KEY:-}
       AWS_DEFAULT_REGION: ${AWS_DEFAULT_REGION:-eu-west-1}
       AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
       AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}

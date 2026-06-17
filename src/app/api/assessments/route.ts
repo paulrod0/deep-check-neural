@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getAssessments, saveAssessment, Assessment } from '@/lib/db';
+import { getAssessmentsUnscoped, saveAssessment, Assessment } from '@/lib/db';
 import { writeAuditLog, extractIP } from '@/lib/auditLog'
 import { validateAdminSession } from '@/lib/adminAuth'
 import { getOrgFromSession } from '@/lib/auth'
@@ -9,7 +9,7 @@ export async function GET(req: NextRequest) {
     if (!await validateAdminSession(req)) {
         return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
-    const assessments = await getAssessments();
+    const assessments = await getAssessmentsUnscoped();
     void writeAuditLog({
         eventType: 'data_access',
         endpoint: '/api/assessments',

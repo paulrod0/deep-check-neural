@@ -8,7 +8,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
-import { createApiKey, getApiKeysList } from '@/lib/db'
+import { createApiKey, getApiKeysList, getDefaultOrgId } from '@/lib/db'
 import { validateAdminSession } from '@/lib/adminAuth'
 
 function cors(res: NextResponse) {
@@ -43,12 +43,19 @@ export async function POST(req: NextRequest) {
     }
 
     try {
-        const { name, permissions = ['read', 'write'], webhookUrl } = await req.json()
+        const { name, permissions = ['read', 'write'], webhookUrl, orgId } = await req.json()
         if (!name) {
             return cors(NextResponse.json({ success: false, error: 'name is required' }, { status: 400 }))
         }
 
-        const apiKey = await createApiKey(name, permissions, webhookUrl)
+        // Assign the key to a tenant: explicit orgId from the request, else the
+        // default (primary) org. A key without an org has no access (IDOR guard).
+        const targetOrg = orgId || await getDefaultOrgId()
+        if (!targetOrg) {
+            return cors(NextResponse.json({ success: false, error: 'No organization available to assign the key to' }, { status: 400 }))
+        }
+
+        const apiKey = await createApiKey(name, permissions, webhookUrl, targetOrg)
         return cors(NextResponse.json({
             success: true,
             data: apiKey,

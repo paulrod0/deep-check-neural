@@ -17,7 +17,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
+import { createClient } from '@insforge/sdk'
 import crypto from 'crypto'
 
 // ── Config ──────────────────────────────────────────────────────────────────────
@@ -31,10 +31,14 @@ const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL || (
 )
 
 function getClient() {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL || ''
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
+  const url = process.env.NEXT_PUBLIC_INSFORGE_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL ?? ''
+  const key = process.env.INSFORGE_SERVICE_KEY ?? process.env.SUPABASE_SERVICE_ROLE_KEY ?? process.env.NEXT_PUBLIC_INSFORGE_ANON_KEY ?? process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? ''
   if (!url || !key) return null
-  return createClient(url, key, { auth: { persistSession: false } })
+  return createClient({
+    baseUrl: url,
+    anonKey: key,
+    isServerMode: true,
+  })
 }
 
 // ── Certificate Payload ─────────────────────────────────────────────────────────
@@ -116,7 +120,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   }
 
   try {
-    const { data: analysis } = await supabase
+    const { data: analysis } = await supabase.database
       .from('dc_document_analyses')
       .select('*')
       .eq('id', id)

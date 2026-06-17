@@ -7,6 +7,8 @@
  */
 import { NextRequest, NextResponse } from 'next/server'
 import { writeAuditLog, extractIP } from '@/lib/auditLog'
+import { getOrgFromSession } from '@/lib/auth'
+import { isUrlSafe, SAFE_FETCH_OPTIONS } from '@/lib/ssrfGuard'
 
 // ─── Forensic analysis helpers (inline, mirrors batch route logic) ─────────────
 
@@ -60,7 +62,12 @@ interface AnalysisResult {
 }
 
 async function analyzeImageUrl(url: string): Promise<AnalysisResult> {
+  // SSRF protection: reject private/internal/metadata targets before any fetch
+  if (!(await isUrlSafe(url))) {
+    throw new Error('Unsafe URL')
+  }
   const resp = await fetch(url, {
+    ...SAFE_FETCH_OPTIONS,
     signal: AbortSignal.timeout(12_000),
     headers: { 'User-Agent': 'Deep-Check-Maltego/2.0' },
   })
@@ -190,7 +197,12 @@ function escapeXml(str: string): string {
 
 // ─── Route handlers ───────────────────────────────────────────────────────────
 
-export async function GET() {
+export async function GET(req: NextRequest) {
+  const org = await getOrgFromSession(req)
+  if (!org) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+
   const trx = buildTrxSeedFile()
   return new NextResponse(trx, {
     status: 200,
@@ -206,6 +218,11 @@ export async function POST(req: NextRequest) {
   const ip = extractIP(req.headers)
 
   try {
+    const org = await getOrgFromSession(req)
+    if (!org) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
     // Accept both JSON (standard) and XML bodies
     const contentType = req.headers.get('content-type') ?? ''
     let entityType = 'maltego.URL'

@@ -9,12 +9,11 @@
  *   frame images here for server-side scoring and persistence.
  */
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
+import { createClient } from '@insforge/sdk'
 import { writeAuditLog, extractIP } from '@/lib/auditLog'
 import { getOrgFromSession } from '@/lib/auth'
 import { checkDocLimit, incrementDocUsage } from '@/lib/planLimits'
 import {
-  analyzeFrame,
   analyzeFrameConsistency,
   detectTemporalAnomalies,
   buildVideoReport,
@@ -23,12 +22,46 @@ import {
   type VideoAnalysisReport,
 } from '@/lib/videoAnalysis'
 
+// ML worker for server-side deepfake detection (V9 DINOv3 / V3 ONNX). Optional:
+// if no worker is configured, deepfake scoring is skipped and frames are
+// reported as "not_analyzed" rather than fabricating a score from byte size.
+const ML_WORKER_URL = process.env.ML_WORKER_URL || process.env.XEON_ML_URL || ''
+const ML_WORKER_API_KEY = process.env.ML_WORKER_API_KEY || ''
+
+/**
+ * Run real server-side deepfake detection on a single frame via the ML worker
+ * (/detect/deepfake). Returns p_fake in [0,1], or null if no worker is
+ * configured or the call fails (non-fatal — frame is reported as not analyzed).
+ */
+async function runDeepfakeDetection(frameBase64: string): Promise<number | null> {
+  if (!ML_WORKER_URL) return null
+  try {
+    const form = new FormData()
+    form.append('frameBase64', frameBase64)
+    const res = await fetch(`${ML_WORKER_URL}/detect/deepfake`, {
+      method: 'POST',
+      body: form,
+      headers: ML_WORKER_API_KEY ? { 'x-api-key': ML_WORKER_API_KEY } : undefined,
+      signal: AbortSignal.timeout(30000),
+    })
+    if (!res.ok) return null
+    const data = await res.json()
+    const p = typeof data?.p_fake === 'number' ? data.p_fake : null
+    if (p === null || Number.isNaN(p)) return null
+    return Math.min(1, Math.max(0, p))
+  } catch {
+    return null
+  }
+}
+
 // ─── Supabase client ──────────────────────────────────────────────────────────
 
 function getClient() {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL!
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY ?? process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-  return createClient(url, key, { auth: { persistSession: false } })
+  return createClient({
+    baseUrl: process.env.NEXT_PUBLIC_INSFORGE_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    anonKey: process.env.INSFORGE_SERVICE_KEY ?? process.env.SUPABASE_SERVICE_ROLE_KEY ?? process.env.NEXT_PUBLIC_INSFORGE_ANON_KEY ?? process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    isServerMode: true,
+  })
 }
 
 // ─── POST — analyse video frames ──────────────────────────────────────────────
@@ -80,18 +113,49 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    // ── Per-frame analysis ─────────────────────────────────────────────────────
-    // In Node.js we do NOT have HTMLCanvasElement.  We run the full analyzeFrame
-    // function which internally uses document.createElement — this will fail in
-    // Node.  Instead we implement a pure-Node pixel-level analysis below that
-    // mirrors the browser logic using raw base64 decoding.
-
-    const frameResults: FrameAnalysisResult[] = await Promise.all(
-      frames.map(f => analyzeFrameServer(f.imageData, f.frameNumber, f.timestamp)),
+    // ── Per-frame deepfake analysis ────────────────────────────────────────────
+    // Pixel-level deepfake scoring requires a real model. In Node.js we have no
+    // Canvas, so we call the ML worker (/detect/deepfake) per frame for a genuine
+    // p_fake. If no worker is configured (or a frame fails), that frame is marked
+    // "not_analyzed" — we do NOT fabricate a score from base64 size/entropy.
+    const framePFakes: Array<number | null> = await Promise.all(
+      frames.map(f => runDeepfakeDetection(f.imageData)),
     )
+    const analyzed = framePFakes.some(p => p !== null)
+
+    const frameResults: FrameAnalysisResult[] = frames.map((f, i) => {
+      const pFake = framePFakes[i]
+      if (pFake === null) {
+        // No real score available for this frame — report honestly, no invented numbers.
+        return {
+          frameNumber: f.frameNumber,
+          timestamp:   f.timestamp,
+          elaScore:    0,
+          noiseScore:  0,
+          aiScore:     0,
+          alerts:      ['not_analyzed'],
+          thumbnail:   '',
+        }
+      }
+      const aiScore = Math.round(pFake * 100)
+      const alerts: string[] = []
+      if (pFake >= 0.7) alerts.push('High deepfake probability (model)')
+      else if (pFake >= 0.5) alerts.push('Moderate deepfake probability (model)')
+      return {
+        frameNumber: f.frameNumber,
+        timestamp:   f.timestamp,
+        elaScore:    0,
+        noiseScore:  0,
+        aiScore,
+        alerts,
+        thumbnail:   '',
+      }
+    })
 
     // ── Consistency & temporal analysis ───────────────────────────────────────
-    // analyzeFrameConsistency uses VideoFrame.imageData (the base64 size proxy)
+    // Splice/consistency detection from frame sizes is a structural heuristic and
+    // does not fabricate a deepfake verdict — keep it. Temporal anomaly detection
+    // is only meaningful when real per-frame scores exist.
     const videoFrames: VideoFrame[] = frames.map(f => ({
       frameNumber: f.frameNumber,
       timestamp:   f.timestamp,
@@ -101,7 +165,10 @@ export async function POST(req: NextRequest) {
     }))
 
     const { splicePoints, consistencyScore } = analyzeFrameConsistency(videoFrames)
-    const { deepfakeScore, anomalyFrames }   = detectTemporalAnomalies(frameResults)
+    // Deepfake score reflects the real model output, or 0 when nothing was analyzed.
+    const { deepfakeScore, anomalyFrames } = analyzed
+      ? detectTemporalAnomalies(frameResults)
+      : { deepfakeScore: 0, anomalyFrames: [] as number[] }
 
     const report = buildVideoReport({
       filename:         filename ?? 'video',
@@ -114,11 +181,21 @@ export async function POST(req: NextRequest) {
       anomalyFrames,
     })
 
+    // Honest deepfake status: mark whether a real model actually ran. When it
+    // did not, the deepfake score is "not analyzed", not a clean verdict.
+    const deepfakeStatus: 'analyzed' | 'not_analyzed' = analyzed ? 'analyzed' : 'not_analyzed'
+    const summary = analyzed
+      ? report.summary
+      : `Análisis deepfake no disponible (sin motor ML configurado). ${report.summary}`
+
     // ── Persist to Supabase (graceful — table may not exist yet) ───────────────
+    // Only persist a deepfake verdict when a real model produced it. Without a
+    // worker we still record the structural (splice/consistency) findings, but
+    // store deepfake_score as null so no fabricated forensic verdict is saved.
     let savedId: string | null = null
     try {
       const sb = getClient()
-      const { data, error } = await sb
+      const { data, error } = await sb.database
         .from('dc_video_analyses')
         .insert({
           filename:             report.filename,
@@ -127,10 +204,10 @@ export async function POST(req: NextRequest) {
           frames_analyzed:      report.framesAnalyzed,
           overall_risk_score:   report.overallRiskScore,
           risk_level:           report.riskLevel,
-          deepfake_score:       report.deepfakeScore,
+          deepfake_score:       analyzed ? report.deepfakeScore : null,
           splicing_detected:    report.splicingDetected,
           suspicious_segments:  report.suspiciousSegments,
-          summary:              report.summary,
+          summary,
           frame_results:        report.frameResults.map(fr => ({
             frameNumber: fr.frameNumber,
             timestamp:   fr.timestamp,
@@ -166,12 +243,24 @@ export async function POST(req: NextRequest) {
         overallRiskScore: report.overallRiskScore,
         riskLevel:        report.riskLevel,
         splicingDetected: report.splicingDetected,
-        deepfakeScore:    report.deepfakeScore,
+        deepfakeScore:    analyzed ? report.deepfakeScore : null,
+        deepfakeStatus,
         savedId,
       },
     })
 
-    return NextResponse.json({ ...report, id: savedId }, { status: 201 })
+    // Response shape stays compatible (all report fields preserved), plus an
+    // explicit honesty flag and a real-or-null deepfake score.
+    return NextResponse.json(
+      {
+        ...report,
+        summary,
+        deepfakeScore: analyzed ? report.deepfakeScore : null,
+        deepfakeStatus,
+        id: savedId,
+      },
+      { status: 201 },
+    )
   } catch (e) {
     console.error('[api/video POST] unexpected:', e)
     void writeAuditLog({
@@ -195,7 +284,7 @@ export async function GET(req: NextRequest) {
     const riskLevel = searchParams.get('riskLevel')
 
     const sb = getClient()
-    let query = sb
+    let query = sb.database
       .from('dc_video_analyses')
       .select('id, created_at, filename, duration, overall_risk_score, risk_level, deepfake_score, splicing_detected, frames_analyzed, summary')
       .order('created_at', { ascending: false })
@@ -236,121 +325,8 @@ export async function GET(req: NextRequest) {
   }
 }
 
-// ─── Server-side frame analysis (no Canvas) ───────────────────────────────────
-
-/**
- * Server-side equivalent of analyzeFrame from videoAnalysis.ts.
- *
- * Since Node.js has no Canvas API, we decode the base64 PNG data URL and
- * perform raw pixel-level analysis by parsing the PNG using JavaScript.
- * For simplicity and to avoid native dependencies, we use a pure-JS approach:
- *
- *   - ELA score: approximated by comparing compressed size ratio. PNG compressed
- *     size relative to a JPEG-equivalent size (estimated by pixel count × quality)
- *     gives a proxy for information density and compression history.
- *
- *   - Noise score: we estimate from the entropy of the base64 payload and a
- *     simple run-length analysis on the raw bytes.
- *
- *   - AI score: combination of ELA + noise proxies.
- *
- * This is a deliberate lightweight approximation: the more accurate Canvas-based
- * analysis runs client-side in the browser (see videoAnalysis.ts).
- */
-
-// ─── Utility ──────────────────────────────────────────────────────────────────
-
-function clamp(v: number, lo: number, hi: number): number {
-  return Math.max(lo, Math.min(hi, v))
-}
-
-async function analyzeFrameServer(
-  dataUrl: string,
-  frameNumber: number,
-  timestamp: number,
-): Promise<FrameAnalysisResult> {
-  try {
-    // Strip the data URL header to get the raw base64 payload
-    const comma = dataUrl.indexOf(',')
-    const b64 = comma !== -1 ? dataUrl.slice(comma + 1) : dataUrl
-    const byteLen = Math.round((b64.length * 3) / 4) // approximate decoded byte size
-
-    // Pixel count estimate from frame dimensions (not available server-side,
-    // so we use the encoded size as proxy).  A typical 640×360 frame at
-    // reasonable quality = ~230 KB PNG ≈ 307,200 bytes base64 overhead.
-    // We normalise against that baseline.
-    const BASE_SIZE = 230_000  // expected bytes for a "normal" 640×360 frame
-
-    // ── ELA proxy ─────────────────────────────────────────────────────────────
-    // Very small file → very uniform content → either AI-generated or near-black frame
-    // Very large file → high detail / noise → likely real camera content
-    const sizeRatio = byteLen / BASE_SIZE
-    // Frames much smaller than baseline are suspiciously clean (AI / solid colour)
-    // Frames much larger than baseline have rich noise (real camera)
-    let elaScore: number
-    if (sizeRatio < 0.15) {
-      // Extremely small → nearly blank frame — not suspicious for ELA
-      elaScore = 5
-    } else if (sizeRatio < 0.5) {
-      // Unusually small for a natural frame → AI-like uniformity
-      elaScore = Math.round((1 - sizeRatio / 0.5) * 40)
-    } else if (sizeRatio > 3.0) {
-      // Very large → rich texture → higher ELA (possible edit artefacts)
-      elaScore = Math.round(Math.min(70, 30 + (sizeRatio - 3) * 10))
-    } else {
-      elaScore = Math.round(15 + sizeRatio * 10)
-    }
-
-    // ── Noise proxy via byte entropy ──────────────────────────────────────────
-    // Decode a sample of the base64 to measure byte distribution entropy.
-    // High entropy → rich / noisy content (real camera)
-    // Low entropy  → uniform / synthetic content (AI generation)
-    const SAMPLE_LEN = Math.min(b64.length, 4000)
-    const sample = b64.slice(0, SAMPLE_LEN)
-    const freq: Record<string, number> = {}
-    for (const ch of sample) {
-      freq[ch] = (freq[ch] ?? 0) + 1
-    }
-    const chars = Object.values(freq)
-    const total = chars.reduce((a, b) => a + b, 0)
-    let entropy = 0
-    for (const c of chars) {
-      const p = c / total
-      if (p > 0) entropy -= p * Math.log2(p)
-    }
-    // Base64 max entropy ≈ 6 bits/char (64 symbols)
-    const entropyRatio = entropy / 6
-    // Low entropy → uniform → higher noise score (AI-like)
-    const noiseScore = clamp(Math.round((1 - entropyRatio) * 100), 0, 100)
-
-    // ── AI Score ──────────────────────────────────────────────────────────────
-    const aiScore = clamp(Math.round(elaScore * 0.4 + noiseScore * 0.6), 0, 100)
-
-    // ── Alerts ────────────────────────────────────────────────────────────────
-    const alerts: string[] = []
-    if (elaScore > 55)  alerts.push('High ELA — possible edit artefacts')
-    if (noiseScore > 70) alerts.push('Low entropy — suspiciously uniform frame')
-    if (aiScore > 65)   alerts.push('High AI probability score')
-
-    return {
-      frameNumber,
-      timestamp,
-      elaScore:   clamp(elaScore, 0, 100),
-      noiseScore: clamp(noiseScore, 0, 100),
-      aiScore:    clamp(aiScore, 0, 100),
-      alerts,
-      thumbnail:  '',   // no canvas in Node — thumbnails extracted client-side
-    }
-  } catch (err) {
-    console.error('[analyzeFrameServer] frame error:', err)
-    return {
-      frameNumber,
-      timestamp,
-      elaScore:  0,
-      noiseScore: 0,
-      aiScore:   0,
-      alerts:    ['server_analysis_error'],
-      thumbnail: '',
-    }
-  }
-}
+// NOTE: A previous version derived a "deepfake" score here from base64 payload
+// size and character entropy. That produced fabricated forensic verdicts with no
+// relation to the actual frame content, so it was removed. Real per-frame scoring
+// now goes through runDeepfakeDetection() against the ML worker; when no worker is
+// configured, frames are reported as "not_analyzed" instead of inventing a score.

@@ -15,7 +15,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { deployModel } from '@/lib/continuousLearning'
-import { createClient } from '@supabase/supabase-js'
+import { createClient } from '@insforge/sdk'
 import crypto from 'crypto'
 
 // ── Config ──────────────────────────────────────────────────────────────────────
@@ -39,10 +39,14 @@ function verifyWebhookSecret(provided: string | null): boolean {
 }
 
 function getSupabase() {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL || ''
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
+  const url = process.env.NEXT_PUBLIC_INSFORGE_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL ?? process.env.SUPABASE_URL ?? ''
+  const key = process.env.INSFORGE_SERVICE_KEY ?? process.env.SUPABASE_SERVICE_ROLE_KEY ?? process.env.NEXT_PUBLIC_INSFORGE_ANON_KEY ?? process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? ''
   if (!url || !key) return null
-  return createClient(url, key)
+  return createClient({
+    baseUrl: url,
+    anonKey: key,
+    isServerMode: true,
+  })
 }
 
 // ── Types ───────────────────────────────────────────────────────────────────────
@@ -108,7 +112,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
   if (event.status === 'Failed' || event.status === 'Stopped') {
     if (supabase) {
-      await supabase
+      await supabase.database
         .from('dc_ml_training_jobs')
         .update({
           status: 'failed',
@@ -139,7 +143,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   // Look up the org from the training job record
   let orgId = event.orgId || ''
   if (!orgId && supabase) {
-    const { data: job } = await supabase
+    const { data: job } = await supabase.database
       .from('dc_ml_training_jobs')
       .select('org_id')
       .eq('job_name', event.jobName)
@@ -154,7 +158,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
   // Update job status to completed
   if (supabase) {
-    await supabase
+    await supabase.database
       .from('dc_ml_training_jobs')
       .update({
         status: 'completed',

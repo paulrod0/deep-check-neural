@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getAssessmentById, saveAssessment } from '@/lib/db';
+import { getAssessmentByIdUnscoped, saveAssessment } from '@/lib/db';
 import { validateAdminSession } from '@/lib/adminAuth';
 
 export async function GET(
@@ -10,7 +10,7 @@ export async function GET(
         return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
     const { id } = await params;
-    const assessment = await getAssessmentById(id);
+    const assessment = await getAssessmentByIdUnscoped(id);
 
     if (!assessment) {
         return NextResponse.json({ error: 'Assessment not found' }, { status: 404 });
@@ -30,7 +30,7 @@ export async function PATCH(
     const { id } = await params;
     const body = await request.json();
 
-    const assessment = await getAssessmentById(id);
+    const assessment = await getAssessmentByIdUnscoped(id);
 
     if (!assessment) {
         return NextResponse.json({ error: 'Assessment not found' }, { status: 404 });

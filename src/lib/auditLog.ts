@@ -15,7 +15,7 @@
  * Failures are silently caught — audit logging must never break the main flow.
  */
 
-import { createClient } from '@supabase/supabase-js'
+import { createClient } from '@insforge/sdk'
 import crypto from 'crypto'
 
 // ─── Layer 1: Original API Audit (backwards compatible) ─────────────────────
@@ -57,10 +57,14 @@ function hashIP(ip: string): string {
 }
 
 function getClient() {
-    const url = process.env.NEXT_PUBLIC_SUPABASE_URL
-    const key = process.env.SUPABASE_SERVICE_ROLE_KEY ?? process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+    const url = process.env.NEXT_PUBLIC_INSFORGE_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL
+    const key = process.env.INSFORGE_SERVICE_KEY ?? process.env.SUPABASE_SERVICE_ROLE_KEY ?? process.env.NEXT_PUBLIC_INSFORGE_ANON_KEY ?? process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
     if (!url || !key) return null
-    return createClient(url, key, { auth: { persistSession: false } })
+    return createClient({
+        baseUrl: url,
+        anonKey: key,
+        isServerMode: true,
+    })
 }
 
 export async function writeAuditLog(entry: AuditEntry): Promise<void> {
@@ -68,7 +72,7 @@ export async function writeAuditLog(entry: AuditEntry): Promise<void> {
         const sb = getClient()
         if (!sb) return
 
-        await sb.from('dc_audit_logs').insert({
+        await sb.database.from('dc_audit_logs').insert({
             event_type:     entry.eventType,
             endpoint:       entry.endpoint,
             method:         entry.method,
@@ -166,7 +170,7 @@ export async function writeChainAuditLog(entry: ChainAuditEntry): Promise<void> 
         // Get previous hash for chain integrity
         let prevHash = lastHashCache[entry.orgId]
         if (!prevHash) {
-            const { data: lastEntry } = await sb
+            const { data: lastEntry } = await sb.database
                 .from('dc_audit_log')
                 .select('entry_hash')
                 .eq('org_id', entry.orgId)
@@ -189,7 +193,7 @@ export async function writeChainAuditLog(entry: ChainAuditEntry): Promise<void> 
             timestamp,
         })
 
-        const { error } = await sb.from('dc_audit_log').insert({
+        const { error } = await sb.database.from('dc_audit_log').insert({
             org_id:        entry.orgId,
             actor_id:      entry.actorId,
             actor_email:   entry.actorEmail,
@@ -226,7 +230,7 @@ export async function verifyAuditChainIntegrity(
     const sb = getClient()
     if (!sb) return { valid: false, entriesChecked: 0, message: 'No database connection' }
 
-    const { data: entries, error } = await sb
+    const { data: entries, error } = await sb.database
         .from('dc_audit_log')
         .select('id, org_id, actor_id, action, resource_id, details, prev_hash, entry_hash, created_at')
         .eq('org_id', orgId)
@@ -308,7 +312,7 @@ export async function queryChainAuditLog(
     const sb = getClient()
     if (!sb) return { entries: [], total: 0 }
 
-    let query = sb
+    let query = sb.database
         .from('dc_audit_log')
         .select('*', { count: 'exact' })
         .eq('org_id', orgId)

@@ -22,7 +22,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
 
   const supabase = createServerClient()
 
-  const { data: members, error } = await supabase
+  const { data: members, error } = await supabase.database
     .from('dc_org_members')
     .select('id, user_id, role, created_at')
     .eq('org_id', org.id)
@@ -32,15 +32,20 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
 
-  // Enrich with user emails from auth.users (via admin API)
+  // Enrich with user emails from dc_org_members join or user profile table
+  // Note: InsForge does not expose auth.admin.getUserById — look up email from org/profile data
   const enriched = await Promise.all(
     (members || []).map(async (m) => {
       let email = 'unknown'
       try {
-        const { data } = await supabase.auth.admin.getUserById(m.user_id)
-        email = data?.user?.email ?? 'unknown'
+        const { data: profile } = await supabase.database
+          .from('dc_user_profiles')
+          .select('email')
+          .eq('user_id', m.user_id)
+          .single()
+        email = profile?.email ?? 'unknown'
       } catch {
-        // Non-fatal — might not have admin access
+        // Non-fatal — profile might not exist yet
       }
       return {
         id: m.id,
@@ -94,33 +99,30 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
   const supabase = createServerClient()
 
-  // Check if user exists in Supabase Auth
-  const { data: users } = await supabase.auth.admin.listUsers()
-  const targetUser = users?.users?.find(u => u.email === body.email.trim().toLowerCase())
+  // Look up user by email in dc_user_profiles
+  // Note: InsForge does not expose auth.admin.listUsers/inviteUserByEmail
+  const { data: targetProfile } = await supabase.database
+    .from('dc_user_profiles')
+    .select('user_id, email')
+    .eq('email', body.email.trim().toLowerCase())
+    .single()
 
-  if (!targetUser) {
-    // Send magic link invite
-    const { error: inviteErr } = await supabase.auth.admin.inviteUserByEmail(body.email.trim())
-    if (inviteErr) {
-      return NextResponse.json(
-        { error: `Failed to invite: ${inviteErr.message}` },
-        { status: 500 }
-      )
-    }
-
+  if (!targetProfile) {
+    // TODO: Implement InsForge invite flow (magic link via auth API)
+    // For now, user must sign up first before being added to an org
     return NextResponse.json({
-      success: true,
-      message: `Invitation sent to ${body.email}. They will be added to the team when they accept.`,
+      success: false,
+      message: `No account found for ${body.email}. The user must sign up first, then you can add them.`,
       pending: true,
-    })
+    }, { status: 404 })
   }
 
   // Check if already a member
-  const { data: existing } = await supabase
+  const { data: existing } = await supabase.database
     .from('dc_org_members')
     .select('id')
     .eq('org_id', org.id)
-    .eq('user_id', targetUser.id)
+    .eq('user_id', targetProfile.user_id)
     .single()
 
   if (existing) {
@@ -131,17 +133,17 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   }
 
   // Remove from any previous org (users can only be in one org)
-  await supabase
+  await supabase.database
     .from('dc_org_members')
     .delete()
-    .eq('user_id', targetUser.id)
+    .eq('user_id', targetProfile.user_id)
 
   // Add to org
-  const { error: insertErr } = await supabase
+  const { error: insertErr } = await supabase.database
     .from('dc_org_members')
     .insert({
       org_id: org.id,
-      user_id: targetUser.id,
+      user_id: targetProfile.user_id,
       role,
     })
 
@@ -153,7 +155,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     success: true,
     message: `${body.email} added as ${role}`,
     member: {
-      userId: targetUser.id,
+      userId: targetProfile.user_id,
       email: body.email,
       role,
     },
@@ -176,7 +178,7 @@ export async function DELETE(req: NextRequest): Promise<NextResponse> {
   const supabase = createServerClient()
 
   // Get the member to be removed
-  const { data: member } = await supabase
+  const { data: member } = await supabase.database
     .from('dc_org_members')
     .select('id, user_id, role, org_id')
     .eq('id', memberId)
@@ -194,7 +196,7 @@ export async function DELETE(req: NextRequest): Promise<NextResponse> {
     )
   }
 
-  const { error: deleteErr } = await supabase
+  const { error: deleteErr } = await supabase.database
     .from('dc_org_members')
     .delete()
     .eq('id', memberId)

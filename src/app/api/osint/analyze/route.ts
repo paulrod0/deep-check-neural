@@ -12,6 +12,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { writeAuditLog, extractIP } from '@/lib/auditLog'
 import { getOrgFromSession } from '@/lib/auth'
 import { getOrgByApiKey } from '@/lib/planLimits'
+import { isUrlSafe, SAFE_FETCH_OPTIONS } from '@/lib/ssrfGuard'
 
 // ─── TTL Cache ────────────────────────────────────────────────────────────────
 
@@ -164,6 +165,10 @@ export async function POST(req: NextRequest) {
 
   try {
     const org  = await resolveAuth(req)
+    if (!org) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
     const body = await req.json()
     const { url, context } = body as { url?: string; context?: string }
 
@@ -171,14 +176,9 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'url is required' }, { status: 400 })
     }
 
-    // Validate URL format
-    try {
-      const parsed = new URL(url)
-      if (!['http:', 'https:'].includes(parsed.protocol)) {
-        return NextResponse.json({ error: 'Only http/https URLs are supported' }, { status: 400 })
-      }
-    } catch {
-      return NextResponse.json({ error: 'Invalid URL' }, { status: 400 })
+    // SSRF protection: reject private/internal/metadata targets before any fetch
+    if (!(await isUrlSafe(url))) {
+      return NextResponse.json({ error: 'Unsafe URL' }, { status: 400 })
     }
 
     // Check cache
@@ -189,6 +189,7 @@ export async function POST(req: NextRequest) {
 
     // Fetch image
     const resp = await fetch(url, {
+      ...SAFE_FETCH_OPTIONS,
       signal: AbortSignal.timeout(15_000),
       headers: { 'User-Agent': 'Deep-Check-OSINT/2.0' },
     })

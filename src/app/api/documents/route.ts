@@ -4,16 +4,25 @@
  * GET  /api/documents   — list recent analyses
  */
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
+import { createClient } from '@insforge/sdk'
 import { writeAuditLog, extractIP } from '@/lib/auditLog'
 import { getOrgFromSession } from '@/lib/auth'
 import { checkDocLimit, incrementDocUsage } from '@/lib/planLimits'
+import { runDocForensics } from '@/lib/docForensics'
+
+// Clamp a numeric value into [min, max]; returns fallback when not finite.
+function clampNum(v: unknown, min: number, max: number, fallback = 0): number {
+    const n = typeof v === 'number' ? v : Number(v)
+    if (!Number.isFinite(n)) return fallback
+    return Math.min(max, Math.max(min, n))
+}
 
 function getClient() {
-    const url = process.env.NEXT_PUBLIC_SUPABASE_URL!
-    const key = process.env.SUPABASE_SERVICE_ROLE_KEY
-        ?? process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-    return createClient(url, key, { auth: { persistSession: false } })
+    return createClient({
+        baseUrl: process.env.NEXT_PUBLIC_INSFORGE_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        anonKey: process.env.INSFORGE_SERVICE_KEY ?? process.env.SUPABASE_SERVICE_ROLE_KEY ?? process.env.NEXT_PUBLIC_INSFORGE_ANON_KEY ?? process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+        isServerMode: true,
+    })
 }
 
 // ─── POST — save analysis ────────────────────────────────────────────────────
@@ -22,16 +31,17 @@ export async function POST(req: NextRequest) {
     const t0 = Date.now()
     const ip = extractIP(req.headers)
     try {
-        // ── Plan gating ──────────────────────────────────────────────────────
+        // ── Auth gate ─────────────────────────────────────────────────────────
         const org = await getOrgFromSession(req)
-        if (org) {
-            const { allowed, used, limit } = await checkDocLimit(org.id)
-            if (!allowed) {
-                return NextResponse.json(
-                    { error: 'Límite del plan alcanzado', used, limit, upgradeUrl: '/pricing' },
-                    { status: 403 }
-                )
-            }
+        if (!org) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+        // ── Plan gating ──────────────────────────────────────────────────────
+        const { allowed, used, limit } = await checkDocLimit(org.id)
+        if (!allowed) {
+            return NextResponse.json(
+                { error: 'Límite del plan alcanzado', used, limit, upgradeUrl: '/pricing' },
+                { status: 403 }
+            )
         }
 
         const body = await req.json()
@@ -45,30 +55,47 @@ export async function POST(req: NextRequest) {
             alerts, exifData, findings,
             thumbnailUrl, elaImageUrl,
             caseRef, submittedBy, notes,
+            documentBase64,
         } = body
 
         if (!filename || riskScore === undefined || !riskLevel) {
             return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
         }
 
+        // ── Server-side forensic recompute ────────────────────────────────────
+        // Never trust client self-reported scores. When the raw document is
+        // provided, recompute p_tampered server-side; otherwise mark the stored
+        // scores as client-origin so downstream consumers can weight them.
+        let manipulationProbVal = clampNum(manipulationProb, 0, 1)
+        let scoreSource: 'client' | 'server' = 'client'
+        if (typeof documentBase64 === 'string' && documentBase64.length > 0) {
+            const pTampered = await runDocForensics(documentBase64)
+            if (pTampered !== null) {
+                manipulationProbVal = clampNum(pTampered, 0, 1)
+                scoreSource = 'server'
+            }
+        }
+
         const sb = getClient()
-        const { data, error } = await sb
+        const { data, error } = await sb.database
             .from('dc_document_analyses')
             .insert({
+                org_id:        org.id,
                 filename,
                 file_size:     fileSize ?? null,
                 mime_type:     mimeType ?? null,
-                risk_score:    riskScore,
+                risk_score:    clampNum(riskScore, 0, 100),
                 risk_level:    riskLevel,
-                ela_score:     elaScore ?? 0,
-                exif_score:    exifScore ?? 0,
-                noise_score:   noiseScore ?? 0,
-                dct_score:             dctScore             ?? 0,
-                chroma_score:          chromaScore          ?? 0,
-                edge_score:            edgeScore            ?? 0,
-                manipulation_prob:     manipulationProb     ?? 0,
-                confidence_level:      confidenceLevel      ?? 0,
+                ela_score:     clampNum(elaScore, 0, 100),
+                exif_score:    clampNum(exifScore, 0, 100),
+                noise_score:   clampNum(noiseScore, 0, 100),
+                dct_score:             clampNum(dctScore, 0, 100),
+                chroma_score:          clampNum(chromaScore, 0, 100),
+                edge_score:            clampNum(edgeScore, 0, 100),
+                manipulation_prob:     manipulationProbVal,
+                confidence_level:      clampNum(confidenceLevel, 0, 1),
                 signals_above_thresh:  signalsAboveThresh   ?? 0,
+                score_source:  scoreSource,
                 alerts:        alerts ?? [],
                 exif_data:     exifData ?? {},
                 findings:      findings ?? {},
@@ -86,7 +113,7 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({ error: 'Internal error' }, { status: 500 })
         }
 
-        if (org) void incrementDocUsage(org.id)
+        void incrementDocUsage(org.id)
 
         void writeAuditLog({
             eventType: 'document_analyzed',
@@ -95,7 +122,7 @@ export async function POST(req: NextRequest) {
             ip,
             statusCode: 201,
             durationMs: Date.now() - t0,
-            details: { id: data.id, filename, riskScore, riskLevel, caseRef: caseRef ?? null },
+            details: { id: data.id, filename, riskScore, riskLevel, caseRef: caseRef ?? null, scoreSource },
         })
         return NextResponse.json({ id: data.id, createdAt: data.created_at }, { status: 201 })
     } catch (e) {
@@ -109,15 +136,20 @@ export async function POST(req: NextRequest) {
 
 export async function GET(req: NextRequest) {
     try {
+        // ── Auth gate ─────────────────────────────────────────────────────────
+        const org = await getOrgFromSession(req)
+        if (!org) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
         const { searchParams } = new URL(req.url)
         const limit    = Math.min(50, parseInt(searchParams.get('limit') ?? '20'))
         const caseRef  = searchParams.get('caseRef')
         const riskLevel = searchParams.get('riskLevel')
 
         const sb = getClient()
-        let query = sb
+        let query = sb.database
             .from('dc_document_analyses')
             .select('id, created_at, filename, file_size, risk_score, risk_level, thumbnail_url, case_ref, ela_score, exif_score, noise_score')
+            .eq('org_id', org.id)
             .order('created_at', { ascending: false })
             .limit(limit)
 

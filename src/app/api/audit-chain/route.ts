@@ -11,19 +11,28 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
+import { createClient } from '@insforge/sdk'
 import { AuditChain, AuditBlock } from '@/lib/auditChain'
+import { getOrgFromSession } from '@/lib/auth'
 
 function getDb() {
-    const url = process.env.NEXT_PUBLIC_SUPABASE_URL
-    const key = process.env.SUPABASE_SERVICE_ROLE_KEY ?? process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-    if (!url || !key) throw new Error('Missing Supabase env vars')
-    return createClient(url, key, { auth: { persistSession: false } })
+    const url = process.env.NEXT_PUBLIC_INSFORGE_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL
+    const key = process.env.INSFORGE_SERVICE_KEY ?? process.env.SUPABASE_SERVICE_ROLE_KEY ?? process.env.NEXT_PUBLIC_INSFORGE_ANON_KEY ?? process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+    if (!url || !key) throw new Error('Missing database env vars')
+    return createClient({
+        baseUrl: url,
+        anonKey: key,
+        isServerMode: true,
+    })
 }
 
 // ─── POST /api/audit-chain ────────────────────────────────────────────────────
 
 export async function POST(req: NextRequest): Promise<NextResponse> {
+    // ── Auth gate ─────────────────────────────────────────────────────────────
+    const org = await getOrgFromSession(req)
+    if (!org) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
     let body: { assessmentId?: string; blocks?: AuditBlock[] }
     try {
         body = await req.json() as { assessmentId?: string; blocks?: AuditBlock[] }
@@ -51,7 +60,25 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     // Save to database
     try {
         const db = getDb()
+
+        // Insert-only: the audit chain is tamper-evident, so existing blocks must
+        // never be overwritten. Reject if any block for this assessment already
+        // exists (scoped to the caller's org).
+        const { data: existing, error: existErr } = await db.database
+            .from('dc_deepfake_audit')
+            .select('block_index')
+            .eq('org_id', org.id)
+            .eq('assessment_id', assessmentId)
+            .limit(1)
+
+        if (!existErr && existing && existing.length > 0) {
+            return NextResponse.json({
+                error: 'Audit chain for this assessment already exists; chain is append-only',
+            }, { status: 409 })
+        }
+
         const rows = blocks.map(block => ({
+            org_id:        org.id,
             assessment_id: assessmentId,
             block_index:   block.index,
             block_hash:    block.hash,
@@ -62,11 +89,18 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
             chain_valid:   true,
         }))
 
-        const { error } = await db
+        const { error } = await db.database
             .from('dc_deepfake_audit')
-            .upsert(rows, { onConflict: 'assessment_id,block_index' })
+            .insert(rows)
 
         if (error) {
+            // Unique violation (assessment_id, block_index) -> chain already exists.
+            const msg = (error.message || '').toLowerCase()
+            if (msg.includes('duplicate') || msg.includes('unique') || msg.includes('conflict')) {
+                return NextResponse.json({
+                    error: 'Audit chain for this assessment already exists; chain is append-only',
+                }, { status: 409 })
+            }
             // Table may not exist yet (before migration) — return soft success
             console.warn('[audit-chain] DB insert failed (table may not exist):', error.message)
             return NextResponse.json({
@@ -91,6 +125,10 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 // ─── GET /api/audit-chain?assessmentId=xxx ────────────────────────────────────
 
 export async function GET(req: NextRequest): Promise<NextResponse> {
+    // ── Auth gate ─────────────────────────────────────────────────────────────
+    const org = await getOrgFromSession(req)
+    if (!org) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
     const assessmentId = req.nextUrl.searchParams.get('assessmentId')
     if (!assessmentId) {
         return NextResponse.json({ error: 'assessmentId query param required' }, { status: 400 })
@@ -98,9 +136,10 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
 
     try {
         const db = getDb()
-        const { data, error } = await db
+        const { data, error } = await db.database
             .from('dc_deepfake_audit')
             .select('*')
+            .eq('org_id', org.id)
             .eq('assessment_id', assessmentId)
             .order('block_index', { ascending: true })
 
