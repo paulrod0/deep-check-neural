@@ -3,13 +3,15 @@ import { NextRequest, NextResponse } from 'next/server'
 export const dynamic = 'force-dynamic'
 export const maxDuration = 300
 
+// Worker URLs from env (fail-closed — no hardcoded IPs). Use HTTPS or a private
+// network: document images (PII) transit here.
 const BACKENDS: Record<string, { url: string; analyzeEndpoint: string }> = {
   xeon: {
-    url: process.env.XEON_ML_URL || 'http://100.116.188.12:8001',
+    url: process.env.XEON_ML_URL || '',
     analyzeEndpoint: '/analyze/document',
   },
   aws: {
-    url: process.env.AWS_GEMMA_URL || 'http://54.229.204.211:8002',
+    url: process.env.AWS_GEMMA_URL || '',
     analyzeEndpoint: '/analyze/document',
   },
 }
@@ -22,6 +24,9 @@ export async function POST(req: NextRequest) {
 
     if (!config) {
       return NextResponse.json({ error: `Unknown backend: ${backend}` }, { status: 400 })
+    }
+    if (!config.url) {
+      return NextResponse.json({ error: `Backend '${backend}' not configured (set XEON_ML_URL / AWS_GEMMA_URL)` }, { status: 503 })
     }
 
     // Forward the image to the backend
@@ -50,7 +55,8 @@ export async function POST(req: NextRequest) {
     }
 
     const data = await res.json()
-    data._proxy = { backend, url: config.url, proxyMs: Date.now() - t0 }
+    // Do not expose the internal backend URL to clients.
+    data._proxy = { backend, proxyMs: Date.now() - t0 }
 
     return NextResponse.json(data)
   } catch (e: any) {
