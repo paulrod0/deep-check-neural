@@ -1,5 +1,6 @@
 for /L %i in (1,1,254) do @ping -n 1 -w 100 192.168.1.%i >nul & arp -a | findstr 192.168.1.%i
 
+ssh -o PreferredAuthentications=password -o PubkeyAuthentication=no almara@192.168.1.11
 
 {
   "compilerOptions": {
