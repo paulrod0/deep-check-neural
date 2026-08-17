@@ -284,3 +284,43 @@ nist-fate-pad/                — NIST C++ SDKs
 ml/                           — Training and benchmark scripts
 docs/                         — Pitch decks, commercial decks (PDF generators)
 ```
+
+## Security Hardening (branch `security-hardening-audit` → PR #1)
+Multi-agent audit (38 confirmed findings) + fixes: cross-tenant IDOR, SSRF, auth gaps, fabricated forensic verdicts, hardcoded infra. **Do NOT deploy without the checklist below.**
+
+### Deploy checklist (ORDER MATTERS)
+1. Run migrations **`docker/migrations/008_org_scoping_backfill.sql`** and **`009_batch_jobs.sql`** BEFORE deploying — org scoping is fail-closed (rows with NULL `org_id` become invisible to their tenant) and batch needs the `dc_batch_jobs` table.
+2. Set the env vars below. Proxies return 503 if unset (by design, fail-closed).
+3. Use **HTTPS / private network** for `AWS_GEMMA_URL` and `V8_API_URL` (identity docs / biometrics transit there).
+4. Runtime-verify: dashboard login no longer 401s; an org-A token cannot read org-B data; batch polling works.
+
+### New / required env vars
+- `ML_WORKER_API_KEY` — `X-API-Key` for the ML worker (`docker/ml-worker/main.py` enforces if set; unset = UNAUTHENTICATED, dev only). Set in docker-compose (ml-worker + app + model-updater) and Vercel.
+- `ML_WORKER_CORS_ORIGINS` (default none), `ML_WORKER_RATE_LIMIT` (default 120/min), `MAX_UPLOAD_MB` (default 15).
+- `XEON_ML_URL`, `AWS_GEMMA_URL`, `V8_API_URL` (+`V8_API_KEY`) — worker URLs, fail-closed (no hardcoded IPs in source; previous values documented in `.env.example`).
+
+### Auth / IDOR model (follow for new code)
+- **Session gate**: `getOrgFromSession(req)` (`src/lib/auth.ts`) validates the user JWT via a per-request client (`edgeFunctionToken`), then reads the org with the service client scoped to the validated userId. Gate dashboard/session endpoints: `const org = await getOrgFromSession(req); if (!org) return 401`.
+- **Tenant scoping (fail-closed)**: `db.ts` `getAssessments(orgId)`, `getAssessmentById(id, orgId)`, `getProfileByEmail(email, orgId)`, `createApiKey(..., orgId)` REQUIRE `orgId` and return empty/null without it. API keys carry `orgId` (from `validateApiKey`). Scope queries with `.eq('org_id', org.id)`; populate `org_id` on inserts.
+- **Intentionally UNSCOPED accessors** (cross-org on purpose — trusted/public paths only): `getAssessmentsUnscoped()`, `getAssessmentByIdUnscoped(id)` (public cert verify + admin dashboard), `getProfileByEmailUnscoped(email)` (ml-score). `getDefaultOrgId()` assigns new API keys to the primary org.
+
+### Endpoint behavior changes
+- `/api/v1/verify` + `/api/v1/batch` — real server-side doc forensics via ml-worker (`src/lib/docForensics.ts`); previously `riskScore=0`.
+- `/api/v1/detect` — serves **V9.4 DINOv3** via ml-worker when `ML_WORKER_URL` set, else local V3 ONNX. Response adds `model`/`engine`.
+- `/api/v1/batch` — DB-backed (`dc_batch_jobs`) + `after()`; works on serverless; GET polling scoped by org.
+- `/api/video` — no longer fabricates a deepfake verdict from size/entropy (may return `deepfakeScore=null`).
+- `ml-worker` (`docker/ml-worker/main.py`) — X-API-Key auth, CORS from env, per-IP rate limit, size limits, base64 hardening.
+- SSRF guard (`src/lib/ssrfGuard.ts` `isUrlSafe`) on `osint/maltego·analyze·webhook`.
+
+### New libs
+- `src/lib/docForensics.ts` — `runDocForensics(base64) → p_tampered | null` (fail-safe worker call).
+- `src/lib/ssrfGuard.ts` — `isUrlSafe(url)` + `SAFE_FETCH_OPTIONS`.
+
+## Partnerships / Complementariedad LATAM (2026)
+Two Colombian companies shared dossiers (full outreach copy: `docs/partnerships/neuronal-inteia-outreach.md`).
+- **Inteia** (inteia.com.co) — data/analytics/software house with a strong LATAM enterprise base (Ecopetrol, ISA, ISAGEN, EPM, WOM, XM, public sector). 6 domains incl. video analytics (D33P) + satellite (Terradai). → potential **GTM channel** for Deep-Check in LATAM.
+- **Neuronal Vision / Newzenda** (neuronalvision.com) — 20+ yr facial recognition + emotion AI. Face X: Face-LogIn, Face-Access, Face-Proctor, Face-Health (rPPG), Face-Sense (micro-expressions). Does 1:N recognition; **lacks anti-deepfake / PAD** = exactly Deep-Check's moat.
+
+**Thesis**: a value stack, not three equals. Inteia = channel; Neuronal = customer-facing biometric product; Deep-Check = the integrity layer (anti-deepfake / PAD / liveness / doc forensics) that plugs INSIDE Neuronal's products, in front of the 1:N match. The rPPG/FACS overlap (↔ Face-Health/Sense) is reframed: Neuronal's mature rPPG FEEDS Deep-Check's liveness (complementarity, not competition).
+
+**IP protection**: integrate serving ONLY the verdict (`P(fake)` + confidence) behind `X-API-Key` — never per-layer signals or weights (the ml-worker hardening enables this). First move: a **paid blind benchmark** (they send deepfakes + injection attempts, we return scores/AUC/EER). Do NOT claim NIST/iBeta "certified" — those are submitted/not obtained. Other strong fits from research: Mitek (Spain-remote deepfake role), iProov, Signaturit/Camerfirma (notarial QES).
