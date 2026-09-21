@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<!-- Open this file in a browser and click each button to download the icons -->
+<html>
+<head><meta charset="utf-8"><title>Icon Generator</title></head>
+<body style="font-family:monospace;padding:2rem;background:#0a0a0f;color:#fff">
+  <h2>Deep-Check PWA Icon Generator</h2>
+  <p>Click each button to generate and download the icon PNG.</p>
+  <div id="buttons" style="display:flex;gap:1rem;flex-wrap:wrap;margin-top:1rem"></div>
+  <canvas id="c" style="display:none"></canvas>
+  <script>
+    const sizes = [96, 180, 192, 512]
+    const btns = document.getElementById('buttons')
+    const c = document.getElementById('c')
+    const ctx = c.getContext('2d')
+
+    function drawIcon(size) {
+      c.width = size; c.height = size
+      // Background
+      ctx.fillStyle = '#0a0a0f'
+      ctx.fillRect(0, 0, size, size)
+      // Rounded rect bg
+      const r = size * 0.18
+      ctx.beginPath()
+      ctx.roundRect(size*0.08, size*0.08, size*0.84, size*0.84, r)
+      const grad = ctx.createLinearGradient(0, 0, size, size)
+      grad.addColorStop(0, '#0a1628')
+      grad.addColorStop(1, '#0d1f3c')
+      ctx.fillStyle = grad
+      ctx.fill()
+      // Border glow
+      ctx.strokeStyle = '#00e5ff'
+      ctx.lineWidth = size * 0.025
+      ctx.stroke()
+      // D letter
+      ctx.fillStyle = '#00e5ff'
+      ctx.font = `bold ${size * 0.52}px -apple-system, sans-serif`
+      ctx.textAlign = 'center'
+      ctx.textBaseline = 'middle'
+      ctx.fillText('D', size * 0.46, size * 0.52)
+      // Check mark dot
+      ctx.beginPath()
+      ctx.arc(size * 0.72, size * 0.68, size * 0.065, 0, Math.PI * 2)
+      ctx.fillStyle = '#39ff14'
+      ctx.fill()
+    }
+
+    sizes.forEach(sz => {
+      const btn = document.createElement('button')
+      btn.textContent = `Download ${sz}x${sz}`
+      btn.style = 'padding:8px 16px;background:#00e5ff;color:#000;border:none;cursor:pointer;border-radius:4px'
+      btn.onclick = () => {
+        drawIcon(sz)
+        const a = document.createElement('a')
+        a.download = `icon-${sz}.png`
+        a.href = c.toDataURL('image/png')
+        a.click()
+      }
+      btns.appendChild(btn)
+    })
+  </script>
+</body>
+</html>

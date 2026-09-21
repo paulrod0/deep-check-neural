@@ -31,7 +31,7 @@ export interface MLInferenceResult {
 
 // ─── Module-level singletons (lazily initialised) ─────────────────────────────
 
-let session: any = null
+let session: import('onnxruntime-web').InferenceSession | null = null
 let scalerParams: ScalerParams | null = null
 let loadPromise: Promise<void> | null = null
 

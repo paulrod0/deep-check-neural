@@ -19,7 +19,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
-import { getProfileById, getProfileByEmail, KeystrokeProfile } from '@/lib/db'
+import { getProfileById, getProfileByEmailUnscoped, KeystrokeProfile } from '@/lib/db'
 import { writeAuditLog, extractIP } from '@/lib/auditLog'
 import path from 'path'
 
@@ -341,7 +341,7 @@ export async function POST(req: NextRequest) {
 
         const profile = enrollmentProfileId
             ? await getProfileById(enrollmentProfileId)
-            : enrollmentEmail ? await getProfileByEmail(enrollmentEmail) : null
+            : enrollmentEmail ? await getProfileByEmailUnscoped(enrollmentEmail) : null
 
         if (profile) {
             const liveVec = [features.flightMean, features.flightStd, features.holdMean, features.entropy]
@@ -417,12 +417,13 @@ export async function POST(req: NextRequest) {
             },
         })
 
-    } catch (err: any) {
-        console.error('[/api/ml-score-v2]', err?.message)
+    } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : String(err)
+        console.error('[/api/ml-score-v2]', msg)
         void writeAuditLog({
             eventType: 'error', endpoint: '/api/ml-score-v2', method: 'POST',
             ip, statusCode: 500, durationMs: Date.now() - t0,
         })
-        return NextResponse.json({ success: false, error: err?.message ?? 'Server error' }, { status: 500 })
+        return NextResponse.json({ success: false, error: msg ?? 'Server error' }, { status: 500 })
     }
 }

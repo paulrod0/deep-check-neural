@@ -63,7 +63,7 @@ export default function VerifyLandingPage() {
                                 style={{ width: '100%', padding: '11px 14px', background: 'rgba(255,255,255,0.05)', border: `1px solid ${error ? '#ff4d4d' : 'var(--color-border)'}`, borderRadius: '10px', color: 'var(--color-text)', fontSize: '0.9rem', outline: 'none', boxSizing: 'border-box', fontFamily: 'monospace' }}
                             />
                             <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginTop: '5px' }}>
-                                Aparece en el certificado PDF junto a "Session:" o "ID:"
+                                Aparece en el certificado PDF junto a &quot;Session:&quot; o &quot;ID:&quot;
                             </div>
                         </div>
 

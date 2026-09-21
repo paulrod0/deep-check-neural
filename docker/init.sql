@@ -141,6 +141,26 @@ CREATE INDEX IF NOT EXISTS idx_docs_case_ref  ON dc_document_analyses (case_ref)
 
 GRANT SELECT, INSERT, UPDATE, DELETE ON dc_document_analyses TO deepcheck_anon;
 
+-- ─── dc_deepfake_audit ────────────────────────────────────────────────────────
+-- Veritas Engine v2 — tamper-evident SHA-256 block chain of forensic evidence
+
+CREATE TABLE IF NOT EXISTS dc_deepfake_audit (
+    id            UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    assessment_id UUID REFERENCES dc_assessments(id) ON DELETE CASCADE,
+    block_index   INTEGER NOT NULL,
+    block_hash    TEXT NOT NULL,
+    prev_hash     TEXT NOT NULL DEFAULT '0000000000000000000000000000000000000000000000000000000000000000',
+    timestamp     BIGINT NOT NULL,
+    layer         TEXT NOT NULL CHECK (layer IN ('rppg','facs','cnn_v1','cnn_v2','efficientnet','keystroke','ensemble','session_start','session_end')),
+    payload       JSONB NOT NULL DEFAULT '{}',
+    chain_valid   BOOLEAN DEFAULT TRUE
+);
+
+CREATE INDEX IF NOT EXISTS idx_deepfake_audit_assessment ON dc_deepfake_audit (assessment_id, block_index);
+CREATE INDEX IF NOT EXISTS idx_deepfake_audit_layer      ON dc_deepfake_audit (layer);
+
+GRANT SELECT, INSERT ON dc_deepfake_audit TO deepcheck_anon;
+
 -- ─── Cleanup expired sessions (cron-like, call periodically) ─────────────────
 
 CREATE OR REPLACE FUNCTION dc_cleanup_expired_sessions() RETURNS void AS $$

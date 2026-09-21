@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128">
+  <rect width="128" height="128" rx="20" fill="#0a0a0f"/>
+  <path d="M64 20L26 40.5V81.5L64 102L102 81.5V40.5L64 20Z" stroke="#00ff9d" stroke-width="3" fill="none"/>
+  <path d="M64 40L42 53V75.5L64 88.5L86 75.5V53L64 40Z" fill="#00ff9d" opacity="0.12"/>
+  <path d="M64 50L48 59.5V75L64 84.5L80 75V59.5L64 50Z" fill="#00ff9d" opacity="0.08"/>
+  <path d="M48 67L58 78L80 54" stroke="#00ff9d" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+  <text x="64" y="118" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" font-weight="bold" fill="rgba(255,255,255,0.4)">FAKECHECK</text>
+</svg>

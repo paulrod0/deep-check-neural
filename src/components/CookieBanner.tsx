@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect } from 'react'
+import React, { useState } from 'react'
 import Link from 'next/link'
 import styles from './CookieBanner.module.css'
 
@@ -9,12 +9,7 @@ const STORAGE_KEY = 'dc_cookie_consent_v1'
 export type ConsentChoice = 'accepted' | 'declined' | null
 
 export default function CookieBanner() {
-    const [visible, setVisible] = useState(false)
-
-    useEffect(() => {
-        const stored = localStorage.getItem(STORAGE_KEY)
-        if (!stored) setVisible(true)
-    }, [])
+    const [visible, setVisible] = useState(() => typeof window !== 'undefined' && !localStorage.getItem(STORAGE_KEY))
 
     const handleChoice = (choice: 'accepted' | 'declined') => {
         localStorage.setItem(STORAGE_KEY, JSON.stringify({ choice, ts: Date.now() }))

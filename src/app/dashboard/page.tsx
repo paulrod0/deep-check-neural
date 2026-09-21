@@ -26,18 +26,30 @@ function exportCSV(candidates: Candidate[]) {
     URL.revokeObjectURL(url)
 }
 
+interface PlanUsage {
+    plan: string
+    planLabel: string
+    sessionsUsed: number
+    sessionsLimit: number
+    docsUsed: number
+    docsLimit: number
+    periodReset: string
+    upgradeNeeded: boolean
+}
+
 export default function DashboardPage() {
     const [allCandidates, setAllCandidates] = useState<Candidate[]>([])
     const [search, setSearch] = useState('')
     const [statusFilter, setStatusFilter] = useState<'all' | 'passed' | 'review' | 'flagged'>('all')
     const [isLoading, setIsLoading] = useState(true)
+    const [planUsage, setPlanUsage] = useState<PlanUsage | null>(null)
 
     useEffect(() => {
         const fetchAssessments = async () => {
             try {
                 const res = await fetch('/api/assessments')
                 const data = await res.json()
-                setAllCandidates(data.map((a: any) => ({
+                setAllCandidates(data.map((a: Record<string, unknown>) => ({
                     id: a.id,
                     name: a.candidateName,
                     role: a.role,
@@ -51,7 +63,14 @@ export default function DashboardPage() {
                 setIsLoading(false)
             }
         }
+        const fetchPlanUsage = async () => {
+            try {
+                const res = await fetch('/api/plan-usage')
+                if (res.ok) setPlanUsage(await res.json())
+            } catch { /* no plan info available */ }
+        }
         fetchAssessments()
+        fetchPlanUsage()
     }, [])
 
     const filtered = allCandidates.filter(c => {
@@ -72,8 +91,127 @@ export default function DashboardPage() {
             <div className={styles.content}>
                 <header className={styles.header}>
                     <h1>Security <span className="text-gradient">Intelligence</span></h1>
-                    <div className={styles.user}>Admin Portal · v2.7</div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                        {planUsage && (
+                            <span style={{
+                                fontSize: '0.7rem', fontWeight: 700, padding: '0.2rem 0.7rem',
+                                borderRadius: '20px', textTransform: 'uppercase', letterSpacing: '0.1em',
+                                background: planUsage.plan === 'free' ? 'rgba(161,161,170,0.15)' : 'rgba(0,255,157,0.15)',
+                                color: planUsage.plan === 'free' ? 'var(--color-text-muted)' : 'var(--color-primary)',
+                                border: `1px solid ${planUsage.plan === 'free' ? 'var(--color-border)' : 'rgba(0,255,157,0.3)'}`,
+                            }}>
+                                {planUsage.planLabel}
+                            </span>
+                        )}
+                        <div className={styles.user}>Admin Portal · v2.7</div>
+                    </div>
                 </header>
+
+                {/* ── Plan Usage Banner ── */}
+                {planUsage && planUsage.upgradeNeeded && (
+                    <div style={{
+                        background: 'rgba(0,255,157,0.05)',
+                        border: '1px solid rgba(0,255,157,0.2)',
+                        borderRadius: '12px',
+                        padding: '1rem 1.25rem',
+                        marginBottom: '1.5rem',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        flexWrap: 'wrap',
+                        gap: '1rem',
+                    }}>
+                        <div style={{ display: 'flex', gap: '2rem', flexWrap: 'wrap' }}>
+                            {/* Sessions usage bar */}
+                            <div>
+                                <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginBottom: '0.35rem' }}>
+                                    Sesiones este mes
+                                </div>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+                                    <div style={{ width: '120px', height: '6px', background: 'var(--color-border)', borderRadius: '3px', overflow: 'hidden' }}>
+                                        <div style={{
+                                            height: '100%', borderRadius: '3px',
+                                            width: `${Math.min(100, (planUsage.sessionsUsed / (planUsage.sessionsLimit || 10)) * 100)}%`,
+                                            background: planUsage.sessionsUsed >= planUsage.sessionsLimit ? '#ff4d4d' : 'var(--color-primary)',
+                                            transition: 'width 0.3s ease',
+                                        }} />
+                                    </div>
+                                    <span style={{ fontSize: '0.8rem', color: '#fff' }}>
+                                        {planUsage.sessionsUsed}/{planUsage.sessionsLimit}
+                                    </span>
+                                </div>
+                            </div>
+                            {/* Docs usage bar */}
+                            <div>
+                                <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginBottom: '0.35rem' }}>
+                                    Análisis forenses
+                                </div>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+                                    <div style={{ width: '120px', height: '6px', background: 'var(--color-border)', borderRadius: '3px', overflow: 'hidden' }}>
+                                        <div style={{
+                                            height: '100%', borderRadius: '3px',
+                                            width: `${Math.min(100, (planUsage.docsUsed / (planUsage.docsLimit || 5)) * 100)}%`,
+                                            background: planUsage.docsUsed >= planUsage.docsLimit ? '#ff4d4d' : 'var(--color-primary)',
+                                            transition: 'width 0.3s ease',
+                                        }} />
+                                    </div>
+                                    <span style={{ fontSize: '0.8rem', color: '#fff' }}>
+                                        {planUsage.docsUsed}/{planUsage.docsLimit}
+                                    </span>
+                                </div>
+                            </div>
+                        </div>
+                        <a href="/pricing" className="btn btn-primary" style={{ fontSize: '0.85rem', padding: '0.5rem 1.25rem' }}>
+                            Actualizar a Pro →
+                        </a>
+                    </div>
+                )}
+
+                {/* Quick links */}
+                <div style={{
+                    display: 'flex', gap: '0.75rem', marginBottom: '1.5rem', flexWrap: 'wrap',
+                }}>
+                    <Link href="/documents/verify" style={{
+                        display: 'flex', alignItems: 'center', gap: '0.5rem',
+                        padding: '0.5rem 1rem', borderRadius: 8,
+                        background: 'rgba(0,229,255,0.06)', border: '1px solid rgba(0,229,255,0.2)',
+                        color: 'var(--color-primary)', textDecoration: 'none', fontSize: '0.82rem', fontWeight: 600,
+                    }}>
+                        🪪 KYC Verification
+                    </Link>
+                    <Link href="/documents" style={{
+                        display: 'flex', alignItems: 'center', gap: '0.5rem',
+                        padding: '0.5rem 1rem', borderRadius: 8,
+                        background: 'rgba(255,255,255,0.03)', border: '1px solid var(--color-border)',
+                        color: 'var(--color-text)', textDecoration: 'none', fontSize: '0.82rem', fontWeight: 600,
+                    }}>
+                        🔬 Document Forensics
+                    </Link>
+                    <Link href="/dashboard/ml" style={{
+                        display: 'flex', alignItems: 'center', gap: '0.5rem',
+                        padding: '0.5rem 1rem', borderRadius: 8,
+                        background: 'rgba(255,255,255,0.03)', border: '1px solid var(--color-border)',
+                        color: 'var(--color-text)', textDecoration: 'none', fontSize: '0.82rem', fontWeight: 600,
+                    }}>
+                        🧠 ML Model Dashboard
+                    </Link>
+                    <Link href="/interview" style={{
+                        display: 'flex', alignItems: 'center', gap: '0.5rem',
+                        padding: '0.5rem 1rem', borderRadius: 8,
+                        background: 'rgba(255,255,255,0.03)', border: '1px solid var(--color-border)',
+                        color: 'var(--color-text)', textDecoration: 'none', fontSize: '0.82rem', fontWeight: 600,
+                    }}>
+                        🎙 Live Interview
+                    </Link>
+                    <Link href="/dashboard/audit" style={{
+                        display: 'flex', alignItems: 'center', gap: '0.5rem',
+                        padding: '0.5rem 1rem', borderRadius: 8,
+                        background: 'rgba(255,255,255,0.03)', border: '1px solid var(--color-border)',
+                        color: 'var(--color-text)', textDecoration: 'none', fontSize: '0.82rem', fontWeight: 600,
+                    }}>
+                        🔗 Audit Trail
+                    </Link>
+                </div>
 
                 {/* Stats Grid */}
                 <div className={styles.statsGrid}>
@@ -122,7 +260,7 @@ export default function DashboardPage() {
                             {/* Status filter */}
                             <select
                                 value={statusFilter}
-                                onChange={e => setStatusFilter(e.target.value as any)}
+                                onChange={e => setStatusFilter(e.target.value as 'all' | 'passed' | 'review' | 'flagged')}
                                 style={{
                                     background: 'var(--color-surface)',
                                     border: '1px solid var(--color-border)',

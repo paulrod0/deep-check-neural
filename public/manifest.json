@@ -1,0 +1,58 @@
+{
+  "name": "Deep-Check",
+  "short_name": "Deep-Check",
+  "description": "Continuous identity verification and document forensics",
+  "start_url": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0a0a0f",
+  "theme_color": "#00e5ff",
+  "categories": ["business", "utilities", "security"],
+  "icons": [
+    {
+      "src": "/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icons/icon-180.png",
+      "sizes": "180x180",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Verify Document",
+      "short_name": "KYC",
+      "description": "Verify an identity document",
+      "url": "/documents/verify",
+      "icons": [{ "src": "/icons/icon-96.png", "sizes": "96x96" }]
+    },
+    {
+      "name": "Live Interview",
+      "short_name": "Interview",
+      "description": "Start a monitored interview session",
+      "url": "/interview",
+      "icons": [{ "src": "/icons/icon-96.png", "sizes": "96x96" }]
+    }
+  ],
+  "screenshots": [
+    {
+      "src": "/screenshots/kyc-wizard.png",
+      "sizes": "390x844",
+      "type": "image/png",
+      "form_factor": "narrow",
+      "label": "KYC Document Verification wizard"
+    }
+  ],
+  "related_applications": [],
+  "prefer_related_applications": false
+}

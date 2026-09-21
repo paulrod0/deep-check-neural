@@ -1,0 +1,22 @@
+{
+  "model": "celebdf_best.onnx (EfficientNet-B4+FrequencyBranch, FF++->CelebDF)",
+  "dataset": "ciplab/real-and-fake-face-detection (Kaggle, cross-dataset)",
+  "type": "REAL INFERENCE (not simulated)",
+  "n_real": 1000,
+  "n_fake": 960,
+  "inference_time_s": 77.71,
+  "avg_ms_per_image": 39.6,
+  "auc": 0.520258,
+  "eer": 0.480083,
+  "eer_threshold": 0.003,
+  "apcer": 0.479167,
+  "bpcer": 0.481,
+  "acer": 0.480083,
+  "d_prime": 0.0056,
+  "accuracy_05": 0.5117,
+  "f1_05": 0.1014,
+  "real_mean": 0.079258,
+  "real_std": 0.186621,
+  "fake_mean": 0.080302,
+  "fake_std": 0.186807
+}

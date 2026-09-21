@@ -5,11 +5,19 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { saveEnrollmentProfile, EnrollmentProfile, KeystrokeProfile } from '@/lib/db'
 import { writeAuditLog, extractIP } from '@/lib/auditLog'
+import { validateAdminSession } from '@/lib/adminAuth'
 import crypto from 'crypto'
 
 export async function POST(req: NextRequest) {
     const t0 = Date.now()
     const ip = extractIP(req.headers)
+
+    // Auth: admin session required — enrollment is an internal operation
+    if (!await validateAdminSession(req)) {
+        void writeAuditLog({ eventType: 'auth_fail', endpoint: '/api/enrollment', method: 'POST', ip, statusCode: 401, durationMs: Date.now() - t0 })
+        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
     try {
         const body = await req.json()
         const { candidateName, candidateEmail, context = 'prose_es', profile }: {
@@ -82,11 +90,12 @@ export async function POST(req: NextRequest) {
             expiresAt: ep.expiresAt,
             enrollmentHash,
         })
-    } catch (e: any) {
-        console.error('[/api/enrollment] Error:', e?.message ?? e)
+    } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : String(e)
+        console.error('[/api/enrollment] Error:', msg)
         void writeAuditLog({ eventType: 'error', endpoint: '/api/enrollment', method: 'POST', ip, statusCode: 500, durationMs: Date.now() - t0 })
         return NextResponse.json(
-            { success: false, error: e?.message ?? 'Error interno del servidor' },
+            { success: false, error: msg ?? 'Error interno del servidor' },
             { status: 500 }
         )
     }

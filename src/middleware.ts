@@ -15,12 +15,26 @@ import { NextRequest, NextResponse } from 'next/server'
 // Limits: 100 req/min general, 20 req/min for auth/sensitive endpoints
 
 const rateLimitMap = new Map<string, { count: number; resetAt: number }>()
+const CLEANUP_INTERVAL = 5 * 60_000 // 5 minutes
+let lastCleanup = Date.now()
+
+/** Purge expired entries to prevent unbounded Map growth in long-lived serverless instances */
+function cleanupStaleEntries() {
+    const now = Date.now()
+    if (now - lastCleanup < CLEANUP_INTERVAL) return
+    lastCleanup = now
+    for (const [key, entry] of rateLimitMap) {
+        if (now > entry.resetAt) rateLimitMap.delete(key)
+    }
+}
 
 const LIMITS: Record<string, number> = {
     '/api/ml-score':           20,  // ML inference — expensive
     '/api/enrollment':         10,  // biometric enrollment
     '/api/documents':          30,  // forensic analysis
     '/api/auth':               5,   // auth attempts — strict
+    '/api/admissions-verify':  5,   // compute-heavy forensics pipeline — strict
+    '/api/osint':              10,  // OSINT batch/analyze — moderate
     'default':                 100, // general limit per minute
 }
 
@@ -56,16 +70,29 @@ function getIP(req: NextRequest): string {
     )
 }
 
-// ─── Admin session check ──────────────────────────────────────────────────────
+// ─── Auth check ───────────────────────────────────────────────────────────────
 // ENS op.acc.5: Mecanismo de autenticación
-// Dashboard requires a valid admin session cookie
+// Dashboard requires EITHER a Supabase Auth session (sb-access-token from magic
+// link) OR a legacy admin session cookie (dc_admin_session).
+// Actual token validation happens in server-side route handlers — middleware
+// only checks presence/format to avoid DB calls at the edge.
+
+function looksLikeJwt(value: string): boolean {
+    const parts = value.split('.')
+    return parts.length === 3 && parts.every(p => p.length > 0)
+}
 
 function isAdminAuthenticated(req: NextRequest): boolean {
-    const token = req.cookies.get('dc_admin_session')?.value
-    if (!token) return false
-    // Token format: "dc_admin_<random>" — actual validation happens in the auth API
-    // Middleware only checks for presence and basic format to avoid DB calls at edge
-    return token.startsWith('dc_admin_') && token.length > 20
+    // Path 1: Supabase Auth magic-link session (new SaaS users)
+    // Check JWT structure (3 dot-separated base64 segments) not just length
+    const sbToken = req.cookies.get('sb-access-token')?.value
+    if (sbToken && looksLikeJwt(sbToken)) return true
+
+    // Path 2: Legacy admin session (password-based, backwards compat)
+    const adminToken = req.cookies.get('dc_admin_session')?.value
+    if (adminToken && adminToken.startsWith('dc_admin_') && adminToken.length > 20) return true
+
+    return false
 }
 
 // ─── Structured logging ───────────────────────────────────────────────────────
@@ -103,6 +130,7 @@ export function middleware(req: NextRequest) {
     }
 
     // ── 2. Rate limiting ──────────────────────────────────────────────────────
+    cleanupStaleEntries()
     if (pathname.startsWith('/api/')) {
         if (!checkRateLimit(ip, pathname)) {
             logRequest(req, 429, 'rate_limited')

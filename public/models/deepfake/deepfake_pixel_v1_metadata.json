@@ -1,0 +1,65 @@
+{
+  "model": "deepfake_pixel_v1",
+  "version": "2.0.0",
+  "architecture": "EfficientNet-B4 (timm) + FrequencyBranchONNX(Laplacian), ONNX opset 17",
+  "metrics": {
+    "faceforensics_auc": 0.9602,
+    "faceforensics_eer": 0.103,
+    "dfdc_auc": 0.9434,
+    "dfdc_eer": 0.127,
+    "celebdf_auc": 0.9913,
+    "celebdf_eer": 0.0455,
+    "deployed_model": "celebdf_best (highest AUC)"
+  },
+  "calibration": {
+    "method": "platt_scaling",
+    "coef": 1.0,
+    "intercept": 0.0,
+    "apply": "p_calibrated = sigmoid(coef * logit + intercept)",
+    "note": "Fine-tuned on FaceForensics++ C23 → CelebDF v2"
+  },
+  "threshold": 0.5,
+  "input": {
+    "name": "face_image",
+    "shape": [1, 3, 224, 224],
+    "dtype": "float32",
+    "preprocessing": "ImageNet normalize CHW (mean=[0.485,0.456,0.406], std=[0.229,0.224,0.225])"
+  },
+  "output": {
+    "name": "logit",
+    "interpretation": "sigmoid(logit) > threshold → fake"
+  },
+  "training": {
+    "pipeline": "StyleGAN2 pretrain → FaceForensics++ C23 fine-tune → CelebDF v2 fine-tune",
+    "datasets": {
+      "faceforensics_pp": {
+        "source": "Kaggle (pre-extracted C23 faces)",
+        "real_images": 91068,
+        "fake_images": 91068,
+        "manipulations": ["Deepfakes", "Face2Face", "FaceSwap", "NeuralTextures"]
+      },
+      "dfdc": {
+        "source": "Kaggle (pre-extracted faces)",
+        "real_images": 62000,
+        "fake_images": 62000,
+        "note": "Trained as parallel branch from FF++ checkpoint"
+      },
+      "celebdf_v2": {
+        "source": "CelebDF v2 (video → face extraction via Haar cascade)",
+        "real_images": 44109,
+        "fake_images": 21539,
+        "videos_processed": 6529,
+        "best_epoch": 9,
+        "epochs": 10
+      }
+    },
+    "backbone": "timm efficientnet_b4",
+    "frequency_branch": "Laplacian convolution (ONNX-compatible replacement for FFT)"
+  },
+  "onnx_size_mb": 68.6,
+  "s3_models": {
+    "faceforensics_best": "s3://deep-check-models/trained/faceforensics++_best.onnx",
+    "dfdc_best": "s3://deep-check-models/trained/dfdc_best.onnx",
+    "celebdf_best": "s3://deep-check-models/trained/celebdf_best.onnx"
+  }
+}

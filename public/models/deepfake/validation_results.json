@@ -1,0 +1,17 @@
+{
+  "pass": 5,
+  "fail": 0,
+  "checks": [
+    {
+      "name": "model_load",
+      "status": "PASS"
+    },
+    {
+      "name": "real_images",
+      "n": 1081,
+      "min": -0.9999992329765632,
+      "max": 1.0,
+      "mean": 0.956570048912637
+    }
+  ]
+}

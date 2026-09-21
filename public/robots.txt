@@ -1,0 +1,14 @@
+# Deep-Check robots.txt
+# https://deep-check-two.vercel.app
+
+User-agent: *
+Allow: /
+
+# Sitemap
+Sitemap: https://deep-check-two.vercel.app/sitemap.xml
+
+# Disallow internal/API routes
+Disallow: /api/
+Disallow: /auth/
+Disallow: /enroll
+Disallow: /_next/
