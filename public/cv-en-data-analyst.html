@@ -1,0 +1,448 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CV — Pablo López Rodríguez — Data Analyst</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'Inter', sans-serif;
+    background: #fff;
+    color: #1a1a2e;
+    font-size: 9pt;
+    line-height: 1.45;
+  }
+
+  .page {
+    display: grid;
+    grid-template-columns: 210px 1fr;
+    min-height: 100vh;
+  }
+
+  /* ── SIDEBAR ── */
+  .sidebar {
+    background: #1a1a2e;
+    color: #e8e8f0;
+    padding: 22px 18px;
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+  }
+
+  .photo-wrap { display: flex; justify-content: center; }
+
+  .photo-wrap img { width: 110px; height: 110px; border-radius: 50%; object-fit: cover; border: 3px solid #00ff9d; }
+
+  .photo-placeholder {
+    width: 110px;
+    height: 110px;
+    border-radius: 50%;
+    background: #2a2a4e;
+    border: 3px solid #00ff9d;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 34pt;
+    color: #00ff9d;
+  }
+
+  .sidebar-section-title {
+    font-size: 7.5pt;
+    font-weight: 700;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: #00ff9d;
+    margin-bottom: 8px;
+    padding-bottom: 4px;
+    border-bottom: 1px solid #2a2a4e;
+  }
+
+  .contact-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    margin-bottom: 6px;
+    font-size: 8.5pt;
+    color: #b0b0cc;
+  }
+
+  .contact-icon { font-size: 11pt; flex-shrink: 0; margin-top: 1px; }
+
+  .skill-item { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+
+  .skill-name { font-size: 8pt; color: #b0b0cc; width: 92px; flex-shrink: 0; }
+
+  .skill-bar-bg { flex: 1; height: 4px; background: #2a2a4e; border-radius: 2px; }
+
+  .skill-bar { height: 4px; background: linear-gradient(90deg, #00ff9d, #7000ff); border-radius: 2px; }
+
+  .lang-badge {
+    display: inline-block;
+    background: #2a2a4e;
+    border: 1px solid #00ff9d;
+    color: #00ff9d;
+    font-size: 7.5pt;
+    font-weight: 600;
+    padding: 2px 8px;
+    border-radius: 10px;
+    margin-top: 4px;
+  }
+
+  .side-text { color: #b0b0cc; font-size: 7.8pt; line-height: 1.6; }
+
+  /* ── MAIN ── */
+  .main {
+    padding: 16px 22px 10px 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .name-block { border-bottom: 2px solid #1a1a2e; padding-bottom: 8px; }
+
+  .name-block .firstname {
+    font-size: 26pt;
+    font-weight: 800;
+    color: #1a1a2e;
+    line-height: 1;
+    letter-spacing: -0.02em;
+  }
+
+  .name-block .lastname { font-size: 18pt; font-weight: 400; color: #444; letter-spacing: 0.05em; }
+
+  .name-block .title {
+    font-size: 9pt;
+    color: #00aa66;
+    font-weight: 600;
+    margin-top: 4px;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+  }
+
+  .section-title {
+    font-size: 8pt;
+    font-weight: 700;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: #00aa66;
+    margin-bottom: 6px;
+    padding-bottom: 4px;
+    border-bottom: 1.5px solid #e8e8f0;
+  }
+
+  .profile-text { font-size: 8.5pt; color: #444; line-height: 1.45; }
+
+  /* Key skills chips */
+  .chips { display: flex; flex-wrap: wrap; gap: 5px; }
+  .chip {
+    font-size: 7.8pt;
+    font-weight: 600;
+    color: #1a1a2e;
+    background: #f0fff8;
+    border: 1px solid #00cc7a;
+    padding: 2px 8px;
+    border-radius: 10px;
+  }
+
+  /* Experience */
+  .exp-item { margin-bottom: 5px; padding-left: 12px; border-left: 2.5px solid #00ff9d; }
+
+  .exp-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 2px; }
+
+  .exp-company { font-size: 9.5pt; font-weight: 700; color: #1a1a2e; }
+
+  .exp-dates { font-size: 7.5pt; color: #888; font-weight: 500; white-space: nowrap; margin-left: 8px; flex-shrink: 0; }
+
+  .exp-role { font-size: 8.5pt; color: #00aa66; font-weight: 600; margin-bottom: 3px; }
+
+  .exp-desc { font-size: 8pt; color: #444; line-height: 1.38; }
+
+  .exp-desc ul { padding-left: 14px; margin-top: 3px; }
+
+  .exp-desc li { margin-bottom: 1px; }
+
+  /* Studies */
+  .edu-grid { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 6px; }
+
+  .edu-item {
+    background: #f8f8fc;
+    border-left: 2.5px solid #1a1a2e;
+    padding: 3px 8px;
+    border-radius: 0 4px 4px 0;
+  }
+
+  .edu-name { font-size: 8.5pt; font-weight: 600; color: #1a1a2e; }
+
+  .edu-year { font-size: 7.5pt; color: #888; margin-top: 1px; }
+
+  /* Print */
+  @media print {
+    body { font-size: 9pt; }
+    .page { min-height: auto; }
+    @page { size: A4; margin: 0; }
+  }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <!-- ── SIDEBAR ── -->
+  <aside class="sidebar">
+
+    <div class="photo-wrap">
+      <img src="cv-photo.jpg" alt="Pablo López Rodríguez">
+    </div>
+
+    <!-- Contact -->
+    <div>
+      <div class="sidebar-section-title">Contact</div>
+      <div class="contact-item">
+        <span class="contact-icon">📍</span>
+        <span>Seville, Spain<br>Open to relocation (BE / NL)</span>
+      </div>
+      <div class="contact-item">
+        <span class="contact-icon">✉️</span>
+        <span>Pablo.lprdz@gmail.com</span>
+      </div>
+      <div class="contact-item">
+        <span class="contact-icon">📱</span>
+        <span>+34 650 068 486</span>
+      </div>
+      <div class="contact-item">
+        <span class="contact-icon">💻</span>
+        <span>github.com/paulrod0</span>
+      </div>
+    </div>
+
+    <!-- Eligibility -->
+    <div>
+      <div class="sidebar-section-title">Eligibility</div>
+      <div class="side-text">
+        🇪🇺 EU citizen (Spain)<br>
+        🔐 Eligible for security clearance<br>
+        🧾 B2B / freelance contract ready<br>
+        ✈️ Available to relocate
+      </div>
+    </div>
+
+    <!-- Technical skills -->
+    <div>
+      <div class="sidebar-section-title">Technical Skills</div>
+
+      <div class="skill-item">
+        <span class="skill-name">SQL</span>
+        <div class="skill-bar-bg"><div class="skill-bar" style="width:90%"></div></div>
+      </div>
+      <div class="skill-item">
+        <span class="skill-name">Python (pandas)</span>
+        <div class="skill-bar-bg"><div class="skill-bar" style="width:90%"></div></div>
+      </div>
+      <div class="skill-item">
+        <span class="skill-name">ETL · Spark</span>
+        <div class="skill-bar-bg"><div class="skill-bar" style="width:85%"></div></div>
+      </div>
+      <div class="skill-item">
+        <span class="skill-name">Snowflake DWH</span>
+        <div class="skill-bar-bg"><div class="skill-bar" style="width:80%"></div></div>
+      </div>
+      <div class="skill-item">
+        <span class="skill-name">AWS (S3/Glue/Athena)</span>
+        <div class="skill-bar-bg"><div class="skill-bar" style="width:80%"></div></div>
+      </div>
+      <div class="skill-item">
+        <span class="skill-name">Power BI</span>
+        <div class="skill-bar-bg"><div class="skill-bar" style="width:75%"></div></div>
+      </div>
+      <div class="skill-item">
+        <span class="skill-name">Plotly Dash</span>
+        <div class="skill-bar-bg"><div class="skill-bar" style="width:80%"></div></div>
+      </div>
+      <div class="skill-item">
+        <span class="skill-name">Excel (advanced)</span>
+        <div class="skill-bar-bg"><div class="skill-bar" style="width:85%"></div></div>
+      </div>
+      <div class="skill-item">
+        <span class="skill-name">Hadoop</span>
+        <div class="skill-bar-bg"><div class="skill-bar" style="width:70%"></div></div>
+      </div>
+      <div class="skill-item">
+        <span class="skill-name">ITSM · ServiceNow</span>
+        <div class="skill-bar-bg"><div class="skill-bar" style="width:70%"></div></div>
+      </div>
+    </div>
+
+    <!-- Tools -->
+    <div>
+      <div class="sidebar-section-title">Tools</div>
+      <div class="side-text">
+        MySQL · SQLite · Athena · Snowflake<br>
+        Scala / PySpark · AWS Glue · Lambda<br>
+        ServiceNow · Jira · ticketing platforms<br>
+        Git / GitHub · Jenkins · Linux · Bash<br>
+        Seaborn · MS Visio · MS Project<br>
+        Active Directory · Windows Server
+      </div>
+    </div>
+
+    <!-- Languages -->
+    <div>
+      <div class="sidebar-section-title">Languages</div>
+      <div class="contact-item" style="flex-direction:column; gap:4px;">
+        <span>🇪🇸 Spanish — Native</span>
+        <span>🇬🇧 English — B2 <span class="lang-badge">Cambridge</span></span>
+      </div>
+    </div>
+
+  </aside>
+
+  <!-- ── MAIN ── -->
+  <main class="main">
+
+    <!-- Name -->
+    <div class="name-block">
+      <div class="firstname">PABLO</div>
+      <div class="lastname">LÓPEZ RODRÍGUEZ</div>
+      <div class="title">Data Analyst · AI &amp; Data Scientist — SQL · ETL · Data Warehousing · BI</div>
+    </div>
+
+    <!-- Profile -->
+    <div>
+      <div class="section-title">Profile</div>
+      <p class="profile-text">
+        Data Analyst / Data Scientist with 6+ years turning raw operational data into reliable datasets, data-quality
+        models and management reporting. Hands-on with <strong>SQL</strong>, large-scale <strong>ETL</strong> (Spark, AWS Glue),
+        cloud <strong>data warehousing</strong> (Snowflake, S3/Athena) and <strong>BI dashboards</strong> (Power BI, Plotly Dash).
+        Experience in the <strong>defence sector</strong> (Airbus Defence &amp; Space) and with <strong>ITSM / incident data</strong> (Fujitsu).
+        EU citizen, B2B contractor, open to relocation to Belgium/Netherlands and to security clearance.
+      </p>
+    </div>
+
+    <!-- Key skills -->
+    <div>
+      <div class="section-title">Core Competencies</div>
+      <div class="chips">
+        <span class="chip">Data Analysis</span>
+        <span class="chip">SQL</span>
+        <span class="chip">Data Warehousing</span>
+        <span class="chip">ETL Pipelines</span>
+        <span class="chip">BI / Reporting</span>
+        <span class="chip">Data Quality &amp; Governance</span>
+        <span class="chip">ITSM / Ticketing Data</span>
+                <span class="chip">Defence Sector</span>
+        <span class="chip">AWS</span>
+        <span class="chip">Snowflake</span>
+        <span class="chip">Power BI</span>
+      </div>
+    </div>
+
+    <!-- Experience -->
+    <div>
+      <div class="section-title">Experience</div>
+
+      <div class="exp-item">
+        <div class="exp-header">
+          <div class="exp-company">Freelance — Grupo Optimus · Endesa · Coca-Cola</div>
+          <div class="exp-dates">Jun 2025 – present</div>
+        </div>
+        <div class="exp-role">AI &amp; Data Scientist (B2B contractor)</div>
+        <div class="exp-desc">
+          <ul>
+            <li><strong>Grupo Optimus (energy):</strong> ETL of energy-consumption data (SIPS/CUPS) into a PostgreSQL warehouse; CRM analytics and automated reporting (invoices → Excel); AI models for invoice extraction and solar-roof detection; KPI dashboards for sales teams.</li>
+            <li><strong>Endesa:</strong> SQL analysis of customer and consumption datasets, data-quality checks and BI reporting for commercial operations.</li>
+            <li><strong>Coca-Cola:</strong> Data-science support for sales and demand analytics — forecasting models, segmentation and Power BI dashboards.</li>
+            <li><strong>Deep-Check (own product):</strong> AI identity-verification SaaS; data pipelines, AUC/EER benchmarks on 900K+ samples; paper published (Zenodo DOI).</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="exp-item">
+        <div class="exp-header">
+          <div class="exp-company">Santander Consumer Finance / Openbank — via NFQ</div>
+          <div class="exp-dates">Dec 2024 – May 2025</div>
+        </div>
+        <div class="exp-role">Data Engineer — Data Governance &amp; Data Quality</div>
+        <div class="exp-desc">
+          <ul>
+            <li>Python/SQL data-analysis tooling for the Data Quality team; defined a data-quality model ensuring consistency and accuracy across reporting pipelines.</li>
+            <li>Designed and ran <strong>Spark ETL</strong> processes for large-scale transformation and loading into <strong>Snowflake</strong> (cloud data warehouse); quality KPIs and reports for governance stakeholders; CI/CD with Jenkins, Hadoop.</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="exp-item">
+        <div class="exp-header">
+          <div class="exp-company">Elmya</div>
+          <div class="exp-dates">Mar 2024 – Oct 2024</div>
+        </div>
+        <div class="exp-role">Head of Development — Data &amp; Automation</div>
+        <div class="exp-desc">
+          <ul>
+            <li>Led the technical area; earthworks optimisation model with Scala/PySpark ETL and interactive <strong>Plotly Dash</strong> dashboards for engineering decisions; QR document-control system with hashed, auditable records.</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="exp-item">
+        <div class="exp-header">
+          <div class="exp-company">Airbus Defence &amp; Space — via Accenture</div>
+          <div class="exp-dates">Jan 2023 – Mar 2024</div>
+        </div>
+        <div class="exp-role">Big Data Engineer / Data Analyst — Military &amp; Defence division</div>
+        <div class="exp-desc">
+          <ul>
+            <li>Data extraction, cleansing and analysis for an internal defence <strong>inventory programme</strong>; delivered analytical datasets and reports to programme management.</li>
+            <li>Implemented <strong>AWS S3, Glue and Athena</strong> for distributed ingestion and large-scale SQL querying over the data lake.</li>
+            <li>ETL in <strong>Scala/PySpark</strong>; reporting with Seaborn and Plotly Dash; GitHub, Hadoop.</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="exp-item">
+        <div class="exp-header">
+          <div class="exp-company">Fujitsu</div>
+          <div class="exp-dates">Sep 2022 – Jan 2023</div>
+        </div>
+        <div class="exp-role">Data Engineer &amp; Incident / ITSM Analyst</div>
+        <div class="exp-desc">
+          <ul>
+            <li>Database administrator and developer of the internal <strong>ticketing (ITSM) platform</strong> (MySQL, Java, JavaScript); analysed incident and service-request data for operational reporting.</li>
+            <li>Monitoring/alerting tools in Python and Bash for incident detection and SLA tracking; Snowflake + AWS S3/Lambda integration.</li>
+          </ul>
+        </div>
+      </div>
+
+
+
+    </div>
+
+    <!-- Education -->
+    <div>
+      <div class="section-title">Education &amp; Certifications</div>
+      <div class="edu-grid">
+        <div class="edu-item">
+          <div class="edu-name">🎓 Software Engineering</div>
+          <div class="edu-year">2024</div>
+        </div>
+        <div class="edu-item">
+          <div class="edu-name">☁️ Google IT Support Professional</div>
+          <div class="edu-year">2022 · Certificate</div>
+        </div>
+        <div class="edu-item">
+          <div class="edu-name">🎫 Ticketing &amp; Monitoring (ITSM)</div>
+          <div class="edu-year">Internal training · Fujitsu</div>
+        </div>
+        <div class="edu-item">
+          <div class="edu-name">🐍 Python · Java · Spark · JavaScript</div>
+          <div class="edu-year">Certified courses · English B2 (Cambridge)</div>
+        </div>
+      </div>
+    </div>
+
+  </main>
+</div>
+</body>
+</html>

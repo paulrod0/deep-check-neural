@@ -1,0 +1,40 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1300 360" width="1300" height="360">
+<rect width="1300" height="360" fill="#ffffff"/>
+
+    <rect x="0" y="0" width="1300" height="65" fill="#0a2540"/>
+    <text x="650" y="40" font-family="Helvetica" font-weight="700" font-size="22"
+          fill="#ffffff" text-anchor="middle">REGLAMENTO EUROPEO DE INTELIGENCIA ARTIFICIAL — Art. 50</text>
+    <text x="650" y="58" font-family="Helvetica" font-size="12" fill="#00d2ff"
+          text-anchor="middle" letter-spacing="2">DETECCIÓN OBLIGATORIA DE CONTENIDO SINTÉTICO</text>
+    
+<line x1="80" y1="200" x2="1220" y2="200" stroke="#0a2540" stroke-width="3"/>
+<circle cx="80" cy="200" r="10" fill="#0a2540" stroke="#ffffff" stroke-width="3"/>
+<text x="80" y="160" font-family="Helvetica" font-weight="700" font-size="15" fill="#0a2540" text-anchor="middle">Publicación</text>
+<text x="80" y="178" font-family="Helvetica" font-size="12" fill="#4a5568" text-anchor="middle">Aug 2024</text>
+<text x="80" y="240" font-family="Helvetica" font-size="12" fill="#4a5568" text-anchor="middle">El AI Act entra en</text>
+<text x="80" y="256" font-family="Helvetica" font-size="12" fill="#4a5568" text-anchor="middle">vigor formalmente</text>
+<circle cx="365" cy="200" r="10" fill="#0a2540" stroke="#ffffff" stroke-width="3"/>
+<text x="365" y="160" font-family="Helvetica" font-weight="700" font-size="15" fill="#0a2540" text-anchor="middle">Prohibiciones</text>
+<text x="365" y="178" font-family="Helvetica" font-size="12" fill="#4a5568" text-anchor="middle">Feb 2025</text>
+<text x="365" y="240" font-family="Helvetica" font-size="12" fill="#4a5568" text-anchor="middle">Aplican prohibiciones</text>
+<text x="365" y="256" font-family="Helvetica" font-size="12" fill="#4a5568" text-anchor="middle">(IA inaceptable)</text>
+<circle cx="650" cy="200" r="10" fill="#0a2540" stroke="#ffffff" stroke-width="3"/>
+<text x="650" y="160" font-family="Helvetica" font-weight="700" font-size="15" fill="#0a2540" text-anchor="middle">Modelos GPAI</text>
+<text x="650" y="178" font-family="Helvetica" font-size="12" fill="#4a5568" text-anchor="middle">Aug 2025</text>
+<text x="650" y="240" font-family="Helvetica" font-size="12" fill="#4a5568" text-anchor="middle">Obligaciones para</text>
+<text x="650" y="256" font-family="Helvetica" font-size="12" fill="#4a5568" text-anchor="middle">modelos generativos</text>
+<circle cx="935" cy="200" r="14" fill="#00d2ff" stroke="#ffffff" stroke-width="3"/>
+<text x="935" y="160" font-family="Helvetica" font-weight="700" font-size="15" fill="#0a2540" text-anchor="middle">Art. 50 OBLIGA</text>
+<text x="935" y="178" font-family="Helvetica" font-size="12" fill="#4a5568" text-anchor="middle">Aug 2026</text>
+<text x="935" y="240" font-family="Helvetica" font-size="12" fill="#4a5568" text-anchor="middle">Detección sintético</text>
+<text x="935" y="256" font-family="Helvetica" font-size="12" fill="#4a5568" text-anchor="middle">Obligatoria</text>
+<circle cx="1220" cy="200" r="10" fill="#0a2540" stroke="#ffffff" stroke-width="3"/>
+<text x="1220" y="160" font-family="Helvetica" font-weight="700" font-size="15" fill="#0a2540" text-anchor="middle">IA alto riesgo</text>
+<text x="1220" y="178" font-family="Helvetica" font-size="12" fill="#4a5568" text-anchor="middle">Aug 2027</text>
+<text x="1220" y="240" font-family="Helvetica" font-size="12" fill="#4a5568" text-anchor="middle">Sectores críticos</text>
+<text x="1220" y="256" font-family="Helvetica" font-size="12" fill="#4a5568" text-anchor="middle">conforme Art. 6</text>
+
+    <rect x="60" y="290" width="1180" height="50" rx="6" fill="#f3f6fb"/>
+    <text x="650" y="320" font-family="Helvetica" font-weight="700" font-size="15"
+          fill="#0a2540" text-anchor="middle">SANCIÓN POR INCUMPLIMIENTO  ·  hasta 15 millones de euros o 3 % de la facturación global  ·  el mayor de los dos (Art. 99)</text>
+    </svg>

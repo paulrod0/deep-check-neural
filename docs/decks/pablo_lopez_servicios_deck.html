@@ -1,0 +1,492 @@
+<meta charset="utf-8">
+<title>Pablo López — Automatización, Apps a medida e IA</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<style>
+  :root{
+    --bg:#0A0E13; --bg2:#0E141B; --panel:#131B24; --panel2:#18222E;
+    --line:#26333F; --hair:#1D2833;
+    --text:#EAEEF3; --muted:#8A97A6; --faint:#5D6B7A;
+    --amber:#F2A24B; --amber-2:#F7C27A; --amber-ink:#0A0E13;
+    --blue:#5B8DEF; --blue-2:#8FB4F6;
+    --green:#42B884;
+    --accent:var(--amber); --accent-2:var(--amber-2);
+    --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,Roboto,"Helvetica Neue",Arial,sans-serif;
+    --mono:ui-monospace,"SF Mono","JetBrains Mono","Roboto Mono",Menlo,Consolas,monospace;
+    --pad:clamp(1.6rem,4.5vw,5rem);
+  }
+
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%}
+  body{
+    background:var(--bg);
+    color:var(--text);
+    font-family:var(--sans);
+    -webkit-font-smoothing:antialiased;
+    overflow:hidden;
+  }
+
+  /* ---- Deck shell ---- */
+  .deck{position:fixed;inset:0}
+  .slide{
+    position:absolute;inset:0;
+    display:flex;flex-direction:column;
+    padding:clamp(1.4rem,3.5vh,2.6rem) var(--pad) clamp(3.4rem,7vh,4.4rem);
+    opacity:0;visibility:hidden;
+    transform:translateY(14px);
+    transition:opacity .5s ease,transform .5s ease,visibility .5s;
+    overflow-y:auto;overflow-x:hidden;
+    background:
+      radial-gradient(120% 80% at 84% 8%, color-mix(in srgb,var(--accent) 8%, transparent) 0%, transparent 55%),
+      radial-gradient(140% 90% at 50% 118%, color-mix(in srgb,var(--accent) 16%, transparent) 0%, transparent 60%),
+      linear-gradient(var(--hair) 1px,transparent 1px) 0 0/100% 64px,
+      linear-gradient(90deg,var(--hair) 1px,transparent 1px) 0 0/64px 100%,
+      var(--bg);
+    background-blend-mode:normal,normal,soft-light,soft-light,normal;
+  }
+  .slide.active{opacity:1;visibility:visible;transform:none}
+  @media (prefers-reduced-motion:reduce){
+    .slide{transition:opacity .2s ease}
+    .slide,.slide.active{transform:none}
+  }
+
+  /* ---- Common furniture ---- */
+  .eyebrow{
+    font-family:var(--mono);font-size:.72rem;font-weight:500;
+    letter-spacing:.24em;text-transform:uppercase;color:var(--accent);
+    display:flex;align-items:center;gap:.7rem;
+  }
+  .eyebrow::before{content:"";width:1.6rem;height:1px;background:var(--accent);display:inline-block}
+  .topbar{display:flex;justify-content:space-between;align-items:baseline;gap:1rem;flex:0 0 auto}
+  .brandmark{font-family:var(--mono);font-size:.72rem;letter-spacing:.18em;color:var(--faint);text-transform:uppercase}
+  .brandmark b{color:var(--muted);font-weight:600}
+  .body{flex:1 1 auto;display:flex;flex-direction:column;justify-content:center;padding:clamp(1rem,3vh,2.4rem) 0;min-height:0}
+
+  h1,h2{font-weight:800;letter-spacing:-.028em;text-wrap:balance;line-height:1.02}
+  h1{font-size:clamp(2.6rem,6.6vw,5.4rem)}
+  h2{font-size:clamp(2rem,4.6vw,3.5rem)}
+  .lede{font-size:clamp(1.05rem,1.7vw,1.4rem);color:var(--muted);max-width:58ch;line-height:1.5;font-weight:400}
+  .kicker{color:var(--accent)}
+  .accent{color:var(--accent)}
+
+  .num{font-family:var(--mono);font-variant-numeric:tabular-nums}
+
+  /* ---- Cover ---- */
+  .cover .body{justify-content:center;gap:1.6rem}
+  .cover h1{margin-top:.2rem}
+  .cover h1 .l2{display:block;color:var(--accent)}
+  .cover .sig{display:flex;flex-wrap:wrap;gap:.6rem 1.4rem;align-items:center;font-family:var(--mono);font-size:.82rem;color:var(--muted);letter-spacing:.04em}
+  .cover .sig .dot{width:5px;height:5px;border-radius:50%;background:var(--accent);display:inline-block;margin-right:.5rem}
+  .strip{display:flex;flex-wrap:wrap;gap:.5rem;margin-top:.4rem}
+  .chip{
+    font-family:var(--mono);font-size:.72rem;letter-spacing:.06em;
+    color:var(--muted);border:1px solid var(--line);border-radius:100px;
+    padding:.42rem .8rem;background:color-mix(in srgb,var(--panel) 60%,transparent);
+  }
+  .chip.live{color:var(--green);border-color:color-mix(in srgb,var(--green) 45%,var(--line))}
+  .chip.live::before{content:"";width:6px;height:6px;border-radius:50%;background:var(--green);display:inline-block;margin-right:.5rem;box-shadow:0 0 0 0 color-mix(in srgb,var(--green) 70%,transparent);animation:pulse 2.4s infinite}
+  @keyframes pulse{0%{box-shadow:0 0 0 0 color-mix(in srgb,var(--green) 55%,transparent)}70%{box-shadow:0 0 0 7px transparent}100%{box-shadow:0 0 0 0 transparent}}
+  @media (prefers-reduced-motion:reduce){.chip.live::before{animation:none}}
+
+  /* ---- Pillars ---- */
+  .grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:1.1rem}
+  .grid2{display:grid;grid-template-columns:1.05fr .95fr;gap:1.4rem}
+  .card{
+    border:1px solid var(--line);border-radius:14px;
+    background:linear-gradient(180deg,var(--panel) 0%,var(--bg2) 100%);
+    padding:1.4rem 1.4rem 1.5rem;display:flex;flex-direction:column;gap:.7rem;
+    position:relative;overflow:hidden;
+  }
+  .card::before{content:"";position:absolute;top:0;left:0;width:100%;height:2px;background:linear-gradient(90deg,var(--accent),transparent 70%);opacity:.8}
+  .card .cn{font-family:var(--mono);font-size:.72rem;color:var(--accent);letter-spacing:.14em}
+  .card h3{font-size:1.24rem;font-weight:700;letter-spacing:-.01em}
+  .card p{color:var(--muted);font-size:.96rem;line-height:1.48}
+  .card ul{list-style:none;display:flex;flex-direction:column;gap:.4rem;margin-top:.2rem}
+  .card li{color:var(--muted);font-size:.9rem;padding-left:1.1rem;position:relative;line-height:1.4}
+  .card li::before{content:"";position:absolute;left:0;top:.55em;width:6px;height:1px;background:var(--accent)}
+
+  /* ---- Case layout ---- */
+  .case .casegrid{display:grid;grid-template-columns:1.15fr .85fr;gap:clamp(1.4rem,3vw,3rem);align-items:start}
+  .case h2{margin:.5rem 0 .8rem}
+  .feat{list-style:none;display:flex;flex-direction:column;gap:.95rem;margin-top:1.2rem}
+  .feat li{display:flex;gap:.85rem;align-items:flex-start}
+  .feat .fi{flex:0 0 auto;font-family:var(--mono);font-size:.7rem;color:var(--accent);border:1px solid color-mix(in srgb,var(--accent) 40%,var(--line));border-radius:6px;padding:.28rem .42rem;letter-spacing:.05em;margin-top:.1rem}
+  .feat strong{font-weight:650;color:var(--text);font-size:1rem}
+  .feat span{color:var(--muted);font-size:.92rem;line-height:1.45;display:block;margin-top:.15rem}
+  .metrics{display:flex;flex-direction:column;gap:.7rem;border-left:1px solid var(--line);padding-left:clamp(1rem,2vw,1.8rem)}
+  .metric{display:flex;flex-direction:column;gap:.2rem;padding:.55rem 0;border-bottom:1px solid var(--hair)}
+  .metric:last-child{border-bottom:0}
+  .metric .mv{font-family:var(--mono);font-variant-numeric:tabular-nums;font-size:1.7rem;font-weight:600;color:var(--accent-2);letter-spacing:-.01em}
+  .metric .ml{font-family:var(--mono);font-size:.7rem;letter-spacing:.12em;text-transform:uppercase;color:var(--faint)}
+  .tag{display:inline-flex;align-items:center;gap:.5rem;font-family:var(--mono);font-size:.72rem;letter-spacing:.08em;color:var(--green);text-transform:uppercase}
+  .tag::before{content:"";width:6px;height:6px;border-radius:50%;background:var(--green)}
+
+  /* ---- Services grid ---- */
+  .grid6{display:grid;grid-template-columns:repeat(4,1fr);gap:.85rem}
+  .svc{border:1px solid var(--line);border-radius:12px;background:var(--bg2);padding:1.1rem 1.15rem;display:flex;flex-direction:column;gap:.45rem}
+  .svc .sn{font-family:var(--mono);font-size:.7rem;color:var(--faint);letter-spacing:.1em}
+  .svc h4{font-size:1.05rem;font-weight:700}
+  .svc p{color:var(--muted);font-size:.88rem;line-height:1.45}
+
+  /* ---- Stack ---- */
+  .stackrow{display:flex;flex-direction:column;gap:1.5rem;max-width:none}
+  .stackgrp{display:flex;flex-direction:column;gap:.7rem}
+  .stackgrp .gl{font-family:var(--mono);font-size:.72rem;letter-spacing:.16em;text-transform:uppercase;color:var(--accent)}
+  .tags{display:flex;flex-wrap:wrap;gap:.5rem}
+  .tags span{font-family:var(--mono);font-size:.82rem;color:var(--muted);border:1px solid var(--line);border-radius:8px;padding:.44rem .8rem;background:color-mix(in srgb,var(--panel) 50%,transparent)}
+
+  /* ---- Process ---- */
+  .steps{display:grid;grid-template-columns:repeat(4,1fr);gap:1.1rem;counter-reset:step}
+  .step{position:relative;padding-top:2.6rem}
+  .step::before{counter-increment:step;content:"0" counter(step);font-family:var(--mono);font-size:1.9rem;font-weight:600;color:var(--accent);position:absolute;top:0;left:0;font-variant-numeric:tabular-nums}
+  .step::after{content:"";position:absolute;top:1.1rem;left:2.9rem;right:-.55rem;height:1px;background:linear-gradient(90deg,var(--line),transparent)}
+  .step:last-child::after{display:none}
+  .step h4{font-size:1.1rem;font-weight:700;margin-bottom:.4rem}
+  .step p{color:var(--muted);font-size:.9rem;line-height:1.45}
+
+  /* ---- Numbers board ---- */
+  .board{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:var(--line);border:1px solid var(--line);border-radius:14px;overflow:hidden}
+  .cell{background:var(--bg2);padding:clamp(1.3rem,2.6vw,2rem);display:flex;flex-direction:column;gap:.4rem;min-height:9.5rem;justify-content:center}
+  .cell .bv{font-family:var(--mono);font-variant-numeric:tabular-nums;font-size:clamp(2rem,3.6vw,3rem);font-weight:700;line-height:1;letter-spacing:-.02em;color:var(--text)}
+  .cell .bv.hi{color:var(--accent-2)}
+  .cell .bl{font-size:.92rem;color:var(--muted);line-height:1.35}
+  .cell .bs{font-family:var(--mono);font-size:.68rem;letter-spacing:.1em;text-transform:uppercase;color:var(--faint)}
+
+  /* ---- Closing ---- */
+  .close .body{gap:1.6rem}
+  .close h2{max-width:20ch}
+  .contact{display:flex;flex-wrap:wrap;gap:1rem 2.2rem;font-family:var(--mono);font-size:1rem;color:var(--text);margin-top:.6rem}
+  .contact a{color:var(--accent);text-decoration:none;border-bottom:1px solid color-mix(in srgb,var(--accent) 40%,transparent);padding-bottom:2px}
+  .contact .cl{color:var(--faint);font-size:.7rem;letter-spacing:.12em;text-transform:uppercase;display:block;margin-bottom:.35rem}
+
+  /* ---- Nav / chrome ---- */
+  .progress{position:fixed;top:0;left:0;height:3px;background:var(--accent);width:0;z-index:40;transition:width .5s ease;box-shadow:0 0 12px color-mix(in srgb,var(--accent) 60%,transparent)}
+  .counter{position:fixed;bottom:1.5rem;left:clamp(1.2rem,3vw,2.4rem);font-family:var(--mono);font-size:.8rem;letter-spacing:.1em;color:var(--muted);z-index:41}
+  .counter .cc{color:var(--accent);font-weight:600}
+  .counter .ct{color:var(--faint)}
+  .nav{position:fixed;bottom:1.1rem;left:0;right:0;display:flex;align-items:center;justify-content:center;gap:1.4rem;z-index:41;pointer-events:none}
+  .nav button{pointer-events:auto;background:color-mix(in srgb,var(--panel) 80%,transparent);border:1px solid var(--line);color:var(--text);width:2.5rem;height:2.5rem;border-radius:50%;cursor:pointer;font-size:1.05rem;display:grid;place-items:center;transition:border-color .2s,background .2s,transform .15s;backdrop-filter:blur(6px)}
+  .nav button:hover{border-color:var(--accent);color:var(--accent)}
+  .nav button:active{transform:scale(.92)}
+  .nav button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+  .dots{display:flex;gap:.5rem;pointer-events:auto}
+  .dots i{width:7px;height:7px;border-radius:50%;background:var(--line);cursor:pointer;transition:background .2s,transform .2s;display:block}
+  .dots i.on{background:var(--accent);transform:scale(1.25)}
+  .hint{position:fixed;bottom:1.5rem;right:clamp(1.2rem,3vw,2.4rem);font-family:var(--mono);font-size:.68rem;color:var(--faint);letter-spacing:.08em;z-index:41}
+
+  .rail{position:fixed;left:clamp(.8rem,2vw,1.6rem);top:50%;transform:translateY(-50%) rotate(180deg);writing-mode:vertical-rl;font-family:var(--mono);font-size:.66rem;letter-spacing:.28em;text-transform:uppercase;color:var(--faint);z-index:30;pointer-events:none}
+
+  @media (max-width:860px){
+    .grid3,.grid6,.steps{grid-template-columns:1fr 1fr}
+    .grid2,.case .casegrid{grid-template-columns:1fr}
+    .board{grid-template-columns:1fr 1fr}
+    .metrics{border-left:0;border-top:1px solid var(--line);padding-left:0;padding-top:1.2rem;margin-top:1.2rem;flex-direction:row;flex-wrap:wrap;gap:1.2rem}
+    .metric{border-bottom:0;flex:1 1 40%}
+    .rail,.hint{display:none}
+  }
+  @media (max-width:560px){
+    .grid3,.grid6,.steps,.board{grid-template-columns:1fr}
+    .step::after{display:none}
+  }
+
+  /* ---- Static per-slide accent (also used by print) ---- */
+  .slide[data-accent="blue"]{--accent:#5B8DEF;--accent-2:#8FB4F6}
+
+  /* ---- Print / PDF export ---- */
+  @page{size:13.333in 7.5in;margin:0}
+  @media print{
+    html,body{overflow:visible;height:auto}
+    .progress,.counter,.rail,.nav,.hint{display:none!important}
+    .deck{position:static}
+    .slide{
+      position:relative;inset:auto;opacity:1!important;visibility:visible!important;transform:none!important;
+      width:100%;height:7.5in;min-height:7.5in;overflow:hidden;
+      page-break-after:always;break-after:page;
+      -webkit-print-color-adjust:exact;print-color-adjust:exact;
+    }
+    .slide:last-child{page-break-after:auto;break-after:auto}
+  }
+</style>
+
+<div class="progress" id="progress"></div>
+<div class="counter"><span class="cc" id="cc">01</span> <span class="ct" id="ct">/ 11</span></div>
+<div class="rail">PABLO LÓPEZ · GRUPO OPTIMUS</div>
+
+<div class="deck" id="deck">
+
+  <!-- 1 · COVER -->
+  <section class="slide cover active">
+    <div class="topbar">
+      <span class="brandmark"><b>PABLO LÓPEZ</b> · GRUPO OPTIMUS / ZEUS ENERGÍA</span>
+      <span class="brandmark">MADRID · 2026</span>
+    </div>
+    <div class="body">
+      <div class="eyebrow">Automatización · Apps a medida · IA aplicada</div>
+      <h1>Software real,<span class="l2">en producción.</span></h1>
+      <p class="lede">Automatizo procesos internos, construyo aplicaciones a medida e implanto IA que funciona de verdad — no pruebas de concepto que nunca salen del cajón. Todo lo que verás está desplegado y en uso.</p>
+      <div class="sig"><span><span class="dot"></span>Pablo López Rodríguez</span><span>Desarrollo · IA · Automatización</span></div>
+      <div class="strip">
+        <span class="chip live">Deep-Check · en vivo</span>
+        <span class="chip live">Zeus Energía · en uso</span>
+        <span class="chip">Automatización administrativa</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- 2 · QUÉ HAGO -->
+  <section class="slide">
+    <div class="topbar"><span class="eyebrow">Qué hago</span><span class="brandmark">01</span></div>
+    <div class="body">
+      <h2>Tres formas de quitarte trabajo de encima.</h2>
+      <p class="lede" style="margin:.8rem 0 2rem">Cada una resuelve un cuello de botella distinto. Casi siempre se combinan: una app que además automatiza y encima usa IA para lo que antes hacía una persona a mano.</p>
+      <div class="grid3">
+        <div class="card">
+          <span class="cn">A</span>
+          <h3>Automatización de procesos</h3>
+          <p>Todo lo repetitivo que hoy hace alguien a mano: rellenar portales, mover datos entre sistemas, generar documentos, cruzar hojas de Excel.</p>
+        </div>
+        <div class="card">
+          <span class="cn">B</span>
+          <h3>Apps a medida</h3>
+          <p>Herramientas web internas o de cara a cliente, hechas para tu proceso exacto — no un SaaS genérico al que te tienes que adaptar.</p>
+        </div>
+        <div class="card">
+          <span class="cn">C</span>
+          <h3>IA aplicada</h3>
+          <p>Leer facturas y documentos, analizar imágenes, detectar fraude, asistentes. Modelos entrenados a medida cuando hace falta precisión real.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 3 · POR QUÉ -->
+  <section class="slide">
+    <div class="topbar"><span class="eyebrow">Cómo trabajo</span><span class="brandmark">02</span></div>
+    <div class="body">
+      <h2>Lo que me diferencia.</h2>
+      <div class="grid2" style="margin-top:1.8rem">
+        <div style="display:flex;flex-direction:column;gap:1.3rem">
+          <div class="feat" style="margin:0">
+            <li><span class="fi">01</span><div><strong>De la idea al deploy</strong><span>No entrego una demo y me voy. Lo dejo funcionando, desplegado y con soporte. Deep-Check y la app de Zeus están en producción, no en un PowerPoint.</span></div></li>
+            <li><span class="fi">02</span><div><strong>IA propia, no solo llamar a una API</strong><span>Cuando la precisión importa, entreno modelos a medida (deepfake, forense documental, biometría) sobre GPUs. Y uso LLMs donde son la herramienta correcta.</span></div></li>
+          </div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:1.3rem">
+          <div class="feat" style="margin:0">
+            <li><span class="fi">03</span><div><strong>Privacidad por diseño</strong><span>En Deep-Check el análisis biométrico corre entero en el navegador: cero datos sensibles al servidor. GDPR nativo, no un parche.</span></div></li>
+            <li><span class="fi">04</span><div><strong>Rigor medible</strong><span>Resultados con números, no adjetivos: AUC, EER, benchmarks reproducibles. Trabajo con estándares (ISO 30107-3, sumisión al NIST) y publicación científica con DOI.</span></div></li>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 4 · CASE — ZEUS -->
+  <section class="slide case" data-accent="amber">
+    <div class="topbar"><span class="eyebrow">Caso 01 · Energía solar</span><span class="brandmark">GRUPO OPTIMUS / ZEUS ENERGÍA</span></div>
+    <div class="body">
+      <span class="tag">Cliente real · en uso comercial</span>
+      <h2>La oferta fotovoltaica, de horas a minutos.</h2>
+      <div class="casegrid">
+        <div>
+          <p class="lede">Una app de diseño solar que lleva al comercial desde la factura de luz hasta una propuesta profesional lista para firmar — sin salir de la herramienta.</p>
+          <ul class="feat">
+            <li><span class="fi">IA</span><div><strong>Lee la factura sola</strong><span>Sube la factura y la IA de visión extrae consumo y datos del CUPS automáticamente.</span></div></li>
+            <li><span class="fi">SAT</span><div><strong>Detecta el tejado</strong><span>Coloca los paneles sobre el tejado real usando Google Solar + LiDAR y ortofoto, no un dibujo aproximado.</span></div></li>
+            <li><span class="fi">PDF</span><div><strong>Genera la oferta</strong><span>Brochure comercial de 9 páginas con producción estimada, ahorro, gráficas reales y presupuesto.</span></div></li>
+            <li><span class="fi">ORG</span><div><strong>Roles y márgenes</strong><span>Acceso jerárquico en 3 niveles con distribución de márgenes en cascada; el comercial nunca ve el margen.</span></div></li>
+          </ul>
+        </div>
+        <div class="metrics">
+          <div class="metric"><span class="mv">&lt; min</span><span class="ml">Oferta completa</span></div>
+          <div class="metric"><span class="mv">9</span><span class="ml">Páginas de propuesta auto</span></div>
+          <div class="metric"><span class="mv">3</span><span class="ml">Niveles de acceso · márgenes</span></div>
+          <div class="metric"><span class="mv">+CUPS</span><span class="ml">Portal rellenado por robot</span></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 5 · CASE — DEEP-CHECK -->
+  <section class="slide case" data-accent="blue">
+    <div class="topbar"><span class="eyebrow">Caso 02 · IA / Verificación</span><span class="brandmark">DEEP-CHECK</span></div>
+    <div class="body">
+      <span class="tag">Producto propio · en vivo</span>
+      <h2>Detección de deepfakes y fraude documental.</h2>
+      <div class="casegrid">
+        <div>
+          <p class="lede">Plataforma de verificación de identidad con IA. Motor <span class="accent">Veritas</span> de 6 capas independientes fusionadas de forma bayesiana — y todo el análisis biométrico corre en el navegador.</p>
+          <ul class="feat">
+            <li><span class="fi">06</span><div><strong>6 capas de detección</strong><span>Flujo sanguíneo (rPPG), microexpresiones (FACS), píxel (EfficientNet-B4), biometría de tecleo y más.</span></div></li>
+            <li><span class="fi">DOC</span><div><strong>Forense documental</strong><span>Detecta manipulación en documentos e imágenes con análisis de nivel de error (ELA).</span></div></li>
+            <li><span class="fi">NIST</span><div><strong>Grado certificable</strong><span>SDKs para el NIST FATE PAD, estándar ISO 30107-3 y publicación científica con DOI.</span></div></li>
+          </ul>
+        </div>
+        <div class="metrics">
+          <div class="metric"><span class="mv">0.9999</span><span class="ml">AUC · detección deepfake</span></div>
+          <div class="metric"><span class="mv">0.31%</span><span class="ml">EER · tasa de error igual</span></div>
+          <div class="metric"><span class="mv">0.998</span><span class="ml">AUC · forense documental</span></div>
+          <div class="metric"><span class="mv">100%</span><span class="ml">Inferencia en navegador · 0 datos al server</span></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 6 · CASE — ADMIN -->
+  <section class="slide case" data-accent="amber">
+    <div class="topbar"><span class="eyebrow">Caso 03 · Back-office</span><span class="brandmark">AUTOMATIZACIÓN ADMINISTRATIVA</span></div>
+    <div class="body">
+      <span class="tag">En uso interno</span>
+      <h2>El trabajo de introducir datos, hecho por la máquina.</h2>
+      <div class="casegrid">
+        <div>
+          <p class="lede">Dos automatizaciones que eliminan tardes enteras de copiar-y-pegar entre PDFs, portales y hojas de cálculo.</p>
+          <ul class="feat">
+            <li><span class="fi">IA</span><div><strong>Facturas → Excel</strong><span>Sube las facturas y la IA las lee y vuelca los datos estructurados a Excel. Con login y control de uso.</span></div></li>
+            <li><span class="fi">BOT</span><div><strong>Automatización de portal (CUPS)</strong><span>Un robot rellena las fechas de finalización en el portal de la comercializadora directamente desde las ofertas.</span></div></li>
+            <li><span class="fi">OCR</span><div><strong>Lectura de zonas</strong><span>OCR sobre áreas delimitadas para contar e inventariar automáticamente.</span></div></li>
+          </ul>
+        </div>
+        <div class="metrics">
+          <div class="metric"><span class="mv">0</span><span class="ml">Tecleo manual de facturas</span></div>
+          <div class="metric"><span class="mv">24/7</span><span class="ml">El robot no descansa</span></div>
+          <div class="metric"><span class="mv">Excel</span><span class="ml">Sale en tu formato de siempre</span></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- · DATOS & BIG DATA -->
+  <section class="slide case" data-accent="blue">
+    <div class="topbar"><span class="eyebrow">Datos · 03</span><span class="brandmark">ANÁLISIS & BIG DATA</span></div>
+    <div class="body">
+      <span class="tag">Capacidad transversal</span>
+      <h2>De los datos a las decisiones.</h2>
+      <div class="casegrid">
+        <div>
+          <p class="lede">Recojo, cruzo y analizo grandes volúmenes de datos y los convierto en conclusiones accionables — no en informes que nadie abre.</p>
+          <ul class="feat">
+            <li><span class="fi">01</span><div><strong>Ingesta y limpieza</strong><span>Unifico datos dispersos — facturas, portales, sensores, CRM — en un único modelo consultable.</span></div></li>
+            <li><span class="fi">02</span><div><strong>Análisis a escala (Big Data)</strong><span>Proceso cientos de miles de registros e imágenes; entrenamiento sobre datasets de 900K+ muestras.</span></div></li>
+            <li><span class="fi">03</span><div><strong>Conclusiones accionables</strong><span>Detecto patrones, anomalías y oportunidades — consumo, fraude, comportamiento — con métricas, no intuiciones.</span></div></li>
+            <li><span class="fi">04</span><div><strong>Visualización</strong><span>Dashboards en tiempo real que enseñan solo lo que importa para decidir rápido.</span></div></li>
+          </ul>
+        </div>
+        <div class="metrics">
+          <div class="metric"><span class="mv">900K+</span><span class="ml">Muestras analizadas</span></div>
+          <div class="metric"><span class="mv">Multi</span><span class="ml">Fuentes unificadas</span></div>
+          <div class="metric"><span class="mv">Real</span><span class="ml">Dashboards en tiempo real</span></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 7 · CATÁLOGO -->
+  <section class="slide">
+    <div class="topbar"><span class="eyebrow">Catálogo de servicios</span><span class="brandmark">04</span></div>
+    <div class="body">
+      <h2 style="margin-bottom:1.6rem">Lo que puedo construir para ti.</h2>
+      <div class="grid6">
+        <div class="svc"><span class="sn">RPA</span><h4>Automatización de procesos</h4><p>Robots que rellenan portales, mueven datos entre sistemas y generan documentos solos.</p></div>
+        <div class="svc"><span class="sn">WEB</span><h4>Apps web a medida</h4><p>Herramientas internas y de cliente en Next.js / React, desplegadas y mantenidas.</p></div>
+        <div class="svc"><span class="sn">IA</span><h4>Asistentes y chatbots</h4><p>LLMs conectados a tus datos para atención, consultas internas y soporte.</p></div>
+        <div class="svc"><span class="sn">BI</span><h4>Análisis de datos & Big Data</h4><p>Cruzo grandes volúmenes de datos y saco conclusiones accionables, no solo gráficas.</p></div>
+        <div class="svc"><span class="sn">CV</span><h4>Visión por computador</h4><p>Leer documentos y facturas, detectar objetos, analizar imágenes y vídeo.</p></div>
+        <div class="svc"><span class="sn">ML</span><h4>Modelos IA a medida</h4><p>Entrenamiento propio sobre GPU cuando necesitas precisión que una API genérica no da.</p></div>
+        <div class="svc"><span class="sn">API</span><h4>Integraciones / APIs</h4><p>Conecto tus sistemas para que hablen entre ellos sin trabajo manual.</p></div>
+        <div class="svc"><span class="sn">DASH</span><h4>Dashboards en tiempo real</h4><p>Visualizo tus métricas clave en vivo para decidir con datos frescos.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 9 · PROCESO -->
+  <section class="slide">
+    <div class="topbar"><span class="eyebrow">Cómo empezamos</span><span class="brandmark">05</span></div>
+    <div class="body">
+      <h2 style="margin-bottom:2rem">Un proceso simple, sin sorpresas.</h2>
+      <div class="steps">
+        <div class="step"><h4>Diagnóstico</h4><p>Miramos juntos el proceso real. Identifico qué se automatiza y qué impacto tiene.</p></div>
+        <div class="step"><h4>Diseño</h4><p>Propuesta concreta: alcance, entregable y plazo. Sin humo ni letra pequeña.</p></div>
+        <div class="step"><h4>Desarrollo</h4><p>Construyo en iteraciones cortas, con algo funcionando y revisable pronto.</p></div>
+        <div class="step"><h4>Deploy & soporte</h4><p>Lo dejo en producción, tú lo usas, y sigo dando soporte y mejoras.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 11 · CIERRE -->
+  <section class="slide close">
+    <div class="topbar"><span class="eyebrow">Hablemos</span><span class="brandmark">GRACIAS</span></div>
+    <div class="body">
+      <div class="eyebrow">El siguiente paso</div>
+      <h2>Cuéntame un proceso que te quite tiempo. Te digo qué se puede automatizar.</h2>
+      <p class="lede">Sin compromiso: una llamada, miramos tu caso y te doy una propuesta concreta con alcance y plazo.</p>
+      <div class="contact">
+        <div><span class="cl">Email</span><a href="mailto:pablo.lprdz@gmail.com">pablo.lprdz@gmail.com</a></div>
+        <div><span class="cl">Base</span><span>Madrid, España</span></div>
+        <div><span class="cl">Áreas</span><span>Automatización · Apps · IA</span></div>
+      </div>
+      <div class="strip" style="margin-top:1rem">
+        <span class="chip live">Deep-Check</span>
+        <span class="chip live">Zeus Energía</span>
+        <span class="chip">Automatización a medida</span>
+      </div>
+    </div>
+  </section>
+
+</div>
+
+<div class="nav">
+  <button id="prev" aria-label="Anterior">‹</button>
+  <div class="dots" id="dots"></div>
+  <button id="next" aria-label="Siguiente">›</button>
+</div>
+<div class="hint">← → · espacio</div>
+
+<script>
+(function(){
+  var slides=Array.prototype.slice.call(document.querySelectorAll('.slide'));
+  var total=slides.length, i=0;
+  var accents={amber:['#F2A24B','#F7C27A'], blue:['#5B8DEF','#8FB4F6']};
+  var cc=document.getElementById('cc'), ct=document.getElementById('ct');
+  var progress=document.getElementById('progress');
+  var dotsWrap=document.getElementById('dots');
+  ct.textContent='/ '+String(total).padStart(2,'0');
+
+  slides.forEach(function(s,idx){
+    var d=document.createElement('i');
+    d.addEventListener('click',function(){go(idx)});
+    dotsWrap.appendChild(d);
+  });
+  var dots=Array.prototype.slice.call(dotsWrap.children);
+
+  function pad(n){return String(n+1).padStart(2,'0')}
+  function render(){
+    slides.forEach(function(s,idx){s.classList.toggle('active',idx===i)});
+    dots.forEach(function(d,idx){d.classList.toggle('on',idx===i)});
+    cc.textContent=pad(i);
+    progress.style.width=((i)/(total-1)*100)+'%';
+    var a=slides[i].getAttribute('data-accent');
+    var root=document.documentElement.style;
+    if(a&&accents[a]){root.setProperty('--accent',accents[a][0]);root.setProperty('--accent-2',accents[a][1]);}
+    else{root.setProperty('--accent','#F2A24B');root.setProperty('--accent-2','#F7C27A');}
+  }
+  function go(n){i=Math.max(0,Math.min(total-1,n));render()}
+  function next(){go(i+1)} function prev(){go(i-1)}
+
+  document.getElementById('next').addEventListener('click',next);
+  document.getElementById('prev').addEventListener('click',prev);
+  window.addEventListener('keydown',function(e){
+    if(e.key==='ArrowRight'||e.key===' '||e.key==='PageDown'){e.preventDefault();next()}
+    else if(e.key==='ArrowLeft'||e.key==='PageUp'){e.preventDefault();prev()}
+    else if(e.key==='Home'){go(0)} else if(e.key==='End'){go(total-1)}
+  });
+  // touch swipe
+  var x0=null;
+  window.addEventListener('touchstart',function(e){x0=e.touches[0].clientX},{passive:true});
+  window.addEventListener('touchend',function(e){
+    if(x0===null)return;var dx=e.changedTouches[0].clientX-x0;
+    if(Math.abs(dx)>50){dx<0?next():prev()} x0=null;
+  },{passive:true});
+
+  render();
+})();
+</script>

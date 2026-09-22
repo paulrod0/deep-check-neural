@@ -1,0 +1,144 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1100 540" width="1100" height="540">
+<rect width="1100" height="540" fill="#ffffff"/>
+
+    <rect x="0" y="0" width="1100" height="70" fill="#0a2540"/>
+    <text x="550" y="44" font-family="Helvetica" font-weight="700" font-size="22" fill="#ffffff"
+          text-anchor="middle">¿REAL O DEEPFAKE?</text>
+    <text x="550" y="62" font-family="Helvetica" font-size="13" fill="#00d2ff"
+          text-anchor="middle" letter-spacing="2">EL OJO HUMANO YA NO LOS DISTINGUE — DEEP-CHECK SÍ</text>
+    
+
+        <rect x="60" y="110" width="450" height="380" rx="10" fill="#ffffff" stroke="#cbd5e0"/>
+        <rect x="60" y="110" width="450" height="44" rx="10" fill="#0a2540"/>
+        <rect x="60" y="142" width="450" height="12" fill="#0a2540"/>
+        <text x="90" y="138" font-family="Helvetica" font-weight="700" font-size="16" fill="#ffffff">SUJETO 1</text>
+        <rect x="400" y="120" width="80" height="24" rx="12" fill="#10b981"/>
+        <text x="440" y="137" font-family="Helvetica" font-weight="700" font-size="12" fill="#ffffff" text-anchor="middle">REAL</text>
+
+        <!-- Cara estilizada -->
+        <rect x="90" y="170" width="390" height="240" fill="#0a2540"/>
+        
+
+        <ellipse cx="285" cy="290" rx="80" ry="105" fill="none" stroke="#00d2ff" stroke-width="1.5"/>
+        <circle cx="260" cy="265" r="6" fill="#00d2ff"/>
+        <circle cx="310" cy="265" r="6" fill="#00d2ff"/>
+        <path d="M 265 320 Q 285 335 305 320" fill="none" stroke="#00d2ff" stroke-width="2"/>
+        <!-- detection grid -->
+        
+<circle cx="307.3082877532614" cy="195.00215104453338" r="1.2" fill="#00d2ff" opacity="0.4"/>
+<circle cx="249.0046909390591" cy="234.64214762976457" r="1.2" fill="#00d2ff" opacity="0.4"/>
+<circle cx="322.835394266242" cy="325.33989748458225" r="1.2" fill="#00d2ff" opacity="0.4"/>
+<circle cx="347.74873083277527" cy="207.38776652588322" r="1.2" fill="#00d2ff" opacity="0.4"/>
+<circle cx="272.5074911496433" cy="195.95944388761407" r="1.2" fill="#00d2ff" opacity="0.4"/>
+<circle cx="239.98207596857654" cy="291.0710576206725" r="1.2" fill="#00d2ff" opacity="0.4"/>
+<circle cx="209.2457551494182" cy="229.7675301373297" r="1.2" fill="#00d2ff" opacity="0.4"/>
+<circle cx="308.9815100447237" cy="298.9882961206433" r="1.2" fill="#00d2ff" opacity="0.4"/>
+<circle cx="240.27049952651146" cy="307.8531367751817" r="1.2" fill="#00d2ff" opacity="0.4"/>
+<circle cx="334.50887306845226" cy="191.2997519356122" r="1.2" fill="#00d2ff" opacity="0.4"/>
+<circle cx="333.93108029324924" cy="329.6278789976454" r="1.2" fill="#00d2ff" opacity="0.4"/>
+<circle cx="259.4400826428787" cy="221.0958999623563" r="1.2" fill="#00d2ff" opacity="0.4"/>
+<circle cx="358.154091553085" cy="257.31890902252536" r="1.2" fill="#00d2ff" opacity="0.4"/>
+<circle cx="219.83933494082368" cy="209.3432753666928" r="1.2" fill="#00d2ff" opacity="0.4"/>
+<circle cx="340.59909861559356" cy="310.74520627337824" r="1.2" fill="#00d2ff" opacity="0.4"/>
+<circle cx="334.14052372390086" cy="335.9463573387636" r="1.2" fill="#00d2ff" opacity="0.4"/>
+<circle cx="290.7964946327521" cy="384.62315279587415" r="1.2" fill="#00d2ff" opacity="0.4"/>
+<circle cx="265.5655003533366" cy="300.40812625464537" r="1.2" fill="#00d2ff" opacity="0.4"/>
+<circle cx="337.7047462804792" cy="313.7039504728492" r="1.2" fill="#00d2ff" opacity="0.4"/>
+<circle cx="342.87310404972436" cy="305.4704290513524" r="1.2" fill="#00d2ff" opacity="0.4"/>
+<circle cx="317.73149379438775" cy="199.16487673113244" r="1.2" fill="#00d2ff" opacity="0.4"/>
+<circle cx="241.4637241042475" cy="247.87759272042143" r="1.2" fill="#00d2ff" opacity="0.4"/>
+<circle cx="217.7667163077804" cy="236.55817727220602" r="1.2" fill="#00d2ff" opacity="0.4"/>
+<circle cx="221.16022870555665" cy="245.59472062201843" r="1.2" fill="#00d2ff" opacity="0.4"/>
+<circle cx="306.70951108230406" cy="262.96643579401683" r="1.2" fill="#00d2ff" opacity="0.4"/>
+<circle cx="264.2289547387012" cy="231.90140615429755" r="1.2" fill="#00d2ff" opacity="0.4"/>
+<circle cx="247.71645152785814" cy="377.3309175424988" r="1.2" fill="#00d2ff" opacity="0.4"/>
+<circle cx="308.68566163945496" cy="311.8262011333976" r="1.2" fill="#00d2ff" opacity="0.4"/>
+<circle cx="232.38218371169552" cy="335.82535959006987" r="1.2" fill="#00d2ff" opacity="0.4"/>
+<circle cx="231.14439900190854" cy="265.89108835152956" r="1.2" fill="#00d2ff" opacity="0.4"/>
+<circle cx="363.3237361018553" cy="317.9999519708186" r="1.2" fill="#00d2ff" opacity="0.4"/>
+<circle cx="294.1119590039434" cy="326.9228501979749" r="1.2" fill="#00d2ff" opacity="0.4"/>
+<circle cx="339.85630723036957" cy="345.199982309249" r="1.2" fill="#00d2ff" opacity="0.4"/>
+<circle cx="241.6476915142567" cy="196.42004878080755" r="1.2" fill="#00d2ff" opacity="0.4"/>
+<circle cx="255.4724876894531" cy="243.54817519514054" r="1.2" fill="#00d2ff" opacity="0.4"/>
+<circle cx="238.75725497381222" cy="378.58194286701087" r="1.2" fill="#00d2ff" opacity="0.4"/>
+<circle cx="345.21882023562705" cy="252.9355761596956" r="1.2" fill="#00d2ff" opacity="0.4"/>
+<circle cx="309.8701864471808" cy="269.12638021213286" r="1.2" fill="#00d2ff" opacity="0.4"/>
+<circle cx="351.3276143584869" cy="281.77037051747976" r="1.2" fill="#00d2ff" opacity="0.4"/>
+<circle cx="247.3808266396884" cy="239.3255015387967" r="1.2" fill="#00d2ff" opacity="0.4"/>
+
+        <text x="285" y="440" font-family="Helvetica" font-size="12" fill="#4a5568" text-anchor="middle">Coherencia biomecánica · Patrón de iluminación natural · Microexpresiones consistentes</text>
+        <rect x="215" y="455" width="140" height="28" rx="14" fill="#10b981"/>
+        <text x="285" y="473" font-family="Helvetica" font-weight="700" font-size="12" fill="#ffffff" text-anchor="middle">AUC 0,98 · DETECTADO</text>
+        
+
+        <rect x="570" y="110" width="450" height="380" rx="10" fill="#ffffff" stroke="#cbd5e0"/>
+        <rect x="570" y="110" width="450" height="44" rx="10" fill="#0a2540"/>
+        <rect x="570" y="142" width="450" height="12" fill="#0a2540"/>
+        <text x="600" y="138" font-family="Helvetica" font-weight="700" font-size="16" fill="#ffffff">SUJETO 2</text>
+        <rect x="910" y="120" width="80" height="24" rx="12" fill="#ef4444"/>
+        <text x="950" y="137" font-family="Helvetica" font-weight="700" font-size="12" fill="#ffffff" text-anchor="middle">DEEPFAKE</text>
+
+        <!-- Cara estilizada -->
+        <rect x="600" y="170" width="390" height="240" fill="#0a2540"/>
+        
+
+        <ellipse cx="795" cy="290" rx="80" ry="105" fill="none" stroke="#00d2ff" stroke-width="1.5"/>
+        <circle cx="770" cy="265" r="6" fill="#00d2ff"/>
+        <circle cx="820" cy="265" r="6" fill="#00d2ff"/>
+        <path d="M 775 320 Q 795 335 815 320" fill="none" stroke="#00d2ff" stroke-width="2"/>
+        <!-- detection grid -->
+        
+<circle cx="721.1682942939808" cy="329.2448645274105" r="1.2" fill="#00d2ff" opacity="0.4"/>
+<circle cx="738.0293154232578" cy="282.5064509658175" r="1.2" fill="#00d2ff" opacity="0.4"/>
+<circle cx="822.4634822588428" cy="348.5902543310589" r="1.2" fill="#00d2ff" opacity="0.4"/>
+<circle cx="787.5102765545939" cy="289.65444595961026" r="1.2" fill="#00d2ff" opacity="0.4"/>
+<circle cx="718.0651372838956" cy="276.47776779028806" r="1.2" fill="#00d2ff" opacity="0.4"/>
+<circle cx="774.5799489313482" cy="360.4577266381706" r="1.2" fill="#00d2ff" opacity="0.4"/>
+<circle cx="802.5174246865608" cy="341.0633676509932" r="1.2" fill="#00d2ff" opacity="0.4"/>
+<circle cx="784.4509022163575" cy="225.2376208569379" r="1.2" fill="#00d2ff" opacity="0.4"/>
+<circle cx="851.1400402871423" cy="354.0439974137422" r="1.2" fill="#00d2ff" opacity="0.4"/>
+<circle cx="775.1373257082319" cy="209.14862269254863" r="1.2" fill="#00d2ff" opacity="0.4"/>
+<circle cx="796.9888554030761" cy="289.19544775590936" r="1.2" fill="#00d2ff" opacity="0.4"/>
+<circle cx="838.5681586108825" cy="309.4433837804206" r="1.2" fill="#00d2ff" opacity="0.4"/>
+<circle cx="796.0681620501709" cy="305.03178504383516" r="1.2" fill="#00d2ff" opacity="0.4"/>
+<circle cx="775.3080297273774" cy="199.78394833098034" r="1.2" fill="#00d2ff" opacity="0.4"/>
+<circle cx="724.7937085469" cy="378.3807227930559" r="1.2" fill="#00d2ff" opacity="0.4"/>
+<circle cx="849.255712229879" cy="249.23195671331789" r="1.2" fill="#00d2ff" opacity="0.4"/>
+<circle cx="857.2003639662801" cy="294.4505456440479" r="1.2" fill="#00d2ff" opacity="0.4"/>
+<circle cx="731.4865136006254" cy="361.13760085936946" r="1.2" fill="#00d2ff" opacity="0.4"/>
+<circle cx="808.5003300356716" cy="376.55745185874616" r="1.2" fill="#00d2ff" opacity="0.4"/>
+<circle cx="823.6802685988417" cy="208.81974167346252" r="1.2" fill="#00d2ff" opacity="0.4"/>
+<circle cx="814.6396260946049" cy="347.3772261249191" r="1.2" fill="#00d2ff" opacity="0.4"/>
+<circle cx="858.8261195700119" cy="256.254997745428" r="1.2" fill="#00d2ff" opacity="0.4"/>
+<circle cx="799.6226270963075" cy="330.2310288530428" r="1.2" fill="#00d2ff" opacity="0.4"/>
+<circle cx="741.6909302787042" cy="359.671942413079" r="1.2" fill="#00d2ff" opacity="0.4"/>
+<circle cx="839.9384442800784" cy="200.01944970546128" r="1.2" fill="#00d2ff" opacity="0.4"/>
+<circle cx="809.6253338672245" cy="263.61042459054033" r="1.2" fill="#00d2ff" opacity="0.4"/>
+<circle cx="744.7612782381557" cy="310.89607279054985" r="1.2" fill="#00d2ff" opacity="0.4"/>
+<circle cx="870.067911140141" cy="300.39396474161174" r="1.2" fill="#00d2ff" opacity="0.4"/>
+<circle cx="733.1282988751008" cy="288.9856226732827" r="1.2" fill="#00d2ff" opacity="0.4"/>
+<circle cx="839.6611842257687" cy="381.04576760764706" r="1.2" fill="#00d2ff" opacity="0.4"/>
+<circle cx="829.4284980702322" cy="198.26860289732042" r="1.2" fill="#00d2ff" opacity="0.4"/>
+<circle cx="869.6487908541253" cy="310.3722592795717" r="1.2" fill="#00d2ff" opacity="0.4"/>
+<circle cx="728.3836965061678" cy="215.43134636426717" r="1.2" fill="#00d2ff" opacity="0.4"/>
+<circle cx="728.796447364704" cy="322.96071399914956" r="1.2" fill="#00d2ff" opacity="0.4"/>
+<circle cx="739.6567232299931" cy="351.4938248806046" r="1.2" fill="#00d2ff" opacity="0.4"/>
+<circle cx="732.4305232644892" cy="297.0377579700115" r="1.2" fill="#00d2ff" opacity="0.4"/>
+<circle cx="785.8922643508212" cy="197.59480319405696" r="1.2" fill="#00d2ff" opacity="0.4"/>
+<circle cx="715.4031146833372" cy="370.7060491911254" r="1.2" fill="#00d2ff" opacity="0.4"/>
+<circle cx="871.2572250701085" cy="214.86396450703455" r="1.2" fill="#00d2ff" opacity="0.4"/>
+<circle cx="832.5345146859312" cy="387.8365864945953" r="1.2" fill="#00d2ff" opacity="0.4"/>
+<circle cx="765" cy="270" r="8" fill="none" stroke="#ef4444" stroke-width="2"/>
+<circle cx="765" cy="270" r="3" fill="#ef4444"/>
+<circle cx="805" cy="305" r="8" fill="none" stroke="#ef4444" stroke-width="2"/>
+<circle cx="805" cy="305" r="3" fill="#ef4444"/>
+<circle cx="820" cy="260" r="8" fill="none" stroke="#ef4444" stroke-width="2"/>
+<circle cx="820" cy="260" r="3" fill="#ef4444"/>
+<circle cx="790" cy="335" r="8" fill="none" stroke="#ef4444" stroke-width="2"/>
+<circle cx="790" cy="335" r="3" fill="#ef4444"/>
+
+        <text x="795" y="440" font-family="Helvetica" font-size="12" fill="#4a5568" text-anchor="middle">Anomalías en frecuencia · Texturas neuronales · Inconsistencia macro-expresiones</text>
+        <rect x="725" y="455" width="140" height="28" rx="14" fill="#ef4444"/>
+        <text x="795" y="473" font-family="Helvetica" font-weight="700" font-size="12" fill="#ffffff" text-anchor="middle">AUC 0,98 · DETECTADO</text>
+        
+</svg>

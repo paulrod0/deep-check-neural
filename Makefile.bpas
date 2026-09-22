@@ -1,0 +1,116 @@
+# BPAS build, train and verify automation.
+#
+# Run from the repo root:
+#
+#     make -f Makefile.bpas help
+
+.PHONY: help \
+        agent agent-tpm agent-test agent-image \
+        worker-image \
+        certs-dev certs-prod \
+        data-balabit data-aalto \
+        train-mouse train-opvae train-keystroke train-keystroke-ddp train-fusion \
+        smoke-tests \
+        clean-certs clean-models
+
+OUT          ?= outputs
+DATA         ?= /data
+DEVICE       ?= cpu
+EPOCHS_QUICK ?= 5
+EPOCHS_FULL  ?= 30
+BATCH        ?= 64
+
+PY           ?= python3
+TORCHRUN     ?= torchrun
+NPROC        ?= 4
+
+help:                                   ## Show this help
+	@grep -E '^[a-zA-Z0-9_.-]+:.*## ' $(MAKEFILE_LIST) | \
+	  awk -F':.*## ' '{printf "  \033[36m%-26s\033[0m %s\n", $$1, $$2}'
+
+# ----- Rust agent --------------------------------------------------------- #
+
+agent:                                  ## Build the BPAS agent (no TPM)
+	cd agent-rust && cargo build --release
+
+agent-tpm:                              ## Build the BPAS agent with TPM backend
+	cd agent-rust && cargo build --release --features tpm
+
+agent-test:                             ## Run the agent unit tests
+	cd agent-rust && cargo test
+
+agent-image:                            ## Build the agent Docker image
+	docker build -t bpas-agent:latest -f agent-rust/Dockerfile agent-rust
+
+# ----- Python worker ------------------------------------------------------ #
+
+worker-image:                           ## Build the inference worker Docker image
+	docker build -t bpas-worker:latest -f docker/bpas/Dockerfile.worker .
+
+# ----- mTLS PKI ----------------------------------------------------------- #
+
+certs-dev:                              ## Generate dev self-signed certs (single CA)
+	bash mtls/gen_certs.sh
+
+certs-prod:                             ## Initialise the internal two-tier PKI
+	bash mtls/gen_internal_pki.sh init
+	bash mtls/gen_internal_pki.sh server bpas-worker.internal
+	bash mtls/gen_internal_pki.sh client bpas-agent-001
+
+# ----- Datasets ----------------------------------------------------------- #
+
+data-balabit:                           ## Download Balabit Mouse Dynamics (CC-BY)
+	bash scripts/download_balabit.sh $(DATA)/balabit
+
+data-aalto:                             ## Download Aalto 136M-keystroke corpus (CC-BY)
+	bash scripts/download_aalto.sh $(DATA)/aalto
+
+# ----- Training ----------------------------------------------------------- #
+
+train-mouse:                            ## Train the mouse-dynamics TCN
+	$(PY) -m ml.bpas.mouse_tcn.train \
+	    --data $(DATA)/balabit/Mouse-Dynamics-Challenge/training_files \
+	    --out $(OUT)/mouse_tcn \
+	    --epochs $(EPOCHS_FULL) --batch $(BATCH) --adversarial
+
+train-opvae:                            ## Train the operational β-VAE (one-class)
+	$(PY) -m ml.bpas.operational_vae.train \
+	    --data $(DATA)/operational/legitimate.jsonl \
+	    --out $(OUT)/op_vae \
+	    --epochs $(EPOCHS_FULL) --batch $(BATCH)
+
+train-keystroke:                        ## Train keystroke v2 (single GPU)
+	$(PY) -m ml.bpas.keystroke_v2.train \
+	    --data $(DATA)/aalto/aalto_keystroke.csv \
+	    --out $(OUT)/keystroke_v2 \
+	    --epochs $(EPOCHS_FULL) --batch $(BATCH)
+
+train-keystroke-ddp:                    ## Train keystroke v2 with DDP across $(NPROC) GPUs
+	$(TORCHRUN) --nproc_per_node=$(NPROC) \
+	    -m ml.bpas.keystroke_v2.train_ddp \
+	    --data $(DATA)/aalto/aalto_keystroke.csv \
+	    --out $(OUT)/keystroke_v2_ddp \
+	    --epochs $(EPOCHS_FULL) --batch $(BATCH)
+
+train-fusion:                           ## Fit the Bayesian-logit ensemble + conformal
+	$(PY) -m ml.bpas.fusion.ensemble \
+	    --inputs $(OUT)/per_modality_scores.json \
+	    --out $(OUT)/fusion
+
+# ----- Verification ------------------------------------------------------- #
+
+smoke-tests:                            ## Run the BPAS Python smoke tests
+	$(PY) -c "import sys; sys.path.insert(0, '.'); \
+	  from ml.bpas.common.metrics import biometric_report; \
+	  from ml.bpas.fusion.ensemble import BayesianLogitEnsemble; \
+	  from ml.bpas.fusion.conformal import RolePolicy; \
+	  from ml.bpas.fusion.isotonic import IsotonicCalibrator; \
+	  from ml.bpas.service.decoder import decode_batch; \
+	  from ml.bpas.service.runtime import BPASRuntime; \
+	  print('OK: all BPAS modules import cleanly')"
+
+clean-certs:                            ## Remove all generated certificates
+	rm -rf mtls/out mtls/pki/root mtls/pki/intermediate
+
+clean-models:                           ## Remove training outputs (CAUTION)
+	rm -rf $(OUT)

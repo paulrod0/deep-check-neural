@@ -1,0 +1,151 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 700" width="1200" height="700">
+<rect width="1200" height="700" fill="#ffffff"/>
+
+    <rect x="0" y="0" width="1200" height="80" fill="#0a2540"/>
+    <text x="600" y="50" font-family="Helvetica" font-weight="700" font-size="28"
+          fill="#ffffff" text-anchor="middle">CUATRO CAPAS DE DETECCIÓN INDEPENDIENTES</text>
+    <text x="600" y="72" font-family="Helvetica" font-weight="400" font-size="14"
+          fill="#00d2ff" text-anchor="middle" letter-spacing="2">VERITAS ENSEMBLE ENGINE · DECISIÓN POR FUSIÓN BAYESIANA</text>
+    
+
+        <g>
+          <rect x="30" y="130" width="270" height="460" rx="12" ry="12"
+                fill="#ffffff" stroke="#cbd5e0" stroke-width="1"/>
+          <rect x="30" y="130" width="270" height="60" rx="12" ry="12" fill="#0a2540"/>
+          <rect x="30" y="178" width="270" height="12" fill="#0a2540"/>
+          <text x="165" y="168" font-family="Helvetica" font-weight="700" font-size="22"
+                fill="#ffffff" text-anchor="middle">Vídeo</text>
+
+          <!-- Numeral grande -->
+          <text x="165" y="275" font-family="Helvetica" font-weight="700" font-size="74"
+                fill="#00d2ff" text-anchor="middle">1</text>
+
+          <text x="165" y="325" font-family="Helvetica" font-weight="700" font-size="16"
+                fill="#0a2540" text-anchor="middle">Detección de deepfakes</text>
+
+          <line x1="60" y1="345" x2="270" y2="345" stroke="#00d2ff" stroke-width="2"/>
+        
+<text x="165" y="375" font-family="Helvetica"
+                font-size="12.5" fill="#4a5568" text-anchor="middle">· Face swap</text>
+<text x="165" y="397" font-family="Helvetica"
+                font-size="12.5" fill="#4a5568" text-anchor="middle">· Reanimación</text>
+<text x="165" y="419" font-family="Helvetica"
+                font-size="12.5" fill="#4a5568" text-anchor="middle">· Lip-sync</text>
+<text x="165" y="441" font-family="Helvetica"
+                font-size="12.5" fill="#4a5568" text-anchor="middle">· Texturas neuronales</text>
+<text x="165" y="463" font-family="Helvetica"
+                font-size="12.5" fill="#4a5568" text-anchor="middle">· Síntesis IA</text>
+
+          <rect x="80" y="525" width="170" height="40" rx="20"
+                fill="#0a2540" />
+          <text x="165" y="551" font-family="Helvetica" font-weight="700"
+                font-size="16" fill="#00d2ff" text-anchor="middle">AUC 0,94</text>
+        </g>
+
+        <g>
+          <rect x="320" y="130" width="270" height="460" rx="12" ry="12"
+                fill="#ffffff" stroke="#cbd5e0" stroke-width="1"/>
+          <rect x="320" y="130" width="270" height="60" rx="12" ry="12" fill="#0a2540"/>
+          <rect x="320" y="178" width="270" height="12" fill="#0a2540"/>
+          <text x="455" y="168" font-family="Helvetica" font-weight="700" font-size="22"
+                fill="#ffffff" text-anchor="middle">Imagen</text>
+
+          <!-- Numeral grande -->
+          <text x="455" y="275" font-family="Helvetica" font-weight="700" font-size="74"
+                fill="#00d2ff" text-anchor="middle">2</text>
+
+          <text x="455" y="325" font-family="Helvetica" font-weight="700" font-size="16"
+                fill="#0a2540" text-anchor="middle">Generación por IA</text>
+
+          <line x1="350" y1="345" x2="560" y2="345" stroke="#00d2ff" stroke-width="2"/>
+        
+<text x="455" y="375" font-family="Helvetica"
+                font-size="12.5" fill="#4a5568" text-anchor="middle">· StyleGAN</text>
+<text x="455" y="397" font-family="Helvetica"
+                font-size="12.5" fill="#4a5568" text-anchor="middle">· Stable Diffusion XL</text>
+<text x="455" y="419" font-family="Helvetica"
+                font-size="12.5" fill="#4a5568" text-anchor="middle">· Flux</text>
+<text x="455" y="441" font-family="Helvetica"
+                font-size="12.5" fill="#4a5568" text-anchor="middle">· MidJourney</text>
+<text x="455" y="463" font-family="Helvetica"
+                font-size="12.5" fill="#4a5568" text-anchor="middle">· DALL-E 3</text>
+<text x="455" y="485" font-family="Helvetica"
+                font-size="12.5" fill="#4a5568" text-anchor="middle">· Sora 2</text>
+
+          <rect x="370" y="525" width="170" height="40" rx="20"
+                fill="#0a2540" />
+          <text x="455" y="551" font-family="Helvetica" font-weight="700"
+                font-size="16" fill="#00d2ff" text-anchor="middle">AUC 0,945</text>
+        </g>
+
+        <g>
+          <rect x="610" y="130" width="270" height="460" rx="12" ry="12"
+                fill="#ffffff" stroke="#cbd5e0" stroke-width="1"/>
+          <rect x="610" y="130" width="270" height="60" rx="12" ry="12" fill="#0a2540"/>
+          <rect x="610" y="178" width="270" height="12" fill="#0a2540"/>
+          <text x="745" y="168" font-family="Helvetica" font-weight="700" font-size="22"
+                fill="#ffffff" text-anchor="middle">Documentos</text>
+
+          <!-- Numeral grande -->
+          <text x="745" y="275" font-family="Helvetica" font-weight="700" font-size="74"
+                fill="#00d2ff" text-anchor="middle">3</text>
+
+          <text x="745" y="325" font-family="Helvetica" font-weight="700" font-size="16"
+                fill="#0a2540" text-anchor="middle">Forensia documental</text>
+
+          <line x1="640" y1="345" x2="850" y2="345" stroke="#00d2ff" stroke-width="2"/>
+        
+<text x="745" y="375" font-family="Helvetica"
+                font-size="12.5" fill="#4a5568" text-anchor="middle">· Splicing</text>
+<text x="745" y="397" font-family="Helvetica"
+                font-size="12.5" fill="#4a5568" text-anchor="middle">· Copy-move</text>
+<text x="745" y="419" font-family="Helvetica"
+                font-size="12.5" fill="#4a5568" text-anchor="middle">· Inpainting</text>
+<text x="745" y="441" font-family="Helvetica"
+                font-size="12.5" fill="#4a5568" text-anchor="middle">· MRZ</text>
+<text x="745" y="463" font-family="Helvetica"
+                font-size="12.5" fill="#4a5568" text-anchor="middle">· ELA</text>
+<text x="745" y="485" font-family="Helvetica"
+                font-size="12.5" fill="#4a5568" text-anchor="middle">· EXIF</text>
+<text x="745" y="507" font-family="Helvetica"
+                font-size="12.5" fill="#4a5568" text-anchor="middle">· JPEG ghost</text>
+
+          <rect x="660" y="525" width="170" height="40" rx="20"
+                fill="#0a2540" />
+          <text x="745" y="551" font-family="Helvetica" font-weight="700"
+                font-size="16" fill="#00d2ff" text-anchor="middle">AUC 0,998</text>
+        </g>
+
+        <g>
+          <rect x="900" y="130" width="270" height="460" rx="12" ry="12"
+                fill="#ffffff" stroke="#cbd5e0" stroke-width="1"/>
+          <rect x="900" y="130" width="270" height="60" rx="12" ry="12" fill="#0a2540"/>
+          <rect x="900" y="178" width="270" height="12" fill="#0a2540"/>
+          <text x="1035" y="168" font-family="Helvetica" font-weight="700" font-size="22"
+                fill="#ffffff" text-anchor="middle">Tecleo</text>
+
+          <!-- Numeral grande -->
+          <text x="1035" y="275" font-family="Helvetica" font-weight="700" font-size="74"
+                fill="#00d2ff" text-anchor="middle">4</text>
+
+          <text x="1035" y="325" font-family="Helvetica" font-weight="700" font-size="16"
+                fill="#0a2540" text-anchor="middle">Biometría conductual</text>
+
+          <line x1="930" y1="345" x2="1140" y2="345" stroke="#00d2ff" stroke-width="2"/>
+        
+<text x="1035" y="375" font-family="Helvetica"
+                font-size="12.5" fill="#4a5568" text-anchor="middle">· Patrón único de pulsación</text>
+<text x="1035" y="397" font-family="Helvetica"
+                font-size="12.5" fill="#4a5568" text-anchor="middle">· Identifica humano vs bot</text>
+<text x="1035" y="419" font-family="Helvetica"
+                font-size="12.5" fill="#4a5568" text-anchor="middle">· Detecta sustitución</text>
+
+          <rect x="950" y="525" width="170" height="40" rx="20"
+                fill="#0a2540" />
+          <text x="1035" y="551" font-family="Helvetica" font-weight="700"
+                font-size="16" fill="#00d2ff" text-anchor="middle">AUC 0,949</text>
+        </g>
+
+    <text x="600" y="670" font-family="Helvetica" font-size="13" fill="#4a5568"
+          text-anchor="middle" font-style="italic">AUC = Area Under the Curve · 1,0 detección perfecta · 0,5 azar puro · 0,90+ calidad operacional</text>
+    </svg>

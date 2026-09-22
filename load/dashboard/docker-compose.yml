@@ -1,0 +1,42 @@
+name: jmeter-dashboard
+
+services:
+  influxdb:
+    image: influxdb:1.8
+    container_name: jmeter-influxdb
+    ports:
+      - "8086:8086"
+    environment:
+      INFLUXDB_DB: jmeter
+      INFLUXDB_USER: jmeter
+      INFLUXDB_USER_PASSWORD: jmeter
+      INFLUXDB_HTTP_AUTH_ENABLED: "false"
+    volumes:
+      - influx-data:/var/lib/influxdb
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8086/ping"]
+      interval: 5s
+      retries: 5
+
+  grafana:
+    image: grafana/grafana:11.3.0
+    container_name: jmeter-grafana
+    depends_on:
+      influxdb:
+        condition: service_healthy
+    ports:
+      - "3001:3000"
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
+      GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /var/lib/grafana/dashboards/deep-check.json
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./provisioning:/etc/grafana/provisioning
+      - ./dashboards:/var/lib/grafana/dashboards
+
+volumes:
+  influx-data:
+  grafana-data:

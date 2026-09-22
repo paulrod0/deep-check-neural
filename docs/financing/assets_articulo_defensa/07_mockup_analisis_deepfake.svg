@@ -1,0 +1,86 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1100 720" width="1100" height="720">
+<rect width="1100" height="720" fill="#f3f6fb"/>
+
+    <rect x="0" y="0" width="1100" height="56" fill="#0a2540"/>
+    <g transform="translate(24, 12)">
+      <path d="M 12 4 L 30 12 L 30 24 Q 30 32 12 40 Q -6 32 -6 24 L -6 12 Z"
+            fill="none" stroke="#00d2ff" stroke-width="2"/>
+      <path d="M 0 22 L 8 28 L 22 14"
+            fill="none" stroke="#00d2ff" stroke-width="3" stroke-linecap="round"/>
+    </g>
+    <text x="64" y="38" font-family="Helvetica" font-weight="700" font-size="20"
+          fill="#ffffff">Deep-Check</text>
+    <text x="180" y="38" font-family="Helvetica" font-size="13" fill="#00d2ff"
+          letter-spacing="1.5">/ ANÁLISIS FORENSE</text>
+    <text x="820" y="38" font-family="Helvetica" font-size="13" fill="#ffffff">
+      Caso: 2026-CIBER-0084 · Operador: J.M. González
+    </text>
+    
+
+    <rect x="40" y="100" width="380" height="460" rx="10" fill="#ffffff" stroke="#cbd5e0"/>
+    <text x="60" y="135" font-family="Helvetica" font-weight="700" font-size="16" fill="#0a2540">EVIDENCIA</text>
+    <line x1="60" y1="150" x2="400" y2="150" stroke="#00d2ff" stroke-width="2"/>
+
+    <rect x="60" y="170" width="340" height="220" fill="#0a2540"/>
+    <text x="230" y="290" font-family="Helvetica" font-size="13" fill="#00d2ff"
+          text-anchor="middle" letter-spacing="2">[ FRAME 312 / 1.840 ]</text>
+    <rect x="100" y="200" width="200" height="160" fill="none" stroke="#00d2ff" stroke-width="2" stroke-dasharray="6 4"/>
+    <text x="200" y="215" font-family="Helvetica" font-size="10" fill="#00d2ff" text-anchor="middle">DETECCIÓN FACIAL</text>
+
+    <text x="60" y="420" font-family="Helvetica" font-size="11" fill="#4a5568">Archivo</text>
+    <text x="60" y="438" font-family="Helvetica" font-weight="700" font-size="13" fill="#0a2540">videoconferencia_mando.mp4</text>
+
+    <text x="60" y="465" font-family="Helvetica" font-size="11" fill="#4a5568">SHA-256 (huella)</text>
+    <text x="60" y="483" font-family="Courier" font-size="11" fill="#0a2540">a4f2:1cb8:7e34:9d12:3a87:bb44:e019:f6...</text>
+
+    <text x="60" y="510" font-family="Helvetica" font-size="11" fill="#4a5568">Sellado eIDAS</text>
+    <text x="60" y="528" font-family="Helvetica" font-weight="700" font-size="12" fill="#10b981">✓ ACCV — Generalitat Valenciana</text>
+    <text x="60" y="544" font-family="Helvetica" font-size="11" fill="#4a5568">2026-04-28T14:32:11.408Z UTC</text>
+    
+
+    <rect x="450" y="100" width="610" height="460" rx="10" fill="#ffffff" stroke="#cbd5e0"/>
+    <text x="470" y="135" font-family="Helvetica" font-weight="700" font-size="16" fill="#0a2540">RESULTADO DEL ANÁLISIS</text>
+    <line x1="470" y1="150" x2="1040" y2="150" stroke="#00d2ff" stroke-width="2"/>
+
+    <text x="470" y="180" font-family="Helvetica" font-size="12" fill="#4a5568">VEREDICTO</text>
+    <text x="470" y="220" font-family="Helvetica" font-weight="700" font-size="32" fill="#ef4444">DEEPFAKE DETECTADO</text>
+
+    <text x="470" y="250" font-family="Helvetica" font-size="12" fill="#4a5568">Probabilidad de manipulación</text>
+    <rect x="470" y="260" width="540" height="14" rx="7" fill="#cbd5e0"/>
+    <rect x="470" y="260" width="497" height="14" rx="7" fill="#ef4444"/>
+    <text x="1015" y="272" font-family="Helvetica" font-weight="700" font-size="12" fill="#0a2540" text-anchor="end">92,1 %</text>
+
+    <text x="470" y="305" font-family="Helvetica" font-size="12" fill="#4a5568">Confianza del modelo</text>
+    <rect x="470" y="315" width="540" height="14" rx="7" fill="#cbd5e0"/>
+    <rect x="470" y="315" width="476" height="14" rx="7" fill="#00d2ff"/>
+    <text x="1015" y="327" font-family="Helvetica" font-weight="700" font-size="12" fill="#0a2540" text-anchor="end">88,2 %</text>
+    
+<text x="470" y="365" font-family="Helvetica" font-size="12" fill="#0a2540">Píxel forense (V3)</text>
+<rect x="700" y="353" width="240" height="14" rx="7" fill="#cbd5e0"/>
+<rect x="700" y="353" width="225" height="14" rx="7" fill="#10b981"/>
+<text x="950" y="365" font-family="Helvetica" font-weight="700" font-size="12" fill="#0a2540">0.94</text>
+<text x="470" y="393" font-family="Helvetica" font-size="12" fill="#0a2540">Frecuencia + ELA</text>
+<rect x="700" y="381" width="240" height="14" rx="7" fill="#cbd5e0"/>
+<rect x="700" y="381" width="213" height="14" rx="7" fill="#10b981"/>
+<text x="950" y="393" font-family="Helvetica" font-weight="700" font-size="12" fill="#0a2540">0.89</text>
+<text x="470" y="421" font-family="Helvetica" font-size="12" fill="#0a2540">Macro-expresión (FACS)</text>
+<rect x="700" y="409" width="240" height="14" rx="7" fill="#cbd5e0"/>
+<rect x="700" y="409" width="194" height="14" rx="7" fill="#f59e0b"/>
+<text x="950" y="421" font-family="Helvetica" font-weight="700" font-size="12" fill="#0a2540">0.81</text>
+<text x="470" y="449" font-family="Helvetica" font-size="12" fill="#0a2540">Modelo blendshape CNN</text>
+<rect x="700" y="437" width="240" height="14" rx="7" fill="#cbd5e0"/>
+<rect x="700" y="437" width="220" height="14" rx="7" fill="#10b981"/>
+<text x="950" y="449" font-family="Helvetica" font-weight="700" font-size="12" fill="#0a2540">0.92</text>
+<text x="470" y="477" font-family="Helvetica" font-size="12" fill="#0a2540">Audio-visual sync</text>
+<rect x="700" y="465" width="240" height="14" rx="7" fill="#cbd5e0"/>
+<rect x="700" y="465" width="187" height="14" rx="7" fill="#f59e0b"/>
+<text x="950" y="477" font-family="Helvetica" font-weight="700" font-size="12" fill="#0a2540">0.78</text>
+
+    <rect x="40" y="600" width="1020" height="90" rx="10" fill="#0a2540"/>
+    <text x="60" y="640" font-family="Helvetica" font-weight="700" font-size="14" fill="#ffffff">INFORME PERICIAL UNE 197010:2015</text>
+    <text x="60" y="662" font-family="Helvetica" font-size="12" fill="#00d2ff">
+      Cadena de custodia: c2f4-3a91-1bf5 (verificada) · Modelo: deep-check-video-v9.4 · Tiempo de inferencia: 184 ms
+    </text>
+    <rect x="900" y="620" width="140" height="46" rx="6" fill="#00d2ff"/>
+    <text x="970" y="650" font-family="Helvetica" font-weight="700" font-size="14" fill="#0a2540" text-anchor="middle">Generar PDF →</text>
+    </svg>

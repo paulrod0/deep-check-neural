@@ -1,0 +1,134 @@
+{
+  "title": "Deep-Check Load Test (live)",
+  "uid": "deep-check-load",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "5s",
+  "time": { "from": "now-5m", "to": "now" },
+  "timepicker": { "refresh_intervals": ["5s", "10s", "30s", "1m"] },
+  "timezone": "browser",
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "Active users",
+      "gridPos": { "x": 0, "y": 0, "w": 6, "h": 4 },
+      "datasource": { "type": "influxdb", "uid": "JMeter" },
+      "targets": [{
+        "measurement": "jmeter",
+        "refId": "A",
+        "policy": "default",
+        "tags": [{ "key": "statut", "operator": "=", "value": "all" }],
+        "groupBy": [{ "params": ["$__interval"], "type": "time" }, { "params": ["null"], "type": "fill" }],
+        "select": [[{ "params": ["maxAT"], "type": "field" }, { "params": [], "type": "max" }]]
+      }]
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Req / s",
+      "gridPos": { "x": 6, "y": 0, "w": 6, "h": 4 },
+      "datasource": { "type": "influxdb", "uid": "JMeter" },
+      "targets": [{
+        "measurement": "jmeter",
+        "refId": "A",
+        "tags": [{ "key": "statut", "operator": "=", "value": "all" }, { "key": "transaction", "operator": "=", "value": "all" }],
+        "groupBy": [{ "params": ["1s"], "type": "time" }, { "params": ["null"], "type": "fill" }],
+        "select": [[{ "params": ["count"], "type": "field" }, { "params": [], "type": "sum" }]]
+      }]
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "Error %",
+      "gridPos": { "x": 12, "y": 0, "w": 6, "h": 4 },
+      "fieldConfig": { "defaults": { "color": { "mode": "thresholds" }, "thresholds": { "steps": [{ "color": "green", "value": null }, { "color": "yellow", "value": 1 }, { "color": "red", "value": 5 }] }, "unit": "percent" } },
+      "datasource": { "type": "influxdb", "uid": "JMeter" },
+      "targets": [{
+        "rawQuery": true,
+        "refId": "A",
+        "query": "SELECT 100 * sum(\"count\") / (SELECT sum(\"count\") FROM \"jmeter\" WHERE \"statut\" = 'all' AND \"transaction\" = 'all' AND $timeFilter) FROM \"jmeter\" WHERE \"statut\" = 'ko' AND $timeFilter"
+      }]
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "p95 latency (ms)",
+      "gridPos": { "x": 18, "y": 0, "w": 6, "h": 4 },
+      "fieldConfig": { "defaults": { "color": { "mode": "thresholds" }, "thresholds": { "steps": [{ "color": "green", "value": null }, { "color": "yellow", "value": 1000 }, { "color": "red", "value": 3000 }] }, "unit": "ms" } },
+      "datasource": { "type": "influxdb", "uid": "JMeter" },
+      "targets": [{
+        "measurement": "jmeter",
+        "refId": "A",
+        "tags": [{ "key": "statut", "operator": "=", "value": "all" }],
+        "groupBy": [{ "params": ["$__interval"], "type": "time" }],
+        "select": [[{ "params": ["pct95.0"], "type": "field" }, { "params": [], "type": "mean" }]]
+      }]
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "Response times by transaction",
+      "gridPos": { "x": 0, "y": 4, "w": 24, "h": 8 },
+      "datasource": { "type": "influxdb", "uid": "JMeter" },
+      "fieldConfig": { "defaults": { "unit": "ms" } },
+      "targets": [
+        {
+          "alias": "$tag_transaction p50",
+          "measurement": "jmeter",
+          "refId": "A",
+          "tags": [{ "key": "statut", "operator": "=", "value": "all" }, { "key": "transaction", "operator": "!=", "value": "all" }],
+          "groupBy": [{ "params": ["$__interval"], "type": "time" }, { "params": ["transaction"], "type": "tag" }],
+          "select": [[{ "params": ["pct50.0"], "type": "field" }, { "params": [], "type": "mean" }]]
+        },
+        {
+          "alias": "$tag_transaction p95",
+          "measurement": "jmeter",
+          "refId": "B",
+          "tags": [{ "key": "statut", "operator": "=", "value": "all" }, { "key": "transaction", "operator": "!=", "value": "all" }],
+          "groupBy": [{ "params": ["$__interval"], "type": "time" }, { "params": ["transaction"], "type": "tag" }],
+          "select": [[{ "params": ["pct95.0"], "type": "field" }, { "params": [], "type": "mean" }]]
+        },
+        {
+          "alias": "$tag_transaction p99",
+          "measurement": "jmeter",
+          "refId": "C",
+          "tags": [{ "key": "statut", "operator": "=", "value": "all" }, { "key": "transaction", "operator": "!=", "value": "all" }],
+          "groupBy": [{ "params": ["$__interval"], "type": "time" }, { "params": ["transaction"], "type": "tag" }],
+          "select": [[{ "params": ["pct99.0"], "type": "field" }, { "params": [], "type": "mean" }]]
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "type": "timeseries",
+      "title": "Throughput (hits / s)",
+      "gridPos": { "x": 0, "y": 12, "w": 12, "h": 8 },
+      "datasource": { "type": "influxdb", "uid": "JMeter" },
+      "targets": [{
+        "alias": "$tag_transaction",
+        "measurement": "jmeter",
+        "refId": "A",
+        "tags": [{ "key": "statut", "operator": "=", "value": "all" }, { "key": "transaction", "operator": "!=", "value": "all" }],
+        "groupBy": [{ "params": ["1s"], "type": "time" }, { "params": ["transaction"], "type": "tag" }],
+        "select": [[{ "params": ["count"], "type": "field" }, { "params": [], "type": "sum" }]]
+      }]
+    },
+    {
+      "id": 7,
+      "type": "timeseries",
+      "title": "Errors",
+      "gridPos": { "x": 12, "y": 12, "w": 12, "h": 8 },
+      "datasource": { "type": "influxdb", "uid": "JMeter" },
+      "fieldConfig": { "defaults": { "custom": { "drawStyle": "bars" }, "color": { "mode": "fixed", "fixedColor": "red" } } },
+      "targets": [{
+        "alias": "errors",
+        "measurement": "jmeter",
+        "refId": "A",
+        "tags": [{ "key": "statut", "operator": "=", "value": "ko" }],
+        "groupBy": [{ "params": ["$__interval"], "type": "time" }, { "params": ["0"], "type": "fill" }],
+        "select": [[{ "params": ["count"], "type": "field" }, { "params": [], "type": "sum" }]]
+      }]
+    }
+  ]
+}
