@@ -1,0 +1,950 @@
+2026-04-17 12:47:27,461 INFO o.a.j.u.JMeterUtils: Setting Locale to en_EN
+2026-04-17 12:47:27,471 INFO o.a.j.JMeter: Loading user properties from: /opt/homebrew/Cellar/jmeter/5.6.3/libexec/bin/user.properties
+2026-04-17 12:47:27,472 INFO o.a.j.JMeter: Loading system properties from: /opt/homebrew/Cellar/jmeter/5.6.3/libexec/bin/system.properties
+2026-04-17 12:47:27,472 INFO o.a.j.JMeter: Setting JMeter property: host=18.201.230.25
+2026-04-17 12:47:27,472 INFO o.a.j.JMeter: Setting JMeter property: port=8445
+2026-04-17 12:47:27,472 INFO o.a.j.JMeter: Setting JMeter property: image=/Users/hium/.gemini/antigravity/scratch/deep-check/load/fixtures/face.jpg
+2026-04-17 12:47:27,472 INFO o.a.j.JMeter: Setting JMeter property: influx_url=http://localhost:8086/write?db=jmeter
+2026-04-17 12:47:27,474 INFO o.a.j.JMeter: Copyright (c) 1998-2024 The Apache Software Foundation
+2026-04-17 12:47:27,474 INFO o.a.j.JMeter: Version 5.6.3
+2026-04-17 12:47:27,474 INFO o.a.j.JMeter: java.version=21.0.10
+2026-04-17 12:47:27,474 INFO o.a.j.JMeter: java.vm.name=OpenJDK 64-Bit Server VM
+2026-04-17 12:47:27,474 INFO o.a.j.JMeter: os.name=Mac OS X
+2026-04-17 12:47:27,474 INFO o.a.j.JMeter: os.arch=aarch64
+2026-04-17 12:47:27,474 INFO o.a.j.JMeter: os.version=26.3.1
+2026-04-17 12:47:27,474 INFO o.a.j.JMeter: file.encoding=UTF-8
+2026-04-17 12:47:27,474 INFO o.a.j.JMeter: java.awt.headless=true
+2026-04-17 12:47:27,474 INFO o.a.j.JMeter: Max memory     =1073741824
+2026-04-17 12:47:27,474 INFO o.a.j.JMeter: Available Processors =10
+2026-04-17 12:47:27,479 INFO o.a.j.JMeter: Default Locale=English (EN)
+2026-04-17 12:47:27,479 INFO o.a.j.JMeter: JMeter  Locale=English (EN)
+2026-04-17 12:47:27,479 INFO o.a.j.JMeter: JMeterHome=/opt/homebrew/Cellar/jmeter/5.6.3/libexec
+2026-04-17 12:47:27,479 INFO o.a.j.JMeter: user.dir  =/Users/hium/.gemini/antigravity/scratch/deep-check/load/dashboard
+2026-04-17 12:47:27,479 INFO o.a.j.JMeter: PWD       =/Users/hium/.gemini/antigravity/scratch/deep-check/load/dashboard
+2026-04-17 12:47:27,480 INFO o.a.j.JMeter: IP: 127.0.0.1 Name: Pablos-MacBook-Pro.local FullName: localhost
+2026-04-17 12:47:27,487 INFO o.a.j.JMeter: Setting property 'jmeter.reportgenerator.outputdir' to:'/Users/hium/.gemini/antigravity/scratch/deep-check/load/report/ec2_20260417_124727'
+2026-04-17 12:47:27,488 INFO o.a.j.s.FileServer: Default base='/Users/hium/.gemini/antigravity/scratch/deep-check/load/dashboard'
+2026-04-17 12:47:27,489 INFO o.a.j.s.FileServer: Set new base='/Users/hium/.gemini/antigravity/scratch/deep-check/load'
+2026-04-17 12:47:27,554 INFO o.a.j.s.SaveService: Testplan (JMX) version: 2.2. Testlog (JTL) version: 2.2
+2026-04-17 12:47:27,566 INFO o.a.j.s.SaveService: Using SaveService properties version 5.0
+2026-04-17 12:47:27,567 INFO o.a.j.s.SaveService: Using SaveService properties file encoding UTF-8
+2026-04-17 12:47:27,568 INFO o.a.j.s.SaveService: Loading file: /Users/hium/.gemini/antigravity/scratch/deep-check/load/deep-check-load-ec2.jmx
+2026-04-17 12:47:27,588 INFO o.a.j.p.h.s.HTTPSamplerBase: Parser for text/html is org.apache.jmeter.protocol.http.parser.LagartoBasedHtmlParser
+2026-04-17 12:47:27,588 INFO o.a.j.p.h.s.HTTPSamplerBase: Parser for application/xhtml+xml is org.apache.jmeter.protocol.http.parser.LagartoBasedHtmlParser
+2026-04-17 12:47:27,588 INFO o.a.j.p.h.s.HTTPSamplerBase: Parser for application/xml is org.apache.jmeter.protocol.http.parser.LagartoBasedHtmlParser
+2026-04-17 12:47:27,588 INFO o.a.j.p.h.s.HTTPSamplerBase: Parser for text/xml is org.apache.jmeter.protocol.http.parser.LagartoBasedHtmlParser
+2026-04-17 12:47:27,588 INFO o.a.j.p.h.s.HTTPSamplerBase: Parser for text/vnd.wap.wml is org.apache.jmeter.protocol.http.parser.RegexpHTMLParser
+2026-04-17 12:47:27,588 INFO o.a.j.p.h.s.HTTPSamplerBase: Parser for text/css is org.apache.jmeter.protocol.http.parser.CssParser
+2026-04-17 12:47:27,706 INFO o.a.j.s.SampleResult: Note: Sample TimeStamps are START times
+2026-04-17 12:47:27,706 INFO o.a.j.s.SampleResult: sampleresult.default.encoding is set to UTF-8
+2026-04-17 12:47:27,706 INFO o.a.j.s.SampleResult: sampleresult.useNanoTime=true
+2026-04-17 12:47:27,706 INFO o.a.j.s.SampleResult: sampleresult.nanoThreadSleep=5000
+2026-04-17 12:47:27,710 INFO o.a.j.JMeter: Creating summariser <summary>
+2026-04-17 12:47:27,715 INFO o.a.j.r.d.ReportGenerator: ReportGenerator will use for Parsing the separator: ','
+2026-04-17 12:47:27,715 INFO o.a.j.r.d.ReportGenerator: Will generate report at end of test from  results file: /Users/hium/.gemini/antigravity/scratch/deep-check/load/results/ec2_20260417_124727.jtl
+2026-04-17 12:47:27,715 INFO o.a.j.r.d.ReportGenerator: Reading report generator properties from: /opt/homebrew/Cellar/jmeter/5.6.3/libexec/bin/reportgenerator.properties
+2026-04-17 12:47:27,715 INFO o.a.j.r.d.ReportGenerator: Merging with JMeter properties
+2026-04-17 12:47:27,717 INFO o.a.j.r.c.ReportGeneratorConfiguration: Property 'jmeter.reportgenerator.temp_dir' not found, using default value 'temp' instead.
+2026-04-17 12:47:27,717 INFO o.a.j.r.c.ReportGeneratorConfiguration: Property 'jmeter.reportgenerator.apdex_per_transaction' not found, using default value 'null' instead.
+2026-04-17 12:47:27,717 INFO o.a.j.r.c.ReportGeneratorConfiguration: apdex_per_transaction is empty, not APDEX per transaction customization
+2026-04-17 12:47:27,717 INFO o.a.j.r.c.ReportGeneratorConfiguration: Property 'jmeter.reportgenerator.sample_filter' not found, using default value 'null' instead.
+2026-04-17 12:47:27,717 INFO o.a.j.r.c.ReportGeneratorConfiguration: Property 'jmeter.reportgenerator.report_title' not found, using default value 'null' instead.
+2026-04-17 12:47:27,717 INFO o.a.j.r.c.ReportGeneratorConfiguration: Property 'jmeter.reportgenerator.start_date' not found, using default value 'null' instead.
+2026-04-17 12:47:27,717 INFO o.a.j.r.c.ReportGeneratorConfiguration: Property 'jmeter.reportgenerator.end_date' not found, using default value 'null' instead.
+2026-04-17 12:47:27,717 INFO o.a.j.r.c.ReportGeneratorConfiguration: Property 'jmeter.reportgenerator.date_format' not found, using default value 'null' instead.
+2026-04-17 12:47:27,717 INFO o.a.j.r.c.ReportGeneratorConfiguration: Will use date range start date: null, end date: null
+2026-04-17 12:47:27,719 INFO o.a.j.r.c.ReportGeneratorConfiguration: Property 'jmeter.reportgenerator.graph.totalTPS.exclude_controllers' not found, using default value 'false' instead.
+2026-04-17 12:47:27,719 INFO o.a.j.r.c.ReportGeneratorConfiguration: Property 'jmeter.reportgenerator.graph.activeThreadsOverTime.exclude_controllers' not found, using default value 'false' instead.
+2026-04-17 12:47:27,719 INFO o.a.j.r.c.ReportGeneratorConfiguration: Property 'jmeter.reportgenerator.graph.timeVsThreads.exclude_controllers' not found, using default value 'false' instead.
+2026-04-17 12:47:27,719 INFO o.a.j.r.c.ReportGeneratorConfiguration: Property 'jmeter.reportgenerator.graph.responseTimeDistribution.exclude_controllers' not found, using default value 'false' instead.
+2026-04-17 12:47:27,719 INFO o.a.j.r.c.ReportGeneratorConfiguration: Property 'jmeter.reportgenerator.graph.transactionsPerSecond.exclude_controllers' not found, using default value 'false' instead.
+2026-04-17 12:47:27,719 INFO o.a.j.r.c.ReportGeneratorConfiguration: Property 'jmeter.reportgenerator.graph.responseTimePercentiles.exclude_controllers' not found, using default value 'false' instead.
+2026-04-17 12:47:27,719 INFO o.a.j.r.c.ReportGeneratorConfiguration: Property 'jmeter.reportgenerator.graph.responseTimePercentilesOverTime.exclude_controllers' not found, using default value 'false' instead.
+2026-04-17 12:47:27,719 INFO o.a.j.r.c.ReportGeneratorConfiguration: Property 'jmeter.reportgenerator.graph.responseTimesOverTime.exclude_controllers' not found, using default value 'false' instead.
+2026-04-17 12:47:27,719 INFO o.a.j.r.c.ReportGeneratorConfiguration: Property 'jmeter.reportgenerator.graph.connectTimeOverTime.exclude_controllers' not found, using default value 'false' instead.
+2026-04-17 12:47:27,719 INFO o.a.j.r.c.ReportGeneratorConfiguration: Property 'jmeter.reportgenerator.graph.latenciesOverTime.exclude_controllers' not found, using default value 'false' instead.
+2026-04-17 12:47:27,719 INFO o.a.j.r.c.ReportGeneratorConfiguration: Property 'jmeter.reportgenerator.exporter.json.filters_only_sample_series' not found, using default value 'true' instead.
+2026-04-17 12:47:27,719 INFO o.a.j.r.c.ReportGeneratorConfiguration: Property 'jmeter.reportgenerator.exporter.json.series_filter' not found, using default value '' instead.
+2026-04-17 12:47:27,719 INFO o.a.j.r.c.ReportGeneratorConfiguration: Property 'jmeter.reportgenerator.exporter.json.show_controllers_only' not found, using default value 'false' instead.
+2026-04-17 12:47:27,719 INFO o.a.j.r.c.ReportGeneratorConfiguration: Property 'jmeter.reportgenerator.exporter.html.filters_only_sample_series' not found, using default value 'true' instead.
+2026-04-17 12:47:27,719 INFO o.a.j.r.c.ReportGeneratorConfiguration: Property 'jmeter.reportgenerator.exporter.html.series_filter' not found, using default value '' instead.
+2026-04-17 12:47:27,719 INFO o.a.j.r.c.ReportGeneratorConfiguration: Property 'jmeter.reportgenerator.exporter.html.show_controllers_only' not found, using default value 'false' instead.
+2026-04-17 12:47:27,723 INFO o.a.j.e.StandardJMeterEngine: Running the test!
+2026-04-17 12:47:27,724 INFO o.a.j.s.SampleEvent: List of sample_variables: []
+2026-04-17 12:47:27,724 INFO o.a.j.s.SampleEvent: List of sample_variables: []
+2026-04-17 12:47:27,725 INFO o.a.j.e.u.CompoundVariable: Note: Function class names must contain the string: '.functions.'
+2026-04-17 12:47:27,725 INFO o.a.j.e.u.CompoundVariable: Note: Function class names must not contain the string: '.gui.'
+2026-04-17 12:47:27,749 INFO o.a.j.r.ClassFinder: Will scan jar /opt/homebrew/Cellar/jmeter/5.6.3/libexec/lib/ext/jmeter-plugins-manager-1.9.jar with filter ExtendsClassFilter [parents=[interface org.apache.jmeter.functions.Function], inner=false, contains=null, notContains=null]. Consider exposing JMeter plugins via META-INF/services, and add JMeter-Skip-Class-Scanning=true manifest attribute so JMeter can skip classfile scanning
+2026-04-17 12:47:27,783 INFO o.a.j.v.b.BackendListener: Grafana Backend Listener: Starting worker with class: class org.apache.jmeter.visualizers.backend.influxdb.InfluxdbBackendListenerClient and queue capacity: 5000
+2026-04-17 12:47:27,783 INFO o.a.j.v.b.BackendListener: Grafana Backend Listener: Started  worker with class: class org.apache.jmeter.visualizers.backend.influxdb.InfluxdbBackendListenerClient
+2026-04-17 12:47:27,867 INFO o.a.j.JMeter: Running test (1776422847867)
+2026-04-17 12:47:27,875 INFO o.a.j.e.StandardJMeterEngine: Starting ThreadGroup: 1 : 01 Steady - /detect
+2026-04-17 12:47:27,875 INFO o.a.j.e.StandardJMeterEngine: Starting 20 threads for group 01 Steady - /detect.
+2026-04-17 12:47:27,875 INFO o.a.j.e.StandardJMeterEngine: Thread will continue on error
+2026-04-17 12:47:27,875 INFO o.a.j.t.ThreadGroup: Starting thread group... number=1 threads=20 ramp-up=30 delayedStart=false
+2026-04-17 12:47:27,878 INFO o.a.j.t.JMeterThread: Thread started: 01 Steady - /detect 1-1
+2026-04-17 12:47:27,880 INFO o.a.j.t.ThreadGroup: Started thread group number 1
+2026-04-17 12:47:27,880 INFO o.a.j.e.StandardJMeterEngine: Waiting for thread group: 01 Steady - /detect to finish before starting next group
+2026-04-17 12:47:27,883 INFO o.a.j.p.h.s.HTTPHCAbstractImpl: Local host = Pablos-MacBook-Pro.local
+2026-04-17 12:47:27,884 INFO o.a.j.p.h.s.HTTPHC4Impl: HTTP request retry count = 0
+2026-04-17 12:47:27,893 INFO o.a.j.s.FileServer: Stored: /Users/hium/.gemini/antigravity/scratch/deep-check/load/fixtures/face.jpg
+2026-04-17 12:47:29,379 INFO o.a.j.t.JMeterThread: Thread started: 01 Steady - /detect 1-2
+2026-04-17 12:47:30,038 INFO o.a.j.r.Summariser: summary +      9 in 00:00:02 =    4.2/s Avg:   296 Min:   231 Max:   375 Err:     0 (0.00%) Active: 2 Started: 2 Finished: 0
+2026-04-17 12:47:30,881 INFO o.a.j.t.JMeterThread: Thread started: 01 Steady - /detect 1-3
+2026-04-17 12:47:32,380 INFO o.a.j.t.JMeterThread: Thread started: 01 Steady - /detect 1-4
+2026-04-17 12:47:33,880 INFO o.a.j.t.JMeterThread: Thread started: 01 Steady - /detect 1-5
+2026-04-17 12:47:35,376 INFO o.a.j.t.JMeterThread: Thread started: 01 Steady - /detect 1-6
+2026-04-17 12:47:36,880 INFO o.a.j.t.JMeterThread: Thread started: 01 Steady - /detect 1-7
+2026-04-17 12:47:38,381 INFO o.a.j.t.JMeterThread: Thread started: 01 Steady - /detect 1-8
+2026-04-17 12:47:39,880 INFO o.a.j.t.JMeterThread: Thread started: 01 Steady - /detect 1-9
+2026-04-17 12:47:41,381 INFO o.a.j.t.JMeterThread: Thread started: 01 Steady - /detect 1-10
+2026-04-17 12:47:42,880 INFO o.a.j.t.JMeterThread: Thread started: 01 Steady - /detect 1-11
+2026-04-17 12:47:44,380 INFO o.a.j.t.JMeterThread: Thread started: 01 Steady - /detect 1-12
+2026-04-17 12:47:45,881 INFO o.a.j.t.JMeterThread: Thread started: 01 Steady - /detect 1-13
+2026-04-17 12:47:47,380 INFO o.a.j.t.JMeterThread: Thread started: 01 Steady - /detect 1-14
+2026-04-17 12:47:48,880 INFO o.a.j.t.JMeterThread: Thread started: 01 Steady - /detect 1-15
+2026-04-17 12:47:50,380 INFO o.a.j.t.JMeterThread: Thread started: 01 Steady - /detect 1-16
+2026-04-17 12:47:51,875 INFO o.a.j.t.JMeterThread: Thread started: 01 Steady - /detect 1-17
+2026-04-17 12:47:53,376 INFO o.a.j.t.JMeterThread: Thread started: 01 Steady - /detect 1-18
+2026-04-17 12:47:54,877 INFO o.a.j.t.JMeterThread: Thread started: 01 Steady - /detect 1-19
+2026-04-17 12:47:56,380 INFO o.a.j.t.JMeterThread: Thread started: 01 Steady - /detect 1-20
+2026-04-17 12:48:00,094 INFO o.a.j.r.Summariser: summary +    286 in 00:00:30 =    9.5/s Avg:  1173 Min:   231 Max:  2266 Err:     0 (0.00%) Active: 20 Started: 20 Finished: 0
+2026-04-17 12:48:00,095 INFO o.a.j.r.Summariser: summary =    295 in 00:00:32 =    9.2/s Avg:  1147 Min:   231 Max:  2266 Err:     0 (0.00%)
+2026-04-17 12:48:30,184 INFO o.a.j.r.Summariser: summary +    288 in 00:00:30 =    9.6/s Avg:  2084 Min:  1951 Max:  2425 Err:     0 (0.00%) Active: 20 Started: 20 Finished: 0
+2026-04-17 12:48:30,185 INFO o.a.j.r.Summariser: summary =    583 in 00:01:02 =    9.4/s Avg:  1610 Min:   231 Max:  2425 Err:     0 (0.00%)
+2026-04-17 12:49:00,061 INFO o.a.j.r.Summariser: summary +    285 in 00:00:30 =    9.5/s Avg:  2098 Min:  1968 Max:  2230 Err:     0 (0.00%) Active: 20 Started: 20 Finished: 0
+2026-04-17 12:49:00,062 INFO o.a.j.r.Summariser: summary =    868 in 00:01:32 =    9.4/s Avg:  1770 Min:   231 Max:  2425 Err:     0 (0.00%)
+2026-04-17 12:49:30,077 INFO o.a.j.r.Summariser: summary +    286 in 00:00:30 =    9.5/s Avg:  2104 Min:  1929 Max:  2390 Err:     0 (0.00%) Active: 20 Started: 20 Finished: 0
+2026-04-17 12:49:30,078 INFO o.a.j.r.Summariser: summary =   1154 in 00:02:02 =    9.4/s Avg:  1853 Min:   231 Max:  2425 Err:     0 (0.00%)
+2026-04-17 12:50:00,158 INFO o.a.j.r.Summariser: summary +    285 in 00:00:30 =    9.5/s Avg:  2107 Min:  1938 Max:  2481 Err:     0 (0.00%) Active: 20 Started: 20 Finished: 0
+2026-04-17 12:50:00,159 INFO o.a.j.r.Summariser: summary =   1439 in 00:02:32 =    9.4/s Avg:  1903 Min:   231 Max:  2481 Err:     0 (0.00%)
+2026-04-17 12:50:27,949 INFO o.a.j.t.JMeterThread: Stopping because end time detected by thread: 01 Steady - /detect 1-6
+2026-04-17 12:50:27,950 INFO o.a.j.t.JMeterThread: Thread finished: 01 Steady - /detect 1-6
+2026-04-17 12:50:28,142 INFO o.a.j.t.JMeterThread: Stopping because end time detected by thread: 01 Steady - /detect 1-10
+2026-04-17 12:50:28,142 INFO o.a.j.t.JMeterThread: Thread finished: 01 Steady - /detect 1-10
+2026-04-17 12:50:28,178 INFO o.a.j.t.JMeterThread: Stopping because end time detected by thread: 01 Steady - /detect 1-18
+2026-04-17 12:50:28,179 INFO o.a.j.t.JMeterThread: Thread finished: 01 Steady - /detect 1-18
+2026-04-17 12:50:28,288 INFO o.a.j.t.JMeterThread: Stopping because end time detected by thread: 01 Steady - /detect 1-3
+2026-04-17 12:50:28,289 INFO o.a.j.t.JMeterThread: Thread finished: 01 Steady - /detect 1-3
+2026-04-17 12:50:28,371 INFO o.a.j.t.JMeterThread: Stopping because end time detected by thread: 01 Steady - /detect 1-7
+2026-04-17 12:50:28,371 INFO o.a.j.t.JMeterThread: Thread finished: 01 Steady - /detect 1-7
+2026-04-17 12:50:28,489 INFO o.a.j.t.JMeterThread: Stopping because end time detected by thread: 01 Steady - /detect 1-17
+2026-04-17 12:50:28,489 INFO o.a.j.t.JMeterThread: Thread finished: 01 Steady - /detect 1-17
+2026-04-17 12:50:28,669 INFO o.a.j.t.JMeterThread: Stopping because end time detected by thread: 01 Steady - /detect 1-13
+2026-04-17 12:50:28,670 INFO o.a.j.t.JMeterThread: Thread finished: 01 Steady - /detect 1-13
+2026-04-17 12:50:28,687 INFO o.a.j.t.JMeterThread: Stopping because end time detected by thread: 01 Steady - /detect 1-16
+2026-04-17 12:50:28,687 INFO o.a.j.t.JMeterThread: Thread finished: 01 Steady - /detect 1-16
+2026-04-17 12:50:28,792 INFO o.a.j.t.JMeterThread: Stopping because end time detected by thread: 01 Steady - /detect 1-14
+2026-04-17 12:50:28,792 INFO o.a.j.t.JMeterThread: Thread finished: 01 Steady - /detect 1-14
+2026-04-17 12:50:28,897 INFO o.a.j.t.JMeterThread: Stopping because end time detected by thread: 01 Steady - /detect 1-15
+2026-04-17 12:50:28,897 INFO o.a.j.t.JMeterThread: Thread finished: 01 Steady - /detect 1-15
+2026-04-17 12:50:29,002 INFO o.a.j.t.JMeterThread: Stopping because end time detected by thread: 01 Steady - /detect 1-4
+2026-04-17 12:50:29,003 INFO o.a.j.t.JMeterThread: Thread finished: 01 Steady - /detect 1-4
+2026-04-17 12:50:29,190 INFO o.a.j.t.JMeterThread: Stopping because end time detected by thread: 01 Steady - /detect 1-11
+2026-04-17 12:50:29,191 INFO o.a.j.t.JMeterThread: Thread finished: 01 Steady - /detect 1-11
+2026-04-17 12:50:29,213 INFO o.a.j.t.JMeterThread: Stopping because end time detected by thread: 01 Steady - /detect 1-2
+2026-04-17 12:50:29,213 INFO o.a.j.t.JMeterThread: Thread finished: 01 Steady - /detect 1-2
+2026-04-17 12:50:29,318 INFO o.a.j.t.JMeterThread: Stopping because end time detected by thread: 01 Steady - /detect 1-8
+2026-04-17 12:50:29,319 INFO o.a.j.t.JMeterThread: Thread finished: 01 Steady - /detect 1-8
+2026-04-17 12:50:29,424 INFO o.a.j.t.JMeterThread: Stopping because end time detected by thread: 01 Steady - /detect 1-5
+2026-04-17 12:50:29,424 INFO o.a.j.t.JMeterThread: Thread finished: 01 Steady - /detect 1-5
+2026-04-17 12:50:29,532 INFO o.a.j.t.JMeterThread: Stopping because end time detected by thread: 01 Steady - /detect 1-20
+2026-04-17 12:50:29,532 INFO o.a.j.t.JMeterThread: Thread finished: 01 Steady - /detect 1-20
+2026-04-17 12:50:29,714 INFO o.a.j.t.JMeterThread: Stopping because end time detected by thread: 01 Steady - /detect 1-19
+2026-04-17 12:50:29,715 INFO o.a.j.t.JMeterThread: Thread finished: 01 Steady - /detect 1-19
+2026-04-17 12:50:29,739 INFO o.a.j.t.JMeterThread: Stopping because end time detected by thread: 01 Steady - /detect 1-1
+2026-04-17 12:50:29,739 INFO o.a.j.t.JMeterThread: Thread finished: 01 Steady - /detect 1-1
+2026-04-17 12:50:29,847 INFO o.a.j.t.JMeterThread: Stopping because end time detected by thread: 01 Steady - /detect 1-12
+2026-04-17 12:50:29,848 INFO o.a.j.t.JMeterThread: Thread finished: 01 Steady - /detect 1-12
+2026-04-17 12:50:29,954 INFO o.a.j.t.JMeterThread: Stopping because end time detected by thread: 01 Steady - /detect 1-9
+2026-04-17 12:50:29,954 INFO o.a.j.t.JMeterThread: Thread finished: 01 Steady - /detect 1-9
+2026-04-17 12:50:29,954 INFO o.a.j.e.StandardJMeterEngine: Starting ThreadGroup: 2 : 02 Spike - /verify
+2026-04-17 12:50:29,955 INFO o.a.j.e.StandardJMeterEngine: Starting 40 threads for group 02 Spike - /verify.
+2026-04-17 12:50:29,955 INFO o.a.j.e.StandardJMeterEngine: Thread will continue on error
+2026-04-17 12:50:29,955 INFO o.a.j.t.ThreadGroup: Starting thread group... number=2 threads=40 ramp-up=10 delayedStart=false
+2026-04-17 12:50:29,958 INFO o.a.j.t.JMeterThread: Thread started: 02 Spike - /verify 2-1
+2026-04-17 12:50:29,972 INFO o.a.j.t.ThreadGroup: Started thread group number 2
+2026-04-17 12:50:29,972 INFO o.a.j.e.StandardJMeterEngine: Waiting for thread group: 02 Spike - /verify to finish before starting next group
+2026-04-17 12:50:30,210 INFO o.a.j.t.JMeterThread: Thread started: 02 Spike - /verify 2-2
+2026-04-17 12:50:30,241 INFO o.a.j.r.Summariser: summary +    284 in 00:00:30 =    9.4/s Avg:  2102 Min:   273 Max:  2294 Err:     0 (0.00%) Active: 2 Started: 22 Finished: 20
+2026-04-17 12:50:30,241 INFO o.a.j.r.Summariser: summary =   1723 in 00:03:02 =    9.4/s Avg:  1936 Min:   231 Max:  2481 Err:     0 (0.00%)
+2026-04-17 12:50:30,460 INFO o.a.j.t.JMeterThread: Thread started: 02 Spike - /verify 2-3
+2026-04-17 12:50:30,710 INFO o.a.j.t.JMeterThread: Thread started: 02 Spike - /verify 2-4
+2026-04-17 12:50:30,959 INFO o.a.j.t.JMeterThread: Thread started: 02 Spike - /verify 2-5
+2026-04-17 12:50:31,211 INFO o.a.j.t.JMeterThread: Thread started: 02 Spike - /verify 2-6
+2026-04-17 12:50:31,461 INFO o.a.j.t.JMeterThread: Thread started: 02 Spike - /verify 2-7
+2026-04-17 12:50:31,709 INFO o.a.j.t.JMeterThread: Thread started: 02 Spike - /verify 2-8
+2026-04-17 12:50:31,960 INFO o.a.j.t.JMeterThread: Thread started: 02 Spike - /verify 2-9
+2026-04-17 12:50:32,208 INFO o.a.j.t.JMeterThread: Thread started: 02 Spike - /verify 2-10
+2026-04-17 12:50:32,336 INFO o.a.j.t.JMeterThread: Thread is done: 02 Spike - /verify 2-1
+2026-04-17 12:50:32,336 INFO o.a.j.t.JMeterThread: Thread finished: 02 Spike - /verify 2-1
+2026-04-17 12:50:32,460 INFO o.a.j.t.JMeterThread: Thread started: 02 Spike - /verify 2-11
+2026-04-17 12:50:32,527 INFO o.a.j.t.JMeterThread: Thread is done: 02 Spike - /verify 2-2
+2026-04-17 12:50:32,527 INFO o.a.j.t.JMeterThread: Thread finished: 02 Spike - /verify 2-2
+2026-04-17 12:50:32,710 INFO o.a.j.t.JMeterThread: Thread started: 02 Spike - /verify 2-12
+2026-04-17 12:50:32,951 INFO o.a.j.t.JMeterThread: Thread is done: 02 Spike - /verify 2-3
+2026-04-17 12:50:32,951 INFO o.a.j.t.JMeterThread: Thread finished: 02 Spike - /verify 2-3
+2026-04-17 12:50:32,959 INFO o.a.j.t.JMeterThread: Thread started: 02 Spike - /verify 2-13
+2026-04-17 12:50:33,188 INFO o.a.j.t.JMeterThread: Thread is done: 02 Spike - /verify 2-4
+2026-04-17 12:50:33,189 INFO o.a.j.t.JMeterThread: Thread finished: 02 Spike - /verify 2-4
+2026-04-17 12:50:33,210 INFO o.a.j.t.JMeterThread: Thread started: 02 Spike - /verify 2-14
+2026-04-17 12:50:33,462 INFO o.a.j.t.JMeterThread: Thread started: 02 Spike - /verify 2-15
+2026-04-17 12:50:33,711 INFO o.a.j.t.JMeterThread: Thread started: 02 Spike - /verify 2-16
+2026-04-17 12:50:33,712 INFO o.a.j.t.JMeterThread: Thread is done: 02 Spike - /verify 2-6
+2026-04-17 12:50:33,712 INFO o.a.j.t.JMeterThread: Thread finished: 02 Spike - /verify 2-6
+2026-04-17 12:50:33,780 INFO o.a.j.t.JMeterThread: Thread is done: 02 Spike - /verify 2-5
+2026-04-17 12:50:33,780 INFO o.a.j.t.JMeterThread: Thread finished: 02 Spike - /verify 2-5
+2026-04-17 12:50:33,960 INFO o.a.j.t.JMeterThread: Thread started: 02 Spike - /verify 2-17
+2026-04-17 12:50:34,210 INFO o.a.j.t.JMeterThread: Thread started: 02 Spike - /verify 2-18
+2026-04-17 12:50:34,238 INFO o.a.j.t.JMeterThread: Thread is done: 02 Spike - /verify 2-7
+2026-04-17 12:50:34,238 INFO o.a.j.t.JMeterThread: Thread finished: 02 Spike - /verify 2-7
+2026-04-17 12:50:34,281 INFO o.a.j.t.JMeterThread: Thread is done: 02 Spike - /verify 2-8
+2026-04-17 12:50:34,281 INFO o.a.j.t.JMeterThread: Thread finished: 02 Spike - /verify 2-8
+2026-04-17 12:50:34,462 INFO o.a.j.t.JMeterThread: Thread started: 02 Spike - /verify 2-19
+2026-04-17 12:50:34,710 INFO o.a.j.t.JMeterThread: Thread started: 02 Spike - /verify 2-20
+2026-04-17 12:50:34,761 INFO o.a.j.t.JMeterThread: Thread is done: 02 Spike - /verify 2-9
+2026-04-17 12:50:34,761 INFO o.a.j.t.JMeterThread: Thread finished: 02 Spike - /verify 2-9
+2026-04-17 12:50:34,957 INFO o.a.j.t.JMeterThread: Thread started: 02 Spike - /verify 2-21
+2026-04-17 12:50:35,059 INFO o.a.j.t.JMeterThread: Thread is done: 02 Spike - /verify 2-11
+2026-04-17 12:50:35,062 INFO o.a.j.t.JMeterThread: Thread finished: 02 Spike - /verify 2-11
+2026-04-17 12:50:35,067 INFO o.a.j.t.JMeterThread: Thread is done: 02 Spike - /verify 2-10
+2026-04-17 12:50:35,072 INFO o.a.j.t.JMeterThread: Thread finished: 02 Spike - /verify 2-10
+2026-04-17 12:50:35,207 INFO o.a.j.t.JMeterThread: Thread started: 02 Spike - /verify 2-22
+2026-04-17 12:50:35,288 INFO o.a.j.t.JMeterThread: Thread is done: 02 Spike - /verify 2-12
+2026-04-17 12:50:35,288 INFO o.a.j.t.JMeterThread: Thread finished: 02 Spike - /verify 2-12
+2026-04-17 12:50:35,460 INFO o.a.j.t.JMeterThread: Thread started: 02 Spike - /verify 2-23
+2026-04-17 12:50:35,683 INFO o.a.j.t.JMeterThread: Thread is done: 02 Spike - /verify 2-13
+2026-04-17 12:50:35,683 INFO o.a.j.t.JMeterThread: Thread finished: 02 Spike - /verify 2-13
+2026-04-17 12:50:35,709 INFO o.a.j.t.JMeterThread: Thread started: 02 Spike - /verify 2-24
+2026-04-17 12:50:35,961 INFO o.a.j.t.JMeterThread: Thread started: 02 Spike - /verify 2-25
+2026-04-17 12:50:36,136 INFO o.a.j.t.JMeterThread: Thread is done: 02 Spike - /verify 2-14
+2026-04-17 12:50:36,137 INFO o.a.j.t.JMeterThread: Thread finished: 02 Spike - /verify 2-14
+2026-04-17 12:50:36,211 INFO o.a.j.t.JMeterThread: Thread started: 02 Spike - /verify 2-26
+2026-04-17 12:50:36,336 INFO o.a.j.t.JMeterThread: Thread is done: 02 Spike - /verify 2-15
+2026-04-17 12:50:36,336 INFO o.a.j.t.JMeterThread: Thread finished: 02 Spike - /verify 2-15
+2026-04-17 12:50:36,462 INFO o.a.j.t.JMeterThread: Thread started: 02 Spike - /verify 2-27
+2026-04-17 12:50:36,595 INFO o.a.j.t.JMeterThread: Thread is done: 02 Spike - /verify 2-16
+2026-04-17 12:50:36,595 INFO o.a.j.t.JMeterThread: Thread finished: 02 Spike - /verify 2-16
+2026-04-17 12:50:36,709 INFO o.a.j.t.JMeterThread: Thread started: 02 Spike - /verify 2-28
+2026-04-17 12:50:36,872 INFO o.a.j.t.JMeterThread: Thread is done: 02 Spike - /verify 2-17
+2026-04-17 12:50:36,872 INFO o.a.j.t.JMeterThread: Thread finished: 02 Spike - /verify 2-17
+2026-04-17 12:50:36,959 INFO o.a.j.t.JMeterThread: Thread started: 02 Spike - /verify 2-29
+2026-04-17 12:50:37,164 INFO o.a.j.t.JMeterThread: Thread is done: 02 Spike - /verify 2-18
+2026-04-17 12:50:37,164 INFO o.a.j.t.JMeterThread: Thread finished: 02 Spike - /verify 2-18
+2026-04-17 12:50:37,209 INFO o.a.j.t.JMeterThread: Thread started: 02 Spike - /verify 2-30
+2026-04-17 12:50:37,384 INFO o.a.j.t.JMeterThread: Thread is done: 02 Spike - /verify 2-19
+2026-04-17 12:50:37,384 INFO o.a.j.t.JMeterThread: Thread finished: 02 Spike - /verify 2-19
+2026-04-17 12:50:37,462 INFO o.a.j.t.JMeterThread: Thread started: 02 Spike - /verify 2-31
+2026-04-17 12:50:37,666 INFO o.a.j.t.JMeterThread: Thread is done: 02 Spike - /verify 2-20
+2026-04-17 12:50:37,666 INFO o.a.j.t.JMeterThread: Thread finished: 02 Spike - /verify 2-20
+2026-04-17 12:50:37,709 INFO o.a.j.t.JMeterThread: Thread started: 02 Spike - /verify 2-32
+2026-04-17 12:50:37,810 INFO o.a.j.t.JMeterThread: Thread is done: 02 Spike - /verify 2-21
+2026-04-17 12:50:37,810 INFO o.a.j.t.JMeterThread: Thread finished: 02 Spike - /verify 2-21
+2026-04-17 12:50:37,958 INFO o.a.j.t.JMeterThread: Thread started: 02 Spike - /verify 2-33
+2026-04-17 12:50:38,209 INFO o.a.j.t.JMeterThread: Thread started: 02 Spike - /verify 2-34
+2026-04-17 12:50:38,430 INFO o.a.j.t.JMeterThread: Thread is done: 02 Spike - /verify 2-23
+2026-04-17 12:50:38,430 INFO o.a.j.t.JMeterThread: Thread finished: 02 Spike - /verify 2-23
+2026-04-17 12:50:38,432 INFO o.a.j.t.JMeterThread: Thread is done: 02 Spike - /verify 2-22
+2026-04-17 12:50:38,432 INFO o.a.j.t.JMeterThread: Thread finished: 02 Spike - /verify 2-22
+2026-04-17 12:50:38,459 INFO o.a.j.t.JMeterThread: Thread started: 02 Spike - /verify 2-35
+2026-04-17 12:50:38,629 INFO o.a.j.t.JMeterThread: Thread is done: 02 Spike - /verify 2-24
+2026-04-17 12:50:38,630 INFO o.a.j.t.JMeterThread: Thread finished: 02 Spike - /verify 2-24
+2026-04-17 12:50:38,710 INFO o.a.j.t.JMeterThread: Thread started: 02 Spike - /verify 2-36
+2026-04-17 12:50:38,955 INFO o.a.j.t.JMeterThread: Thread is done: 02 Spike - /verify 2-25
+2026-04-17 12:50:38,956 INFO o.a.j.t.JMeterThread: Thread finished: 02 Spike - /verify 2-25
+2026-04-17 12:50:38,960 INFO o.a.j.t.JMeterThread: Thread started: 02 Spike - /verify 2-37
+2026-04-17 12:50:39,050 INFO o.a.j.t.JMeterThread: Thread is done: 02 Spike - /verify 2-26
+2026-04-17 12:50:39,051 INFO o.a.j.t.JMeterThread: Thread finished: 02 Spike - /verify 2-26
+2026-04-17 12:50:39,210 INFO o.a.j.t.JMeterThread: Thread started: 02 Spike - /verify 2-38
+2026-04-17 12:50:39,333 INFO o.a.j.t.JMeterThread: Thread is done: 02 Spike - /verify 2-27
+2026-04-17 12:50:39,334 INFO o.a.j.t.JMeterThread: Thread finished: 02 Spike - /verify 2-27
+2026-04-17 12:50:39,461 INFO o.a.j.t.JMeterThread: Thread started: 02 Spike - /verify 2-39
+2026-04-17 12:50:39,709 INFO o.a.j.t.JMeterThread: Thread started: 02 Spike - /verify 2-40
+2026-04-17 12:50:39,820 INFO o.a.j.t.JMeterThread: Thread is done: 02 Spike - /verify 2-28
+2026-04-17 12:50:39,820 INFO o.a.j.t.JMeterThread: Thread finished: 02 Spike - /verify 2-28
+2026-04-17 12:50:39,904 INFO o.a.j.t.JMeterThread: Thread is done: 02 Spike - /verify 2-29
+2026-04-17 12:50:39,904 INFO o.a.j.t.JMeterThread: Thread finished: 02 Spike - /verify 2-29
+2026-04-17 12:50:40,028 INFO o.a.j.t.JMeterThread: Thread is done: 02 Spike - /verify 2-30
+2026-04-17 12:50:40,028 INFO o.a.j.t.JMeterThread: Thread finished: 02 Spike - /verify 2-30
+2026-04-17 12:50:40,529 INFO o.a.j.t.JMeterThread: Thread is done: 02 Spike - /verify 2-32
+2026-04-17 12:50:40,529 INFO o.a.j.t.JMeterThread: Thread is done: 02 Spike - /verify 2-31
+2026-04-17 12:50:40,529 INFO o.a.j.t.JMeterThread: Thread finished: 02 Spike - /verify 2-32
+2026-04-17 12:50:40,529 INFO o.a.j.t.JMeterThread: Thread finished: 02 Spike - /verify 2-31
+2026-04-17 12:50:40,859 INFO o.a.j.t.JMeterThread: Thread is done: 02 Spike - /verify 2-33
+2026-04-17 12:50:40,859 INFO o.a.j.t.JMeterThread: Thread finished: 02 Spike - /verify 2-33
+2026-04-17 12:50:41,080 INFO o.a.j.t.JMeterThread: Thread is done: 02 Spike - /verify 2-34
+2026-04-17 12:50:41,081 INFO o.a.j.t.JMeterThread: Thread finished: 02 Spike - /verify 2-34
+2026-04-17 12:50:41,373 INFO o.a.j.t.JMeterThread: Thread is done: 02 Spike - /verify 2-35
+2026-04-17 12:50:41,374 INFO o.a.j.t.JMeterThread: Thread finished: 02 Spike - /verify 2-35
+2026-04-17 12:50:41,456 INFO o.a.j.t.JMeterThread: Thread is done: 02 Spike - /verify 2-36
+2026-04-17 12:50:41,457 INFO o.a.j.t.JMeterThread: Thread finished: 02 Spike - /verify 2-36
+2026-04-17 12:50:41,681 INFO o.a.j.t.JMeterThread: Thread is done: 02 Spike - /verify 2-37
+2026-04-17 12:50:41,682 INFO o.a.j.t.JMeterThread: Thread finished: 02 Spike - /verify 2-37
+2026-04-17 12:50:41,928 INFO o.a.j.t.JMeterThread: Thread is done: 02 Spike - /verify 2-38
+2026-04-17 12:50:41,929 INFO o.a.j.t.JMeterThread: Thread finished: 02 Spike - /verify 2-38
+2026-04-17 12:50:41,994 INFO o.a.j.t.JMeterThread: Thread is done: 02 Spike - /verify 2-39
+2026-04-17 12:50:41,994 INFO o.a.j.t.JMeterThread: Thread finished: 02 Spike - /verify 2-39
+2026-04-17 12:50:42,298 INFO o.a.j.t.JMeterThread: Thread is done: 02 Spike - /verify 2-40
+2026-04-17 12:50:42,298 INFO o.a.j.t.JMeterThread: Thread finished: 02 Spike - /verify 2-40
+2026-04-17 12:50:42,298 INFO o.a.j.e.StandardJMeterEngine: Starting ThreadGroup: 3 : 03 Stress - /health
+2026-04-17 12:50:42,298 INFO o.a.j.e.StandardJMeterEngine: Starting 200 threads for group 03 Stress - /health.
+2026-04-17 12:50:42,298 INFO o.a.j.e.StandardJMeterEngine: Thread will continue on error
+2026-04-17 12:50:42,298 INFO o.a.j.t.ThreadGroup: Starting thread group... number=3 threads=200 ramp-up=60 delayedStart=false
+2026-04-17 12:50:42,299 INFO o.a.j.t.JMeterThread: Thread started: 03 Stress - /health 3-1
+2026-04-17 12:50:42,332 INFO o.a.j.t.ThreadGroup: Started thread group number 3
+2026-04-17 12:50:42,332 INFO o.a.j.e.StandardJMeterEngine: All thread groups have been started
+2026-04-17 12:50:42,601 INFO o.a.j.t.JMeterThread: Thread started: 03 Stress - /health 3-2
+2026-04-17 12:50:42,901 INFO o.a.j.t.JMeterThread: Thread started: 03 Stress - /health 3-3
+2026-04-17 12:50:43,200 INFO o.a.j.t.JMeterThread: Thread started: 03 Stress - /health 3-4
+2026-04-17 12:50:43,504 INFO o.a.j.t.JMeterThread: Thread started: 03 Stress - /health 3-5
+2026-04-17 12:50:43,803 INFO o.a.j.t.JMeterThread: Thread started: 03 Stress - /health 3-6
+2026-04-17 12:50:44,103 INFO o.a.j.t.JMeterThread: Thread started: 03 Stress - /health 3-7
+2026-04-17 12:50:44,404 INFO o.a.j.t.JMeterThread: Thread started: 03 Stress - /health 3-8
+2026-04-17 12:50:44,700 INFO o.a.j.t.JMeterThread: Thread started: 03 Stress - /health 3-9
+2026-04-17 12:50:45,003 INFO o.a.j.t.JMeterThread: Thread started: 03 Stress - /health 3-10
+2026-04-17 12:50:45,300 INFO o.a.j.t.JMeterThread: Thread started: 03 Stress - /health 3-11
+2026-04-17 12:50:45,602 INFO o.a.j.t.JMeterThread: Thread started: 03 Stress - /health 3-12
+2026-04-17 12:50:45,903 INFO o.a.j.t.JMeterThread: Thread started: 03 Stress - /health 3-13
+2026-04-17 12:50:46,203 INFO o.a.j.t.JMeterThread: Thread started: 03 Stress - /health 3-14
+2026-04-17 12:50:46,503 INFO o.a.j.t.JMeterThread: Thread started: 03 Stress - /health 3-15
+2026-04-17 12:50:46,804 INFO o.a.j.t.JMeterThread: Thread started: 03 Stress - /health 3-16
+2026-04-17 12:50:47,104 INFO o.a.j.t.JMeterThread: Thread started: 03 Stress - /health 3-17
+2026-04-17 12:50:47,403 INFO o.a.j.t.JMeterThread: Thread started: 03 Stress - /health 3-18
+2026-04-17 12:50:47,703 INFO o.a.j.t.JMeterThread: Thread started: 03 Stress - /health 3-19
+2026-04-17 12:50:48,003 INFO o.a.j.t.JMeterThread: Thread started: 03 Stress - /health 3-20
+2026-04-17 12:50:48,301 INFO o.a.j.t.JMeterThread: Thread started: 03 Stress - /health 3-21
+2026-04-17 12:50:48,604 INFO o.a.j.t.JMeterThread: Thread started: 03 Stress - /health 3-22
+2026-04-17 12:50:48,900 INFO o.a.j.t.JMeterThread: Thread started: 03 Stress - /health 3-23
+2026-04-17 12:50:49,203 INFO o.a.j.t.JMeterThread: Thread started: 03 Stress - /health 3-24
+2026-04-17 12:50:49,503 INFO o.a.j.t.JMeterThread: Thread started: 03 Stress - /health 3-25
+2026-04-17 12:50:49,803 INFO o.a.j.t.JMeterThread: Thread started: 03 Stress - /health 3-26
+2026-04-17 12:50:50,103 INFO o.a.j.t.JMeterThread: Thread started: 03 Stress - /health 3-27
+2026-04-17 12:50:50,401 INFO o.a.j.t.JMeterThread: Thread started: 03 Stress - /health 3-28
+2026-04-17 12:50:50,702 INFO o.a.j.t.JMeterThread: Thread started: 03 Stress - /health 3-29
+2026-04-17 12:50:51,003 INFO o.a.j.t.JMeterThread: Thread started: 03 Stress - /health 3-30
+2026-04-17 12:50:51,306 INFO o.a.j.t.JMeterThread: Thread started: 03 Stress - /health 3-31
+2026-04-17 12:50:51,603 INFO o.a.j.t.JMeterThread: Thread started: 03 Stress - /health 3-32
+2026-04-17 12:50:51,899 INFO o.a.j.t.JMeterThread: Thread started: 03 Stress - /health 3-33
+2026-04-17 12:50:52,201 INFO o.a.j.t.JMeterThread: Thread started: 03 Stress - /health 3-34
+2026-04-17 12:50:52,503 INFO o.a.j.t.JMeterThread: Thread started: 03 Stress - /health 3-35
+2026-04-17 12:50:52,803 INFO o.a.j.t.JMeterThread: Thread started: 03 Stress - /health 3-36
+2026-04-17 12:50:53,100 INFO o.a.j.t.JMeterThread: Thread started: 03 Stress - /health 3-37
+2026-04-17 12:50:53,404 INFO o.a.j.t.JMeterThread: Thread started: 03 Stress - /health 3-38
+2026-04-17 12:50:53,703 INFO o.a.j.t.JMeterThread: Thread started: 03 Stress - /health 3-39
+2026-04-17 12:50:54,003 INFO o.a.j.t.JMeterThread: Thread started: 03 Stress - /health 3-40
+2026-04-17 12:50:54,304 INFO o.a.j.t.JMeterThread: Thread started: 03 Stress - /health 3-41
+2026-04-17 12:50:54,603 INFO o.a.j.t.JMeterThread: Thread started: 03 Stress - /health 3-42
+2026-04-17 12:50:54,901 INFO o.a.j.t.JMeterThread: Thread started: 03 Stress - /health 3-43
+2026-04-17 12:50:55,203 INFO o.a.j.t.JMeterThread: Thread started: 03 Stress - /health 3-44
+2026-04-17 12:50:55,501 INFO o.a.j.t.JMeterThread: Thread started: 03 Stress - /health 3-45
+2026-04-17 12:50:55,803 INFO o.a.j.t.JMeterThread: Thread started: 03 Stress - /health 3-46
+2026-04-17 12:50:56,102 INFO o.a.j.t.JMeterThread: Thread started: 03 Stress - /health 3-47
+2026-04-17 12:50:56,401 INFO o.a.j.t.JMeterThread: Thread started: 03 Stress - /health 3-48
+2026-04-17 12:50:56,701 INFO o.a.j.t.JMeterThread: Thread started: 03 Stress - /health 3-49
+2026-04-17 12:50:57,005 INFO o.a.j.t.JMeterThread: Thread started: 03 Stress - /health 3-50
+2026-04-17 12:50:57,304 INFO o.a.j.t.JMeterThread: Thread started: 03 Stress - /health 3-51
+2026-04-17 12:50:57,603 INFO o.a.j.t.JMeterThread: Thread started: 03 Stress - /health 3-52
+2026-04-17 12:50:57,901 INFO o.a.j.t.JMeterThread: Thread started: 03 Stress - /health 3-53
+2026-04-17 12:50:58,202 INFO o.a.j.t.JMeterThread: Thread started: 03 Stress - /health 3-54
+2026-04-17 12:50:58,500 INFO o.a.j.t.JMeterThread: Thread started: 03 Stress - /health 3-55
+2026-04-17 12:50:58,803 INFO o.a.j.t.JMeterThread: Thread started: 03 Stress - /health 3-56
+2026-04-17 12:50:59,103 INFO o.a.j.t.JMeterThread: Thread started: 03 Stress - /health 3-57
+2026-04-17 12:50:59,405 INFO o.a.j.t.JMeterThread: Thread started: 03 Stress - /health 3-58
+2026-04-17 12:50:59,701 INFO o.a.j.t.JMeterThread: Thread started: 03 Stress - /health 3-59
+2026-04-17 12:51:00,000 INFO o.a.j.t.JMeterThread: Thread started: 03 Stress - /health 3-60
+2026-04-17 12:51:00,126 INFO o.a.j.r.Summariser: summary +   2552 in 00:00:30 =   85.4/s Avg:   248 Min:    81 Max:  1371 Err:     0 (0.00%) Active: 60 Started: 120 Finished: 60
+2026-04-17 12:51:00,127 INFO o.a.j.r.Summariser: summary =   4275 in 00:03:32 =   20.1/s Avg:   928 Min:    81 Max:  2481 Err:     0 (0.00%)
+2026-04-17 12:51:00,303 INFO o.a.j.t.JMeterThread: Thread started: 03 Stress - /health 3-61
+2026-04-17 12:51:00,603 INFO o.a.j.t.JMeterThread: Thread started: 03 Stress - /health 3-62
+2026-04-17 12:51:00,904 INFO o.a.j.t.JMeterThread: Thread started: 03 Stress - /health 3-63
+2026-04-17 12:51:01,200 INFO o.a.j.t.JMeterThread: Thread started: 03 Stress - /health 3-64
+2026-04-17 12:51:01,502 INFO o.a.j.t.JMeterThread: Thread started: 03 Stress - /health 3-65
+2026-04-17 12:51:01,803 INFO o.a.j.t.JMeterThread: Thread started: 03 Stress - /health 3-66
+2026-04-17 12:51:02,102 INFO o.a.j.t.JMeterThread: Thread started: 03 Stress - /health 3-67
+2026-04-17 12:51:02,401 INFO o.a.j.t.JMeterThread: Thread started: 03 Stress - /health 3-68
+2026-04-17 12:51:02,700 INFO o.a.j.t.JMeterThread: Thread started: 03 Stress - /health 3-69
+2026-04-17 12:51:03,001 INFO o.a.j.t.JMeterThread: Thread started: 03 Stress - /health 3-70
+2026-04-17 12:51:03,301 INFO o.a.j.t.JMeterThread: Thread started: 03 Stress - /health 3-71
+2026-04-17 12:51:03,599 INFO o.a.j.t.JMeterThread: Thread started: 03 Stress - /health 3-72
+2026-04-17 12:51:03,898 INFO o.a.j.t.JMeterThread: Thread started: 03 Stress - /health 3-73
+2026-04-17 12:51:04,200 INFO o.a.j.t.JMeterThread: Thread started: 03 Stress - /health 3-74
+2026-04-17 12:51:04,504 INFO o.a.j.t.JMeterThread: Thread started: 03 Stress - /health 3-75
+2026-04-17 12:51:04,804 INFO o.a.j.t.JMeterThread: Thread started: 03 Stress - /health 3-76
+2026-04-17 12:51:05,101 INFO o.a.j.t.JMeterThread: Thread started: 03 Stress - /health 3-77
+2026-04-17 12:51:05,401 INFO o.a.j.t.JMeterThread: Thread started: 03 Stress - /health 3-78
+2026-04-17 12:51:05,703 INFO o.a.j.t.JMeterThread: Thread started: 03 Stress - /health 3-79
+2026-04-17 12:51:06,002 INFO o.a.j.t.JMeterThread: Thread started: 03 Stress - /health 3-80
+2026-04-17 12:51:06,300 INFO o.a.j.t.JMeterThread: Thread started: 03 Stress - /health 3-81
+2026-04-17 12:51:06,602 INFO o.a.j.t.JMeterThread: Thread started: 03 Stress - /health 3-82
+2026-04-17 12:51:06,902 INFO o.a.j.t.JMeterThread: Thread started: 03 Stress - /health 3-83
+2026-04-17 12:51:07,204 INFO o.a.j.t.JMeterThread: Thread started: 03 Stress - /health 3-84
+2026-04-17 12:51:07,504 INFO o.a.j.t.JMeterThread: Thread started: 03 Stress - /health 3-85
+2026-04-17 12:51:07,803 INFO o.a.j.t.JMeterThread: Thread started: 03 Stress - /health 3-86
+2026-04-17 12:51:08,104 INFO o.a.j.t.JMeterThread: Thread started: 03 Stress - /health 3-87
+2026-04-17 12:51:08,402 INFO o.a.j.t.JMeterThread: Thread started: 03 Stress - /health 3-88
+2026-04-17 12:51:08,700 INFO o.a.j.t.JMeterThread: Thread started: 03 Stress - /health 3-89
+2026-04-17 12:51:09,003 INFO o.a.j.t.JMeterThread: Thread started: 03 Stress - /health 3-90
+2026-04-17 12:51:09,303 INFO o.a.j.t.JMeterThread: Thread started: 03 Stress - /health 3-91
+2026-04-17 12:51:09,604 INFO o.a.j.t.JMeterThread: Thread started: 03 Stress - /health 3-92
+2026-04-17 12:51:09,903 INFO o.a.j.t.JMeterThread: Thread started: 03 Stress - /health 3-93
+2026-04-17 12:51:10,203 INFO o.a.j.t.JMeterThread: Thread started: 03 Stress - /health 3-94
+2026-04-17 12:51:10,503 INFO o.a.j.t.JMeterThread: Thread started: 03 Stress - /health 3-95
+2026-04-17 12:51:10,800 INFO o.a.j.t.JMeterThread: Thread started: 03 Stress - /health 3-96
+2026-04-17 12:51:11,100 INFO o.a.j.t.JMeterThread: Thread started: 03 Stress - /health 3-97
+2026-04-17 12:51:11,405 INFO o.a.j.t.JMeterThread: Thread started: 03 Stress - /health 3-98
+2026-04-17 12:51:11,704 INFO o.a.j.t.JMeterThread: Thread started: 03 Stress - /health 3-99
+2026-04-17 12:51:12,003 INFO o.a.j.t.JMeterThread: Thread started: 03 Stress - /health 3-100
+2026-04-17 12:51:12,302 INFO o.a.j.t.JMeterThread: Thread started: 03 Stress - /health 3-101
+2026-04-17 12:51:12,601 INFO o.a.j.t.JMeterThread: Thread started: 03 Stress - /health 3-102
+2026-04-17 12:51:12,899 INFO o.a.j.t.JMeterThread: Thread started: 03 Stress - /health 3-103
+2026-04-17 12:51:13,201 INFO o.a.j.t.JMeterThread: Thread started: 03 Stress - /health 3-104
+2026-04-17 12:51:13,503 INFO o.a.j.t.JMeterThread: Thread started: 03 Stress - /health 3-105
+2026-04-17 12:51:13,804 INFO o.a.j.t.JMeterThread: Thread started: 03 Stress - /health 3-106
+2026-04-17 12:51:14,100 INFO o.a.j.t.JMeterThread: Thread started: 03 Stress - /health 3-107
+2026-04-17 12:51:14,402 INFO o.a.j.t.JMeterThread: Thread started: 03 Stress - /health 3-108
+2026-04-17 12:51:14,703 INFO o.a.j.t.JMeterThread: Thread started: 03 Stress - /health 3-109
+2026-04-17 12:51:15,002 INFO o.a.j.t.JMeterThread: Thread started: 03 Stress - /health 3-110
+2026-04-17 12:51:15,301 INFO o.a.j.t.JMeterThread: Thread started: 03 Stress - /health 3-111
+2026-04-17 12:51:15,604 INFO o.a.j.t.JMeterThread: Thread started: 03 Stress - /health 3-112
+2026-04-17 12:51:15,901 INFO o.a.j.t.JMeterThread: Thread started: 03 Stress - /health 3-113
+2026-04-17 12:51:16,204 INFO o.a.j.t.JMeterThread: Thread started: 03 Stress - /health 3-114
+2026-04-17 12:51:16,502 INFO o.a.j.t.JMeterThread: Thread started: 03 Stress - /health 3-115
+2026-04-17 12:51:16,803 INFO o.a.j.t.JMeterThread: Thread started: 03 Stress - /health 3-116
+2026-04-17 12:51:17,103 INFO o.a.j.t.JMeterThread: Thread started: 03 Stress - /health 3-117
+2026-04-17 12:51:17,403 INFO o.a.j.t.JMeterThread: Thread started: 03 Stress - /health 3-118
+2026-04-17 12:51:17,702 INFO o.a.j.t.JMeterThread: Thread started: 03 Stress - /health 3-119
+2026-04-17 12:51:17,999 INFO o.a.j.t.JMeterThread: Thread started: 03 Stress - /health 3-120
+2026-04-17 12:51:18,303 INFO o.a.j.t.JMeterThread: Thread started: 03 Stress - /health 3-121
+2026-04-17 12:51:18,604 INFO o.a.j.t.JMeterThread: Thread started: 03 Stress - /health 3-122
+2026-04-17 12:51:18,903 INFO o.a.j.t.JMeterThread: Thread started: 03 Stress - /health 3-123
+2026-04-17 12:51:19,203 INFO o.a.j.t.JMeterThread: Thread started: 03 Stress - /health 3-124
+2026-04-17 12:51:19,503 INFO o.a.j.t.JMeterThread: Thread started: 03 Stress - /health 3-125
+2026-04-17 12:51:19,803 INFO o.a.j.t.JMeterThread: Thread started: 03 Stress - /health 3-126
+2026-04-17 12:51:20,100 INFO o.a.j.t.JMeterThread: Thread started: 03 Stress - /health 3-127
+2026-04-17 12:51:20,403 INFO o.a.j.t.JMeterThread: Thread started: 03 Stress - /health 3-128
+2026-04-17 12:51:20,703 INFO o.a.j.t.JMeterThread: Thread started: 03 Stress - /health 3-129
+2026-04-17 12:51:21,005 INFO o.a.j.t.JMeterThread: Thread started: 03 Stress - /health 3-130
+2026-04-17 12:51:21,303 INFO o.a.j.t.JMeterThread: Thread started: 03 Stress - /health 3-131
+2026-04-17 12:51:21,603 INFO o.a.j.t.JMeterThread: Thread started: 03 Stress - /health 3-132
+2026-04-17 12:51:21,903 INFO o.a.j.t.JMeterThread: Thread started: 03 Stress - /health 3-133
+2026-04-17 12:51:22,200 INFO o.a.j.t.JMeterThread: Thread started: 03 Stress - /health 3-134
+2026-04-17 12:51:22,503 INFO o.a.j.t.JMeterThread: Thread started: 03 Stress - /health 3-135
+2026-04-17 12:51:22,800 INFO o.a.j.t.JMeterThread: Thread started: 03 Stress - /health 3-136
+2026-04-17 12:51:23,101 INFO o.a.j.t.JMeterThread: Thread started: 03 Stress - /health 3-137
+2026-04-17 12:51:23,403 INFO o.a.j.t.JMeterThread: Thread started: 03 Stress - /health 3-138
+2026-04-17 12:51:23,704 INFO o.a.j.t.JMeterThread: Thread started: 03 Stress - /health 3-139
+2026-04-17 12:51:24,004 INFO o.a.j.t.JMeterThread: Thread started: 03 Stress - /health 3-140
+2026-04-17 12:51:24,303 INFO o.a.j.t.JMeterThread: Thread started: 03 Stress - /health 3-141
+2026-04-17 12:51:24,603 INFO o.a.j.t.JMeterThread: Thread started: 03 Stress - /health 3-142
+2026-04-17 12:51:24,903 INFO o.a.j.t.JMeterThread: Thread started: 03 Stress - /health 3-143
+2026-04-17 12:51:25,203 INFO o.a.j.t.JMeterThread: Thread started: 03 Stress - /health 3-144
+2026-04-17 12:51:25,501 INFO o.a.j.t.JMeterThread: Thread started: 03 Stress - /health 3-145
+2026-04-17 12:51:25,800 INFO o.a.j.t.JMeterThread: Thread started: 03 Stress - /health 3-146
+2026-04-17 12:51:26,100 INFO o.a.j.t.JMeterThread: Thread started: 03 Stress - /health 3-147
+2026-04-17 12:51:26,404 INFO o.a.j.t.JMeterThread: Thread started: 03 Stress - /health 3-148
+2026-04-17 12:51:26,703 INFO o.a.j.t.JMeterThread: Thread started: 03 Stress - /health 3-149
+2026-04-17 12:51:27,002 INFO o.a.j.t.JMeterThread: Thread started: 03 Stress - /health 3-150
+2026-04-17 12:51:27,303 INFO o.a.j.t.JMeterThread: Thread started: 03 Stress - /health 3-151
+2026-04-17 12:51:27,603 INFO o.a.j.t.JMeterThread: Thread started: 03 Stress - /health 3-152
+2026-04-17 12:51:27,903 INFO o.a.j.t.JMeterThread: Thread started: 03 Stress - /health 3-153
+2026-04-17 12:51:28,203 INFO o.a.j.t.JMeterThread: Thread started: 03 Stress - /health 3-154
+2026-04-17 12:51:28,504 INFO o.a.j.t.JMeterThread: Thread started: 03 Stress - /health 3-155
+2026-04-17 12:51:28,801 INFO o.a.j.t.JMeterThread: Thread started: 03 Stress - /health 3-156
+2026-04-17 12:51:29,103 INFO o.a.j.t.JMeterThread: Thread started: 03 Stress - /health 3-157
+2026-04-17 12:51:29,403 INFO o.a.j.t.JMeterThread: Thread started: 03 Stress - /health 3-158
+2026-04-17 12:51:29,702 INFO o.a.j.t.JMeterThread: Thread started: 03 Stress - /health 3-159
+2026-04-17 12:51:30,002 INFO o.a.j.t.JMeterThread: Thread started: 03 Stress - /health 3-160
+2026-04-17 12:51:30,008 INFO o.a.j.r.Summariser: summary +   3963 in 00:00:30 =  132.6/s Avg:   804 Min:   121 Max:  5362 Err:     0 (0.00%) Active: 160 Started: 220 Finished: 60
+2026-04-17 12:51:30,008 INFO o.a.j.r.Summariser: summary =   8238 in 00:04:02 =   34.0/s Avg:   868 Min:    81 Max:  5362 Err:     0 (0.00%)
+2026-04-17 12:51:30,302 INFO o.a.j.t.JMeterThread: Thread started: 03 Stress - /health 3-161
+2026-04-17 12:51:30,600 INFO o.a.j.t.JMeterThread: Thread started: 03 Stress - /health 3-162
+2026-04-17 12:51:30,903 INFO o.a.j.t.JMeterThread: Thread started: 03 Stress - /health 3-163
+2026-04-17 12:51:31,203 INFO o.a.j.t.JMeterThread: Thread started: 03 Stress - /health 3-164
+2026-04-17 12:51:31,500 INFO o.a.j.t.JMeterThread: Thread started: 03 Stress - /health 3-165
+2026-04-17 12:51:31,800 INFO o.a.j.t.JMeterThread: Thread started: 03 Stress - /health 3-166
+2026-04-17 12:51:32,100 INFO o.a.j.t.JMeterThread: Thread started: 03 Stress - /health 3-167
+2026-04-17 12:51:32,399 INFO o.a.j.t.JMeterThread: Thread started: 03 Stress - /health 3-168
+2026-04-17 12:51:32,702 INFO o.a.j.t.JMeterThread: Thread started: 03 Stress - /health 3-169
+2026-04-17 12:51:33,001 INFO o.a.j.t.JMeterThread: Thread started: 03 Stress - /health 3-170
+2026-04-17 12:51:33,300 INFO o.a.j.t.JMeterThread: Thread started: 03 Stress - /health 3-171
+2026-04-17 12:51:33,604 INFO o.a.j.t.JMeterThread: Thread started: 03 Stress - /health 3-172
+2026-04-17 12:51:33,903 INFO o.a.j.t.JMeterThread: Thread started: 03 Stress - /health 3-173
+2026-04-17 12:51:34,200 INFO o.a.j.t.JMeterThread: Thread started: 03 Stress - /health 3-174
+2026-04-17 12:51:34,504 INFO o.a.j.t.JMeterThread: Thread started: 03 Stress - /health 3-175
+2026-04-17 12:51:34,803 INFO o.a.j.t.JMeterThread: Thread started: 03 Stress - /health 3-176
+2026-04-17 12:51:35,102 INFO o.a.j.t.JMeterThread: Thread started: 03 Stress - /health 3-177
+2026-04-17 12:51:35,403 INFO o.a.j.t.JMeterThread: Thread started: 03 Stress - /health 3-178
+2026-04-17 12:51:35,703 INFO o.a.j.t.JMeterThread: Thread started: 03 Stress - /health 3-179
+2026-04-17 12:51:36,003 INFO o.a.j.t.JMeterThread: Thread started: 03 Stress - /health 3-180
+2026-04-17 12:51:36,302 INFO o.a.j.t.JMeterThread: Thread started: 03 Stress - /health 3-181
+2026-04-17 12:51:36,603 INFO o.a.j.t.JMeterThread: Thread started: 03 Stress - /health 3-182
+2026-04-17 12:51:36,898 INFO o.a.j.t.JMeterThread: Thread started: 03 Stress - /health 3-183
+2026-04-17 12:51:37,203 INFO o.a.j.t.JMeterThread: Thread started: 03 Stress - /health 3-184
+2026-04-17 12:51:37,502 INFO o.a.j.t.JMeterThread: Thread started: 03 Stress - /health 3-185
+2026-04-17 12:51:37,802 INFO o.a.j.t.JMeterThread: Thread started: 03 Stress - /health 3-186
+2026-04-17 12:51:38,102 INFO o.a.j.t.JMeterThread: Thread started: 03 Stress - /health 3-187
+2026-04-17 12:51:38,400 INFO o.a.j.t.JMeterThread: Thread started: 03 Stress - /health 3-188
+2026-04-17 12:51:38,703 INFO o.a.j.t.JMeterThread: Thread started: 03 Stress - /health 3-189
+2026-04-17 12:51:39,003 INFO o.a.j.t.JMeterThread: Thread started: 03 Stress - /health 3-190
+2026-04-17 12:51:39,304 INFO o.a.j.t.JMeterThread: Thread started: 03 Stress - /health 3-191
+2026-04-17 12:51:39,603 INFO o.a.j.t.JMeterThread: Thread started: 03 Stress - /health 3-192
+2026-04-17 12:51:39,901 INFO o.a.j.t.JMeterThread: Thread started: 03 Stress - /health 3-193
+2026-04-17 12:51:40,203 INFO o.a.j.t.JMeterThread: Thread started: 03 Stress - /health 3-194
+2026-04-17 12:51:40,499 INFO o.a.j.t.JMeterThread: Thread started: 03 Stress - /health 3-195
+2026-04-17 12:51:40,803 INFO o.a.j.t.JMeterThread: Thread started: 03 Stress - /health 3-196
+2026-04-17 12:51:41,100 INFO o.a.j.t.JMeterThread: Thread started: 03 Stress - /health 3-197
+2026-04-17 12:51:41,403 INFO o.a.j.t.JMeterThread: Thread started: 03 Stress - /health 3-198
+2026-04-17 12:51:41,703 INFO o.a.j.t.JMeterThread: Thread started: 03 Stress - /health 3-199
+2026-04-17 12:51:42,001 INFO o.a.j.t.JMeterThread: Thread started: 03 Stress - /health 3-200
+2026-04-17 12:52:00,005 INFO o.a.j.r.Summariser: summary +   6246 in 00:00:30 =  208.2/s Avg:   908 Min:   282 Max:  9636 Err:     0 (0.00%) Active: 200 Started: 260 Finished: 60
+2026-04-17 12:52:00,007 INFO o.a.j.r.Summariser: summary =  14484 in 00:04:32 =   53.2/s Avg:   885 Min:    81 Max:  9636 Err:     0 (0.00%)
+2026-04-17 12:52:30,004 INFO o.a.j.r.Summariser: summary +   7235 in 00:00:30 =  241.1/s Avg:   837 Min:   240 Max: 21068 Err:     0 (0.00%) Active: 200 Started: 260 Finished: 60
+2026-04-17 12:52:30,004 INFO o.a.j.r.Summariser: summary =  21719 in 00:05:02 =   71.9/s Avg:   869 Min:    81 Max: 21068 Err:     0 (0.00%)
+2026-04-17 12:52:42,359 INFO o.a.j.t.JMeterThread: Stopping because end time detected by thread: 03 Stress - /health 3-82
+2026-04-17 12:52:42,361 INFO o.a.j.t.JMeterThread: Stopping because end time detected by thread: 03 Stress - /health 3-90
+2026-04-17 12:52:42,360 INFO o.a.j.t.JMeterThread: Stopping because end time detected by thread: 03 Stress - /health 3-164
+2026-04-17 12:52:42,363 INFO o.a.j.t.JMeterThread: Thread finished: 03 Stress - /health 3-82
+2026-04-17 12:52:42,363 INFO o.a.j.t.JMeterThread: Thread finished: 03 Stress - /health 3-164
+2026-04-17 12:52:42,363 INFO o.a.j.t.JMeterThread: Thread finished: 03 Stress - /health 3-90
+2026-04-17 12:52:42,360 INFO o.a.j.t.JMeterThread: Stopping because end time detected by thread: 03 Stress - /health 3-15
+2026-04-17 12:52:42,360 INFO o.a.j.t.JMeterThread: Stopping because end time detected by thread: 03 Stress - /health 3-118
+2026-04-17 12:52:42,363 INFO o.a.j.t.JMeterThread: Thread finished: 03 Stress - /health 3-15
+2026-04-17 12:52:42,363 INFO o.a.j.t.JMeterThread: Thread finished: 03 Stress - /health 3-118
+2026-04-17 12:52:42,360 INFO o.a.j.t.JMeterThread: Stopping because end time detected by thread: 03 Stress - /health 3-57
+2026-04-17 12:52:42,359 INFO o.a.j.t.JMeterThread: Stopping because end time detected by thread: 03 Stress - /health 3-41
+2026-04-17 12:52:42,364 INFO o.a.j.t.JMeterThread: Thread finished: 03 Stress - /health 3-57
+2026-04-17 12:52:42,360 INFO o.a.j.t.JMeterThread: Stopping because end time detected by thread: 03 Stress - /health 3-5
+2026-04-17 12:52:42,360 INFO o.a.j.t.JMeterThread: Stopping because end time detected by thread: 03 Stress - /health 3-66
+2026-04-17 12:52:42,359 INFO o.a.j.t.JMeterThread: Stopping because end time detected by thread: 03 Stress - /health 3-65
+2026-04-17 12:52:42,364 INFO o.a.j.t.JMeterThread: Thread finished: 03 Stress - /health 3-66
+2026-04-17 12:52:42,364 INFO o.a.j.t.JMeterThread: Thread finished: 03 Stress - /health 3-65
+2026-04-17 12:52:42,360 INFO o.a.j.t.JMeterThread: Stopping because end time detected by thread: 03 Stress - /health 3-71
+2026-04-17 12:52:42,364 INFO o.a.j.t.JMeterThread: Thread finished: 03 Stress - /health 3-5
+2026-04-17 12:52:42,365 INFO o.a.j.t.JMeterThread: Thread finished: 03 Stress - /health 3-71
+2026-04-17 12:52:42,364 INFO o.a.j.t.JMeterThread: Thread finished: 03 Stress - /health 3-41
+2026-04-17 12:52:42,367 INFO o.a.j.t.JMeterThread: Stopping because end time detected by thread: 03 Stress - /health 3-146
+2026-04-17 12:52:42,367 INFO o.a.j.t.JMeterThread: Stopping because end time detected by thread: 03 Stress - /health 3-24
+2026-04-17 12:52:42,367 INFO o.a.j.t.JMeterThread: Thread finished: 03 Stress - /health 3-146
+2026-04-17 12:52:42,367 INFO o.a.j.t.JMeterThread: Thread finished: 03 Stress - /health 3-24
+2026-04-17 12:52:42,368 INFO o.a.j.t.JMeterThread: Stopping because end time detected by thread: 03 Stress - /health 3-167
+2026-04-17 12:52:42,369 INFO o.a.j.t.JMeterThread: Thread finished: 03 Stress - /health 3-167
+2026-04-17 12:52:42,372 INFO o.a.j.t.JMeterThread: Stopping because end time detected by thread: 03 Stress - /health 3-150
+2026-04-17 12:52:42,372 INFO o.a.j.t.JMeterThread: Thread finished: 03 Stress - /health 3-150
+2026-04-17 12:52:42,375 INFO o.a.j.t.JMeterThread: Stopping because end time detected by thread: 03 Stress - /health 3-2
+2026-04-17 12:52:42,375 INFO o.a.j.t.JMeterThread: Stopping because end time detected by thread: 03 Stress - /health 3-193
+2026-04-17 12:52:42,375 INFO o.a.j.t.JMeterThread: Stopping because end time detected by thread: 03 Stress - /health 3-151
+2026-04-17 12:52:42,375 INFO o.a.j.t.JMeterThread: Thread finished: 03 Stress - /health 3-2
+2026-04-17 12:52:42,375 INFO o.a.j.t.JMeterThread: Thread finished: 03 Stress - /health 3-193
+2026-04-17 12:52:42,375 INFO o.a.j.t.JMeterThread: Thread finished: 03 Stress - /health 3-151
+2026-04-17 12:52:42,377 INFO o.a.j.t.JMeterThread: Stopping because end time detected by thread: 03 Stress - /health 3-47
+2026-04-17 12:52:42,377 INFO o.a.j.t.JMeterThread: Stopping because end time detected by thread: 03 Stress - /health 3-23
+2026-04-17 12:52:42,377 INFO o.a.j.t.JMeterThread: Thread finished: 03 Stress - /health 3-47
+2026-04-17 12:52:42,377 INFO o.a.j.t.JMeterThread: Thread finished: 03 Stress - /health 3-23
+2026-04-17 12:52:42,377 INFO o.a.j.t.JMeterThread: Stopping because end time detected by thread: 03 Stress - /health 3-46
+2026-04-17 12:52:42,377 INFO o.a.j.t.JMeterThread: Thread finished: 03 Stress - /health 3-46
+2026-04-17 12:52:42,381 INFO o.a.j.t.JMeterThread: Stopping because end time detected by thread: 03 Stress - /health 3-142
+2026-04-17 12:52:42,382 INFO o.a.j.t.JMeterThread: Stopping because end time detected by thread: 03 Stress - /health 3-131
+2026-04-17 12:52:42,382 INFO o.a.j.t.JMeterThread: Thread finished: 03 Stress - /health 3-142
+2026-04-17 12:52:42,382 INFO o.a.j.t.JMeterThread: Thread finished: 03 Stress - /health 3-131
+2026-04-17 12:52:42,387 INFO o.a.j.t.JMeterThread: Stopping because end time detected by thread: 03 Stress - /health 3-163
+2026-04-17 12:52:42,387 INFO o.a.j.t.JMeterThread: Thread finished: 03 Stress - /health 3-163
+2026-04-17 12:52:42,393 INFO o.a.j.t.JMeterThread: Stopping because end time detected by thread: 03 Stress - /health 3-127
+2026-04-17 12:52:42,393 INFO o.a.j.t.JMeterThread: Stopping because end time detected by thread: 03 Stress - /health 3-124
+2026-04-17 12:52:42,393 INFO o.a.j.t.JMeterThread: Stopping because end time detected by thread: 03 Stress - /health 3-18
+2026-04-17 12:52:42,393 INFO o.a.j.t.JMeterThread: Thread finished: 03 Stress - /health 3-127
+2026-04-17 12:52:42,393 INFO o.a.j.t.JMeterThread: Thread finished: 03 Stress - /health 3-18
+2026-04-17 12:52:42,393 INFO o.a.j.t.JMeterThread: Thread finished: 03 Stress - /health 3-124
+2026-04-17 12:52:42,416 INFO o.a.j.t.JMeterThread: Stopping because end time detected by thread: 03 Stress - /health 3-111
+2026-04-17 12:52:42,416 INFO o.a.j.t.JMeterThread: Thread finished: 03 Stress - /health 3-111
+2026-04-17 12:52:42,418 INFO o.a.j.t.JMeterThread: Stopping because end time detected by thread: 03 Stress - /health 3-89
+2026-04-17 12:52:42,418 INFO o.a.j.t.JMeterThread: Thread finished: 03 Stress - /health 3-89
+2026-04-17 12:52:42,422 INFO o.a.j.t.JMeterThread: Stopping because end time detected by thread: 03 Stress - /health 3-174
+2026-04-17 12:52:42,422 INFO o.a.j.t.JMeterThread: Thread finished: 03 Stress - /health 3-174
+2026-04-17 12:52:42,423 INFO o.a.j.t.JMeterThread: Stopping because end time detected by thread: 03 Stress - /health 3-32
+2026-04-17 12:52:42,423 INFO o.a.j.t.JMeterThread: Stopping because end time detected by thread: 03 Stress - /health 3-30
+2026-04-17 12:52:42,423 INFO o.a.j.t.JMeterThread: Thread finished: 03 Stress - /health 3-32
+2026-04-17 12:52:42,423 INFO o.a.j.t.JMeterThread: Thread finished: 03 Stress - /health 3-30
+2026-04-17 12:52:42,429 INFO o.a.j.t.JMeterThread: Stopping because end time detected by thread: 03 Stress - /health 3-191
+2026-04-17 12:52:42,429 INFO o.a.j.t.JMeterThread: Stopping because end time detected by thread: 03 Stress - /health 3-25
+2026-04-17 12:52:42,430 INFO o.a.j.t.JMeterThread: Thread finished: 03 Stress - /health 3-191
+2026-04-17 12:52:42,430 INFO o.a.j.t.JMeterThread: Thread finished: 03 Stress - /health 3-25
+2026-04-17 12:52:42,433 INFO o.a.j.t.JMeterThread: Stopping because end time detected by thread: 03 Stress - /health 3-186
+2026-04-17 12:52:42,434 INFO o.a.j.t.JMeterThread: Thread finished: 03 Stress - /health 3-186
+2026-04-17 12:52:42,437 INFO o.a.j.t.JMeterThread: Stopping because end time detected by thread: 03 Stress - /health 3-50
+2026-04-17 12:52:42,437 INFO o.a.j.t.JMeterThread: Thread finished: 03 Stress - /health 3-50
+2026-04-17 12:52:42,440 INFO o.a.j.t.JMeterThread: Stopping because end time detected by thread: 03 Stress - /health 3-44
+2026-04-17 12:52:42,440 INFO o.a.j.t.JMeterThread: Stopping because end time detected by thread: 03 Stress - /health 3-115
+2026-04-17 12:52:42,441 INFO o.a.j.t.JMeterThread: Thread finished: 03 Stress - /health 3-44
+2026-04-17 12:52:42,441 INFO o.a.j.t.JMeterThread: Thread finished: 03 Stress - /health 3-115
+2026-04-17 12:52:42,442 INFO o.a.j.t.JMeterThread: Stopping because end time detected by thread: 03 Stress - /health 3-87
+2026-04-17 12:52:42,442 INFO o.a.j.t.JMeterThread: Thread finished: 03 Stress - /health 3-87
+2026-04-17 12:52:42,448 INFO o.a.j.t.JMeterThread: Stopping because end time detected by thread: 03 Stress - /health 3-28
+2026-04-17 12:52:42,448 INFO o.a.j.t.JMeterThread: Thread finished: 03 Stress - /health 3-28
+2026-04-17 12:52:42,452 INFO o.a.j.t.JMeterThread: Stopping because end time detected by thread: 03 Stress - /health 3-36
+2026-04-17 12:52:42,452 INFO o.a.j.t.JMeterThread: Stopping because end time detected by thread: 03 Stress - /health 3-59
+2026-04-17 12:52:42,452 INFO o.a.j.t.JMeterThread: Thread finished: 03 Stress - /health 3-36
+2026-04-17 12:52:42,452 INFO o.a.j.t.JMeterThread: Thread finished: 03 Stress - /health 3-59
+2026-04-17 12:52:42,455 INFO o.a.j.t.JMeterThread: Stopping because end time detected by thread: 03 Stress - /health 3-26
+2026-04-17 12:52:42,456 INFO o.a.j.t.JMeterThread: Thread finished: 03 Stress - /health 3-26
+2026-04-17 12:52:42,460 INFO o.a.j.t.JMeterThread: Stopping because end time detected by thread: 03 Stress - /health 3-78
+2026-04-17 12:52:42,460 INFO o.a.j.t.JMeterThread: Stopping because end time detected by thread: 03 Stress - /health 3-86
+2026-04-17 12:52:42,460 INFO o.a.j.t.JMeterThread: Thread finished: 03 Stress - /health 3-78
+2026-04-17 12:52:42,460 INFO o.a.j.t.JMeterThread: Thread finished: 03 Stress - /health 3-86
+2026-04-17 12:52:42,505 INFO o.a.j.t.JMeterThread: Stopping because end time detected by thread: 03 Stress - /health 3-105
+2026-04-17 12:52:42,505 INFO o.a.j.t.JMeterThread: Thread finished: 03 Stress - /health 3-105
+2026-04-17 12:52:42,523 INFO o.a.j.t.JMeterThread: Stopping because end time detected by thread: 03 Stress - /health 3-148
+2026-04-17 12:52:42,523 INFO o.a.j.t.JMeterThread: Thread finished: 03 Stress - /health 3-148
+2026-04-17 12:52:42,524 INFO o.a.j.t.JMeterThread: Stopping because end time detected by thread: 03 Stress - /health 3-141
+2026-04-17 12:52:42,524 INFO o.a.j.t.JMeterThread: Thread finished: 03 Stress - /health 3-141
+2026-04-17 12:52:42,529 INFO o.a.j.t.JMeterThread: Stopping because end time detected by thread: 03 Stress - /health 3-133
+2026-04-17 12:52:42,529 INFO o.a.j.t.JMeterThread: Stopping because end time detected by thread: 03 Stress - /health 3-197
+2026-04-17 12:52:42,530 INFO o.a.j.t.JMeterThread: Thread finished: 03 Stress - /health 3-133
+2026-04-17 12:52:42,530 INFO o.a.j.t.JMeterThread: Thread finished: 03 Stress - /health 3-197
+2026-04-17 12:52:42,535 INFO o.a.j.t.JMeterThread: Stopping because end time detected by thread: 03 Stress - /health 3-159
+2026-04-17 12:52:42,535 INFO o.a.j.t.JMeterThread: Thread finished: 03 Stress - /health 3-159
+2026-04-17 12:52:42,538 INFO o.a.j.t.JMeterThread: Stopping because end time detected by thread: 03 Stress - /health 3-173
+2026-04-17 12:52:42,538 INFO o.a.j.t.JMeterThread: Thread finished: 03 Stress - /health 3-173
+2026-04-17 12:52:42,539 INFO o.a.j.t.JMeterThread: Stopping because end time detected by thread: 03 Stress - /health 3-182
+2026-04-17 12:52:42,540 INFO o.a.j.t.JMeterThread: Thread finished: 03 Stress - /health 3-182
+2026-04-17 12:52:42,543 INFO o.a.j.t.JMeterThread: Stopping because end time detected by thread: 03 Stress - /health 3-139
+2026-04-17 12:52:42,543 INFO o.a.j.t.JMeterThread: Thread finished: 03 Stress - /health 3-139
+2026-04-17 12:52:42,545 INFO o.a.j.t.JMeterThread: Stopping because end time detected by thread: 03 Stress - /health 3-56
+2026-04-17 12:52:42,545 INFO o.a.j.t.JMeterThread: Thread finished: 03 Stress - /health 3-56
+2026-04-17 12:52:42,554 INFO o.a.j.t.JMeterThread: Stopping because end time detected by thread: 03 Stress - /health 3-101
+2026-04-17 12:52:42,555 INFO o.a.j.t.JMeterThread: Thread finished: 03 Stress - /health 3-101
+2026-04-17 12:52:42,556 INFO o.a.j.t.JMeterThread: Stopping because end time detected by thread: 03 Stress - /health 3-1
+2026-04-17 12:52:42,556 INFO o.a.j.t.JMeterThread: Thread finished: 03 Stress - /health 3-1
+2026-04-17 12:52:42,569 INFO o.a.j.t.JMeterThread: Stopping because end time detected by thread: 03 Stress - /health 3-38
+2026-04-17 12:52:42,569 INFO o.a.j.t.JMeterThread: Thread finished: 03 Stress - /health 3-38
+2026-04-17 12:52:42,574 INFO o.a.j.t.JMeterThread: Stopping because end time detected by thread: 03 Stress - /health 3-156
+2026-04-17 12:52:42,574 INFO o.a.j.t.JMeterThread: Thread finished: 03 Stress - /health 3-156
+2026-04-17 12:52:42,580 INFO o.a.j.t.JMeterThread: Stopping because end time detected by thread: 03 Stress - /health 3-185
+2026-04-17 12:52:42,580 INFO o.a.j.t.JMeterThread: Stopping because end time detected by thread: 03 Stress - /health 3-192
+2026-04-17 12:52:42,581 INFO o.a.j.t.JMeterThread: Thread finished: 03 Stress - /health 3-185
+2026-04-17 12:52:42,581 INFO o.a.j.t.JMeterThread: Thread finished: 03 Stress - /health 3-192
+2026-04-17 12:52:42,585 INFO o.a.j.t.JMeterThread: Stopping because end time detected by thread: 03 Stress - /health 3-73
+2026-04-17 12:52:42,585 INFO o.a.j.t.JMeterThread: Thread finished: 03 Stress - /health 3-73
+2026-04-17 12:52:42,590 INFO o.a.j.t.JMeterThread: Stopping because end time detected by thread: 03 Stress - /health 3-70
+2026-04-17 12:52:42,590 INFO o.a.j.t.JMeterThread: Stopping because end time detected by thread: 03 Stress - /health 3-11
+2026-04-17 12:52:42,590 INFO o.a.j.t.JMeterThread: Thread finished: 03 Stress - /health 3-70
+2026-04-17 12:52:42,590 INFO o.a.j.t.JMeterThread: Thread finished: 03 Stress - /health 3-11
+2026-04-17 12:52:42,591 INFO o.a.j.t.JMeterThread: Stopping because end time detected by thread: 03 Stress - /health 3-94
+2026-04-17 12:52:42,591 INFO o.a.j.t.JMeterThread: Thread finished: 03 Stress - /health 3-94
+2026-04-17 12:52:42,596 INFO o.a.j.t.JMeterThread: Stopping because end time detected by thread: 03 Stress - /health 3-29
+2026-04-17 12:52:42,596 INFO o.a.j.t.JMeterThread: Thread finished: 03 Stress - /health 3-29
+2026-04-17 12:52:42,598 INFO o.a.j.t.JMeterThread: Stopping because end time detected by thread: 03 Stress - /health 3-187
+2026-04-17 12:52:42,599 INFO o.a.j.t.JMeterThread: Thread finished: 03 Stress - /health 3-187
+2026-04-17 12:52:42,687 INFO o.a.j.t.JMeterThread: Stopping because end time detected by thread: 03 Stress - /health 3-123
+2026-04-17 12:52:42,687 INFO o.a.j.t.JMeterThread: Thread finished: 03 Stress - /health 3-123
+2026-04-17 12:52:42,688 INFO o.a.j.t.JMeterThread: Stopping because end time detected by thread: 03 Stress - /health 3-91
+2026-04-17 12:52:42,688 INFO o.a.j.t.JMeterThread: Thread finished: 03 Stress - /health 3-91
+2026-04-17 12:52:42,688 INFO o.a.j.t.JMeterThread: Stopping because end time detected by thread: 03 Stress - /health 3-84
+2026-04-17 12:52:42,688 INFO o.a.j.t.JMeterThread: Thread finished: 03 Stress - /health 3-84
+2026-04-17 12:52:42,688 INFO o.a.j.t.JMeterThread: Stopping because end time detected by thread: 03 Stress - /health 3-168
+2026-04-17 12:52:42,688 INFO o.a.j.t.JMeterThread: Thread finished: 03 Stress - /health 3-168
+2026-04-17 12:52:42,689 INFO o.a.j.t.JMeterThread: Stopping because end time detected by thread: 03 Stress - /health 3-9
+2026-04-17 12:52:42,689 INFO o.a.j.t.JMeterThread: Thread finished: 03 Stress - /health 3-9
+2026-04-17 12:52:42,689 INFO o.a.j.t.JMeterThread: Stopping because end time detected by thread: 03 Stress - /health 3-85
+2026-04-17 12:52:42,689 INFO o.a.j.t.JMeterThread: Stopping because end time detected by thread: 03 Stress - /health 3-171
+2026-04-17 12:52:42,689 INFO o.a.j.t.JMeterThread: Stopping because end time detected by thread: 03 Stress - /health 3-107
+2026-04-17 12:52:42,689 INFO o.a.j.t.JMeterThread: Stopping because end time detected by thread: 03 Stress - /health 3-195
+2026-04-17 12:52:42,690 INFO o.a.j.t.JMeterThread: Thread finished: 03 Stress - /health 3-107
+2026-04-17 12:52:42,689 INFO o.a.j.t.JMeterThread: Stopping because end time detected by thread: 03 Stress - /health 3-136
+2026-04-17 12:52:42,690 INFO o.a.j.t.JMeterThread: Thread finished: 03 Stress - /health 3-195
+2026-04-17 12:52:42,689 INFO o.a.j.t.JMeterThread: Stopping because end time detected by thread: 03 Stress - /health 3-190
+2026-04-17 12:52:42,689 INFO o.a.j.t.JMeterThread: Stopping because end time detected by thread: 03 Stress - /health 3-135
+2026-04-17 12:52:42,689 INFO o.a.j.t.JMeterThread: Stopping because end time detected by thread: 03 Stress - /health 3-6
+2026-04-17 12:52:42,690 INFO o.a.j.t.JMeterThread: Thread finished: 03 Stress - /health 3-190
+2026-04-17 12:52:42,690 INFO o.a.j.t.JMeterThread: Thread finished: 03 Stress - /health 3-136
+2026-04-17 12:52:42,690 INFO o.a.j.t.JMeterThread: Thread finished: 03 Stress - /health 3-85
+2026-04-17 12:52:42,690 INFO o.a.j.t.JMeterThread: Thread finished: 03 Stress - /health 3-171
+2026-04-17 12:52:42,690 INFO o.a.j.t.JMeterThread: Stopping because end time detected by thread: 03 Stress - /health 3-177
+2026-04-17 12:52:42,689 INFO o.a.j.t.JMeterThread: Stopping because end time detected by thread: 03 Stress - /health 3-143
+2026-04-17 12:52:42,689 INFO o.a.j.t.JMeterThread: Stopping because end time detected by thread: 03 Stress - /health 3-58
+2026-04-17 12:52:42,690 INFO o.a.j.t.JMeterThread: Thread finished: 03 Stress - /health 3-177
+2026-04-17 12:52:42,690 INFO o.a.j.t.JMeterThread: Thread finished: 03 Stress - /health 3-58
+2026-04-17 12:52:42,690 INFO o.a.j.t.JMeterThread: Thread finished: 03 Stress - /health 3-6
+2026-04-17 12:52:42,690 INFO o.a.j.t.JMeterThread: Thread finished: 03 Stress - /health 3-135
+2026-04-17 12:52:42,690 INFO o.a.j.t.JMeterThread: Thread finished: 03 Stress - /health 3-143
+2026-04-17 12:52:42,711 INFO o.a.j.t.JMeterThread: Stopping because end time detected by thread: 03 Stress - /health 3-169
+2026-04-17 12:52:42,712 INFO o.a.j.t.JMeterThread: Thread finished: 03 Stress - /health 3-169
+2026-04-17 12:52:42,715 INFO o.a.j.t.JMeterThread: Stopping because end time detected by thread: 03 Stress - /health 3-21
+2026-04-17 12:52:42,715 INFO o.a.j.t.JMeterThread: Thread finished: 03 Stress - /health 3-21
+2026-04-17 12:52:42,717 INFO o.a.j.t.JMeterThread: Stopping because end time detected by thread: 03 Stress - /health 3-55
+2026-04-17 12:52:42,717 INFO o.a.j.t.JMeterThread: Stopping because end time detected by thread: 03 Stress - /health 3-93
+2026-04-17 12:52:42,717 INFO o.a.j.t.JMeterThread: Stopping because end time detected by thread: 03 Stress - /health 3-110
+2026-04-17 12:52:42,718 INFO o.a.j.t.JMeterThread: Thread finished: 03 Stress - /health 3-55
+2026-04-17 12:52:42,718 INFO o.a.j.t.JMeterThread: Thread finished: 03 Stress - /health 3-110
+2026-04-17 12:52:42,718 INFO o.a.j.t.JMeterThread: Thread finished: 03 Stress - /health 3-93
+2026-04-17 12:52:42,721 INFO o.a.j.t.JMeterThread: Stopping because end time detected by thread: 03 Stress - /health 3-194
+2026-04-17 12:52:42,721 INFO o.a.j.t.JMeterThread: Stopping because end time detected by thread: 03 Stress - /health 3-144
+2026-04-17 12:52:42,721 INFO o.a.j.t.JMeterThread: Thread finished: 03 Stress - /health 3-194
+2026-04-17 12:52:42,721 INFO o.a.j.t.JMeterThread: Thread finished: 03 Stress - /health 3-144
+2026-04-17 12:52:42,721 INFO o.a.j.t.JMeterThread: Stopping because end time detected by thread: 03 Stress - /health 3-170
+2026-04-17 12:52:42,721 INFO o.a.j.t.JMeterThread: Stopping because end time detected by thread: 03 Stress - /health 3-145
+2026-04-17 12:52:42,721 INFO o.a.j.t.JMeterThread: Thread finished: 03 Stress - /health 3-170
+2026-04-17 12:52:42,721 INFO o.a.j.t.JMeterThread: Thread finished: 03 Stress - /health 3-145
+2026-04-17 12:52:42,724 INFO o.a.j.t.JMeterThread: Stopping because end time detected by thread: 03 Stress - /health 3-45
+2026-04-17 12:52:42,724 INFO o.a.j.t.JMeterThread: Thread finished: 03 Stress - /health 3-45
+2026-04-17 12:52:42,726 INFO o.a.j.t.JMeterThread: Stopping because end time detected by thread: 03 Stress - /health 3-99
+2026-04-17 12:52:42,726 INFO o.a.j.t.JMeterThread: Stopping because end time detected by thread: 03 Stress - /health 3-80
+2026-04-17 12:52:42,726 INFO o.a.j.t.JMeterThread: Thread finished: 03 Stress - /health 3-99
+2026-04-17 12:52:42,726 INFO o.a.j.t.JMeterThread: Thread finished: 03 Stress - /health 3-80
+2026-04-17 12:52:42,730 INFO o.a.j.t.JMeterThread: Stopping because end time detected by thread: 03 Stress - /health 3-98
+2026-04-17 12:52:42,730 INFO o.a.j.t.JMeterThread: Thread finished: 03 Stress - /health 3-98
+2026-04-17 12:52:42,733 INFO o.a.j.t.JMeterThread: Stopping because end time detected by thread: 03 Stress - /health 3-37
+2026-04-17 12:52:42,733 INFO o.a.j.t.JMeterThread: Stopping because end time detected by thread: 03 Stress - /health 3-10
+2026-04-17 12:52:42,733 INFO o.a.j.t.JMeterThread: Thread finished: 03 Stress - /health 3-37
+2026-04-17 12:52:42,733 INFO o.a.j.t.JMeterThread: Thread finished: 03 Stress - /health 3-10
+2026-04-17 12:52:42,735 INFO o.a.j.t.JMeterThread: Stopping because end time detected by thread: 03 Stress - /health 3-128
+2026-04-17 12:52:42,735 INFO o.a.j.t.JMeterThread: Stopping because end time detected by thread: 03 Stress - /health 3-109
+2026-04-17 12:52:42,735 INFO o.a.j.t.JMeterThread: Thread finished: 03 Stress - /health 3-109
+2026-04-17 12:52:42,735 INFO o.a.j.t.JMeterThread: Thread finished: 03 Stress - /health 3-128
+2026-04-17 12:52:42,744 INFO o.a.j.t.JMeterThread: Stopping because end time detected by thread: 03 Stress - /health 3-176
+2026-04-17 12:52:42,744 INFO o.a.j.t.JMeterThread: Thread finished: 03 Stress - /health 3-176
+2026-04-17 12:52:42,780 INFO o.a.j.t.JMeterThread: Stopping because end time detected by thread: 03 Stress - /health 3-166
+2026-04-17 12:52:42,780 INFO o.a.j.t.JMeterThread: Thread finished: 03 Stress - /health 3-166
+2026-04-17 12:52:42,782 INFO o.a.j.t.JMeterThread: Stopping because end time detected by thread: 03 Stress - /health 3-108
+2026-04-17 12:52:42,782 INFO o.a.j.t.JMeterThread: Thread finished: 03 Stress - /health 3-108
+2026-04-17 12:52:42,883 INFO o.a.j.t.JMeterThread: Stopping because end time detected by thread: 03 Stress - /health 3-126
+2026-04-17 12:52:42,883 INFO o.a.j.t.JMeterThread: Stopping because end time detected by thread: 03 Stress - /health 3-74
+2026-04-17 12:52:42,884 INFO o.a.j.t.JMeterThread: Thread finished: 03 Stress - /health 3-126
+2026-04-17 12:52:42,884 INFO o.a.j.t.JMeterThread: Stopping because end time detected by thread: 03 Stress - /health 3-189
+2026-04-17 12:52:42,884 INFO o.a.j.t.JMeterThread: Thread finished: 03 Stress - /health 3-189
+2026-04-17 12:52:42,884 INFO o.a.j.t.JMeterThread: Stopping because end time detected by thread: 03 Stress - /health 3-49
+2026-04-17 12:52:42,884 INFO o.a.j.t.JMeterThread: Stopping because end time detected by thread: 03 Stress - /health 3-172
+2026-04-17 12:52:42,884 INFO o.a.j.t.JMeterThread: Thread finished: 03 Stress - /health 3-172
+2026-04-17 12:52:42,884 INFO o.a.j.t.JMeterThread: Stopping because end time detected by thread: 03 Stress - /health 3-100
+2026-04-17 12:52:42,884 INFO o.a.j.t.JMeterThread: Thread finished: 03 Stress - /health 3-100
+2026-04-17 12:52:42,884 INFO o.a.j.t.JMeterThread: Stopping because end time detected by thread: 03 Stress - /health 3-39
+2026-04-17 12:52:42,884 INFO o.a.j.t.JMeterThread: Thread finished: 03 Stress - /health 3-39
+2026-04-17 12:52:42,883 INFO o.a.j.t.JMeterThread: Stopping because end time detected by thread: 03 Stress - /health 3-83
+2026-04-17 12:52:42,884 INFO o.a.j.t.JMeterThread: Thread finished: 03 Stress - /health 3-83
+2026-04-17 12:52:42,885 INFO o.a.j.t.JMeterThread: Stopping because end time detected by thread: 03 Stress - /health 3-48
+2026-04-17 12:52:42,885 INFO o.a.j.t.JMeterThread: Stopping because end time detected by thread: 03 Stress - /health 3-181
+2026-04-17 12:52:42,885 INFO o.a.j.t.JMeterThread: Stopping because end time detected by thread: 03 Stress - /health 3-51
+2026-04-17 12:52:42,885 INFO o.a.j.t.JMeterThread: Thread finished: 03 Stress - /health 3-181
+2026-04-17 12:52:42,885 INFO o.a.j.t.JMeterThread: Stopping because end time detected by thread: 03 Stress - /health 3-8
+2026-04-17 12:52:42,885 INFO o.a.j.t.JMeterThread: Thread finished: 03 Stress - /health 3-8
+2026-04-17 12:52:42,885 INFO o.a.j.t.JMeterThread: Stopping because end time detected by thread: 03 Stress - /health 3-122
+2026-04-17 12:52:42,885 INFO o.a.j.t.JMeterThread: Thread finished: 03 Stress - /health 3-122
+2026-04-17 12:52:42,884 INFO o.a.j.t.JMeterThread: Stopping because end time detected by thread: 03 Stress - /health 3-79
+2026-04-17 12:52:42,884 INFO o.a.j.t.JMeterThread: Thread finished: 03 Stress - /health 3-49
+2026-04-17 12:52:42,884 INFO o.a.j.t.JMeterThread: Thread finished: 03 Stress - /health 3-74
+2026-04-17 12:52:42,883 INFO o.a.j.t.JMeterThread: Stopping because end time detected by thread: 03 Stress - /health 3-97
+2026-04-17 12:52:42,885 INFO o.a.j.t.JMeterThread: Thread finished: 03 Stress - /health 3-79
+2026-04-17 12:52:42,886 INFO o.a.j.t.JMeterThread: Thread finished: 03 Stress - /health 3-97
+2026-04-17 12:52:42,885 INFO o.a.j.t.JMeterThread: Stopping because end time detected by thread: 03 Stress - /health 3-52
+2026-04-17 12:52:42,885 INFO o.a.j.t.JMeterThread: Stopping because end time detected by thread: 03 Stress - /health 3-7
+2026-04-17 12:52:42,885 INFO o.a.j.t.JMeterThread: Thread finished: 03 Stress - /health 3-48
+2026-04-17 12:52:42,886 INFO o.a.j.t.JMeterThread: Thread finished: 03 Stress - /health 3-7
+2026-04-17 12:52:42,886 INFO o.a.j.t.JMeterThread: Thread finished: 03 Stress - /health 3-51
+2026-04-17 12:52:42,886 INFO o.a.j.t.JMeterThread: Thread finished: 03 Stress - /health 3-52
+2026-04-17 12:52:42,899 INFO o.a.j.t.JMeterThread: Stopping because end time detected by thread: 03 Stress - /health 3-3
+2026-04-17 12:52:42,899 INFO o.a.j.t.JMeterThread: Stopping because end time detected by thread: 03 Stress - /health 3-114
+2026-04-17 12:52:42,899 INFO o.a.j.t.JMeterThread: Thread finished: 03 Stress - /health 3-114
+2026-04-17 12:52:42,899 INFO o.a.j.t.JMeterThread: Thread finished: 03 Stress - /health 3-3
+2026-04-17 12:52:42,902 INFO o.a.j.t.JMeterThread: Stopping because end time detected by thread: 03 Stress - /health 3-165
+2026-04-17 12:52:42,902 INFO o.a.j.t.JMeterThread: Stopping because end time detected by thread: 03 Stress - /health 3-154
+2026-04-17 12:52:42,902 INFO o.a.j.t.JMeterThread: Thread finished: 03 Stress - /health 3-165
+2026-04-17 12:52:42,902 INFO o.a.j.t.JMeterThread: Thread finished: 03 Stress - /health 3-154
+2026-04-17 12:52:42,904 INFO o.a.j.t.JMeterThread: Stopping because end time detected by thread: 03 Stress - /health 3-17
+2026-04-17 12:52:42,904 INFO o.a.j.t.JMeterThread: Thread finished: 03 Stress - /health 3-17
+2026-04-17 12:52:42,907 INFO o.a.j.t.JMeterThread: Stopping because end time detected by thread: 03 Stress - /health 3-129
+2026-04-17 12:52:42,907 INFO o.a.j.t.JMeterThread: Thread finished: 03 Stress - /health 3-129
+2026-04-17 12:52:42,914 INFO o.a.j.t.JMeterThread: Stopping because end time detected by thread: 03 Stress - /health 3-152
+2026-04-17 12:52:42,914 INFO o.a.j.t.JMeterThread: Thread finished: 03 Stress - /health 3-152
+2026-04-17 12:52:42,918 INFO o.a.j.t.JMeterThread: Stopping because end time detected by thread: 03 Stress - /health 3-75
+2026-04-17 12:52:42,918 INFO o.a.j.t.JMeterThread: Stopping because end time detected by thread: 03 Stress - /health 3-179
+2026-04-17 12:52:42,918 INFO o.a.j.t.JMeterThread: Thread finished: 03 Stress - /health 3-75
+2026-04-17 12:52:42,918 INFO o.a.j.t.JMeterThread: Thread finished: 03 Stress - /health 3-179
+2026-04-17 12:52:42,921 INFO o.a.j.t.JMeterThread: Stopping because end time detected by thread: 03 Stress - /health 3-155
+2026-04-17 12:52:42,921 INFO o.a.j.t.JMeterThread: Thread finished: 03 Stress - /health 3-155
+2026-04-17 12:52:42,925 INFO o.a.j.t.JMeterThread: Stopping because end time detected by thread: 03 Stress - /health 3-132
+2026-04-17 12:52:42,925 INFO o.a.j.t.JMeterThread: Stopping because end time detected by thread: 03 Stress - /health 3-160
+2026-04-17 12:52:42,925 INFO o.a.j.t.JMeterThread: Stopping because end time detected by thread: 03 Stress - /health 3-138
+2026-04-17 12:52:42,925 INFO o.a.j.t.JMeterThread: Thread finished: 03 Stress - /health 3-132
+2026-04-17 12:52:42,925 INFO o.a.j.t.JMeterThread: Thread finished: 03 Stress - /health 3-138
+2026-04-17 12:52:42,925 INFO o.a.j.t.JMeterThread: Thread finished: 03 Stress - /health 3-160
+2026-04-17 12:52:42,930 INFO o.a.j.t.JMeterThread: Stopping because end time detected by thread: 03 Stress - /health 3-35
+2026-04-17 12:52:42,930 INFO o.a.j.t.JMeterThread: Stopping because end time detected by thread: 03 Stress - /health 3-180
+2026-04-17 12:52:42,930 INFO o.a.j.t.JMeterThread: Thread finished: 03 Stress - /health 3-35
+2026-04-17 12:52:42,930 INFO o.a.j.t.JMeterThread: Thread finished: 03 Stress - /health 3-180
+2026-04-17 12:52:42,931 INFO o.a.j.t.JMeterThread: Stopping because end time detected by thread: 03 Stress - /health 3-92
+2026-04-17 12:52:42,931 INFO o.a.j.t.JMeterThread: Thread finished: 03 Stress - /health 3-92
+2026-04-17 12:52:42,947 INFO o.a.j.t.JMeterThread: Stopping because end time detected by thread: 03 Stress - /health 3-31
+2026-04-17 12:52:42,947 INFO o.a.j.t.JMeterThread: Thread finished: 03 Stress - /health 3-31
+2026-04-17 12:52:42,951 INFO o.a.j.t.JMeterThread: Stopping because end time detected by thread: 03 Stress - /health 3-157
+2026-04-17 12:52:42,951 INFO o.a.j.t.JMeterThread: Stopping because end time detected by thread: 03 Stress - /health 3-96
+2026-04-17 12:52:42,951 INFO o.a.j.t.JMeterThread: Thread finished: 03 Stress - /health 3-157
+2026-04-17 12:52:42,951 INFO o.a.j.t.JMeterThread: Thread finished: 03 Stress - /health 3-96
+2026-04-17 12:52:42,956 INFO o.a.j.t.JMeterThread: Stopping because end time detected by thread: 03 Stress - /health 3-64
+2026-04-17 12:52:42,956 INFO o.a.j.t.JMeterThread: Thread finished: 03 Stress - /health 3-64
+2026-04-17 12:52:43,000 INFO o.a.j.t.JMeterThread: Stopping because end time detected by thread: 03 Stress - /health 3-61
+2026-04-17 12:52:43,000 INFO o.a.j.t.JMeterThread: Stopping because end time detected by thread: 03 Stress - /health 3-42
+2026-04-17 12:52:43,001 INFO o.a.j.t.JMeterThread: Thread finished: 03 Stress - /health 3-61
+2026-04-17 12:52:43,001 INFO o.a.j.t.JMeterThread: Thread finished: 03 Stress - /health 3-42
+2026-04-17 12:52:43,013 INFO o.a.j.t.JMeterThread: Stopping because end time detected by thread: 03 Stress - /health 3-20
+2026-04-17 12:52:43,013 INFO o.a.j.t.JMeterThread: Thread finished: 03 Stress - /health 3-20
+2026-04-17 12:52:43,028 INFO o.a.j.t.JMeterThread: Stopping because end time detected by thread: 03 Stress - /health 3-200
+2026-04-17 12:52:43,028 INFO o.a.j.t.JMeterThread: Thread finished: 03 Stress - /health 3-200
+2026-04-17 12:52:43,029 INFO o.a.j.t.JMeterThread: Stopping because end time detected by thread: 03 Stress - /health 3-34
+2026-04-17 12:52:43,029 INFO o.a.j.t.JMeterThread: Thread finished: 03 Stress - /health 3-34
+2026-04-17 12:52:43,106 INFO o.a.j.t.JMeterThread: Stopping because end time detected by thread: 03 Stress - /health 3-27
+2026-04-17 12:52:43,106 INFO o.a.j.t.JMeterThread: Thread finished: 03 Stress - /health 3-27
+2026-04-17 12:52:43,212 INFO o.a.j.t.JMeterThread: Stopping because end time detected by thread: 03 Stress - /health 3-121
+2026-04-17 12:52:43,212 INFO o.a.j.t.JMeterThread: Stopping because end time detected by thread: 03 Stress - /health 3-183
+2026-04-17 12:52:43,212 INFO o.a.j.t.JMeterThread: Stopping because end time detected by thread: 03 Stress - /health 3-184
+2026-04-17 12:52:43,212 INFO o.a.j.t.JMeterThread: Thread finished: 03 Stress - /health 3-184
+2026-04-17 12:52:43,212 INFO o.a.j.t.JMeterThread: Thread finished: 03 Stress - /health 3-183
+2026-04-17 12:52:43,212 INFO o.a.j.t.JMeterThread: Thread finished: 03 Stress - /health 3-121
+2026-04-17 12:52:43,251 INFO o.a.j.t.JMeterThread: Stopping because end time detected by thread: 03 Stress - /health 3-53
+2026-04-17 12:52:43,251 INFO o.a.j.t.JMeterThread: Stopping because end time detected by thread: 03 Stress - /health 3-60
+2026-04-17 12:52:43,251 INFO o.a.j.t.JMeterThread: Thread finished: 03 Stress - /health 3-60
+2026-04-17 12:52:43,251 INFO o.a.j.t.JMeterThread: Thread finished: 03 Stress - /health 3-53
+2026-04-17 12:52:43,296 INFO o.a.j.t.JMeterThread: Stopping because end time detected by thread: 03 Stress - /health 3-116
+2026-04-17 12:52:43,296 INFO o.a.j.t.JMeterThread: Stopping because end time detected by thread: 03 Stress - /health 3-125
+2026-04-17 12:52:43,296 INFO o.a.j.t.JMeterThread: Stopping because end time detected by thread: 03 Stress - /health 3-40
+2026-04-17 12:52:43,297 INFO o.a.j.t.JMeterThread: Thread finished: 03 Stress - /health 3-116
+2026-04-17 12:52:43,297 INFO o.a.j.t.JMeterThread: Thread finished: 03 Stress - /health 3-40
+2026-04-17 12:52:43,297 INFO o.a.j.t.JMeterThread: Thread finished: 03 Stress - /health 3-125
+2026-04-17 12:52:43,407 INFO o.a.j.t.JMeterThread: Stopping because end time detected by thread: 03 Stress - /health 3-103
+2026-04-17 12:52:43,407 INFO o.a.j.t.JMeterThread: Stopping because end time detected by thread: 03 Stress - /health 3-68
+2026-04-17 12:52:43,408 INFO o.a.j.t.JMeterThread: Thread finished: 03 Stress - /health 3-103
+2026-04-17 12:52:43,408 INFO o.a.j.t.JMeterThread: Thread finished: 03 Stress - /health 3-68
+2026-04-17 12:52:43,446 INFO o.a.j.t.JMeterThread: Stopping because end time detected by thread: 03 Stress - /health 3-95
+2026-04-17 12:52:43,446 INFO o.a.j.t.JMeterThread: Stopping because end time detected by thread: 03 Stress - /health 3-196
+2026-04-17 12:52:43,447 INFO o.a.j.t.JMeterThread: Thread finished: 03 Stress - /health 3-95
+2026-04-17 12:52:43,447 INFO o.a.j.t.JMeterThread: Thread finished: 03 Stress - /health 3-196
+2026-04-17 12:52:43,448 INFO o.a.j.t.JMeterThread: Stopping because end time detected by thread: 03 Stress - /health 3-77
+2026-04-17 12:52:43,448 INFO o.a.j.t.JMeterThread: Thread finished: 03 Stress - /health 3-77
+2026-04-17 12:52:43,453 INFO o.a.j.t.JMeterThread: Stopping because end time detected by thread: 03 Stress - /health 3-104
+2026-04-17 12:52:43,453 INFO o.a.j.t.JMeterThread: Thread finished: 03 Stress - /health 3-104
+2026-04-17 12:52:43,457 INFO o.a.j.t.JMeterThread: Stopping because end time detected by thread: 03 Stress - /health 3-112
+2026-04-17 12:52:43,457 INFO o.a.j.t.JMeterThread: Stopping because end time detected by thread: 03 Stress - /health 3-14
+2026-04-17 12:52:43,457 INFO o.a.j.t.JMeterThread: Thread finished: 03 Stress - /health 3-112
+2026-04-17 12:52:43,457 INFO o.a.j.t.JMeterThread: Thread finished: 03 Stress - /health 3-14
+2026-04-17 12:52:43,458 INFO o.a.j.t.JMeterThread: Stopping because end time detected by thread: 03 Stress - /health 3-113
+2026-04-17 12:52:43,458 INFO o.a.j.t.JMeterThread: Thread finished: 03 Stress - /health 3-113
+2026-04-17 12:52:43,464 INFO o.a.j.t.JMeterThread: Stopping because end time detected by thread: 03 Stress - /health 3-106
+2026-04-17 12:52:43,464 INFO o.a.j.t.JMeterThread: Thread finished: 03 Stress - /health 3-106
+2026-04-17 12:52:43,468 INFO o.a.j.t.JMeterThread: Stopping because end time detected by thread: 03 Stress - /health 3-134
+2026-04-17 12:52:43,468 INFO o.a.j.t.JMeterThread: Stopping because end time detected by thread: 03 Stress - /health 3-153
+2026-04-17 12:52:43,468 INFO o.a.j.t.JMeterThread: Thread finished: 03 Stress - /health 3-134
+2026-04-17 12:52:43,468 INFO o.a.j.t.JMeterThread: Thread finished: 03 Stress - /health 3-153
+2026-04-17 12:52:43,471 INFO o.a.j.t.JMeterThread: Stopping because end time detected by thread: 03 Stress - /health 3-69
+2026-04-17 12:52:43,471 INFO o.a.j.t.JMeterThread: Thread finished: 03 Stress - /health 3-69
+2026-04-17 12:52:43,494 INFO o.a.j.t.JMeterThread: Stopping because end time detected by thread: 03 Stress - /health 3-16
+2026-04-17 12:52:43,494 INFO o.a.j.t.JMeterThread: Stopping because end time detected by thread: 03 Stress - /health 3-147
+2026-04-17 12:52:43,494 INFO o.a.j.t.JMeterThread: Thread finished: 03 Stress - /health 3-16
+2026-04-17 12:52:43,494 INFO o.a.j.t.JMeterThread: Thread finished: 03 Stress - /health 3-147
+2026-04-17 12:52:43,736 INFO o.a.j.t.JMeterThread: Stopping because end time detected by thread: 03 Stress - /health 3-178
+2026-04-17 12:52:43,736 INFO o.a.j.t.JMeterThread: Thread finished: 03 Stress - /health 3-178
+2026-04-17 12:52:43,736 INFO o.a.j.t.JMeterThread: Stopping because end time detected by thread: 03 Stress - /health 3-76
+2026-04-17 12:52:43,736 INFO o.a.j.t.JMeterThread: Stopping because end time detected by thread: 03 Stress - /health 3-198
+2026-04-17 12:52:43,736 INFO o.a.j.t.JMeterThread: Thread finished: 03 Stress - /health 3-76
+2026-04-17 12:52:43,736 INFO o.a.j.t.JMeterThread: Thread finished: 03 Stress - /health 3-198
+2026-04-17 12:52:43,933 INFO o.a.j.t.JMeterThread: Stopping because end time detected by thread: 03 Stress - /health 3-72
+2026-04-17 12:52:43,933 INFO o.a.j.t.JMeterThread: Thread finished: 03 Stress - /health 3-72
+2026-04-17 12:52:43,935 INFO o.a.j.t.JMeterThread: Stopping because end time detected by thread: 03 Stress - /health 3-67
+2026-04-17 12:52:43,935 INFO o.a.j.t.JMeterThread: Stopping because end time detected by thread: 03 Stress - /health 3-149
+2026-04-17 12:52:43,935 INFO o.a.j.t.JMeterThread: Thread finished: 03 Stress - /health 3-67
+2026-04-17 12:52:43,935 INFO o.a.j.t.JMeterThread: Thread finished: 03 Stress - /health 3-149
+2026-04-17 12:52:44,064 INFO o.a.j.t.JMeterThread: Stopping because end time detected by thread: 03 Stress - /health 3-62
+2026-04-17 12:52:44,064 INFO o.a.j.t.JMeterThread: Thread finished: 03 Stress - /health 3-62
+2026-04-17 12:52:44,260 INFO o.a.j.t.JMeterThread: Stopping because end time detected by thread: 03 Stress - /health 3-22
+2026-04-17 12:52:44,260 INFO o.a.j.t.JMeterThread: Stopping because end time detected by thread: 03 Stress - /health 3-19
+2026-04-17 12:52:44,260 INFO o.a.j.t.JMeterThread: Stopping because end time detected by thread: 03 Stress - /health 3-199
+2026-04-17 12:52:44,260 INFO o.a.j.t.JMeterThread: Stopping because end time detected by thread: 03 Stress - /health 3-13
+2026-04-17 12:52:44,261 INFO o.a.j.t.JMeterThread: Thread finished: 03 Stress - /health 3-199
+2026-04-17 12:52:44,261 INFO o.a.j.t.JMeterThread: Thread finished: 03 Stress - /health 3-22
+2026-04-17 12:52:44,261 INFO o.a.j.t.JMeterThread: Thread finished: 03 Stress - /health 3-19
+2026-04-17 12:52:44,261 INFO o.a.j.t.JMeterThread: Thread finished: 03 Stress - /health 3-13
+2026-04-17 12:52:44,319 INFO o.a.j.t.JMeterThread: Stopping because end time detected by thread: 03 Stress - /health 3-102
+2026-04-17 12:52:44,319 INFO o.a.j.t.JMeterThread: Stopping because end time detected by thread: 03 Stress - /health 3-130
+2026-04-17 12:52:44,320 INFO o.a.j.t.JMeterThread: Thread finished: 03 Stress - /health 3-102
+2026-04-17 12:52:44,320 INFO o.a.j.t.JMeterThread: Thread finished: 03 Stress - /health 3-130
+2026-04-17 12:52:44,457 INFO o.a.j.t.JMeterThread: Stopping because end time detected by thread: 03 Stress - /health 3-140
+2026-04-17 12:52:44,457 INFO o.a.j.t.JMeterThread: Thread finished: 03 Stress - /health 3-140
+2026-04-17 12:52:44,514 INFO o.a.j.t.JMeterThread: Stopping because end time detected by thread: 03 Stress - /health 3-54
+2026-04-17 12:52:44,514 INFO o.a.j.t.JMeterThread: Stopping because end time detected by thread: 03 Stress - /health 3-120
+2026-04-17 12:52:44,514 INFO o.a.j.t.JMeterThread: Stopping because end time detected by thread: 03 Stress - /health 3-119
+2026-04-17 12:52:44,514 INFO o.a.j.t.JMeterThread: Thread finished: 03 Stress - /health 3-120
+2026-04-17 12:52:44,514 INFO o.a.j.t.JMeterThread: Thread finished: 03 Stress - /health 3-54
+2026-04-17 12:52:44,514 INFO o.a.j.t.JMeterThread: Thread finished: 03 Stress - /health 3-119
+2026-04-17 12:52:44,784 INFO o.a.j.t.JMeterThread: Stopping because end time detected by thread: 03 Stress - /health 3-175
+2026-04-17 12:52:44,784 INFO o.a.j.t.JMeterThread: Stopping because end time detected by thread: 03 Stress - /health 3-63
+2026-04-17 12:52:44,784 INFO o.a.j.t.JMeterThread: Thread finished: 03 Stress - /health 3-175
+2026-04-17 12:52:44,784 INFO o.a.j.t.JMeterThread: Thread finished: 03 Stress - /health 3-63
+2026-04-17 12:52:44,832 INFO o.a.j.t.JMeterThread: Stopping because end time detected by thread: 03 Stress - /health 3-158
+2026-04-17 12:52:44,832 INFO o.a.j.t.JMeterThread: Thread finished: 03 Stress - /health 3-158
+2026-04-17 12:52:45,089 INFO o.a.j.t.JMeterThread: Stopping because end time detected by thread: 03 Stress - /health 3-137
+2026-04-17 12:52:45,089 INFO o.a.j.t.JMeterThread: Thread finished: 03 Stress - /health 3-137
+2026-04-17 12:52:45,152 INFO o.a.j.t.JMeterThread: Stopping because end time detected by thread: 03 Stress - /health 3-12
+2026-04-17 12:52:45,153 INFO o.a.j.t.JMeterThread: Thread finished: 03 Stress - /health 3-12
+2026-04-17 12:52:45,344 INFO o.a.j.t.JMeterThread: Stopping because end time detected by thread: 03 Stress - /health 3-117
+2026-04-17 12:52:45,344 INFO o.a.j.t.JMeterThread: Stopping because end time detected by thread: 03 Stress - /health 3-161
+2026-04-17 12:52:45,344 INFO o.a.j.t.JMeterThread: Thread finished: 03 Stress - /health 3-117
+2026-04-17 12:52:45,344 INFO o.a.j.t.JMeterThread: Thread finished: 03 Stress - /health 3-161
+2026-04-17 12:52:45,408 INFO o.a.j.t.JMeterThread: Stopping because end time detected by thread: 03 Stress - /health 3-4
+2026-04-17 12:52:45,408 INFO o.a.j.t.JMeterThread: Stopping because end time detected by thread: 03 Stress - /health 3-88
+2026-04-17 12:52:45,408 INFO o.a.j.t.JMeterThread: Thread finished: 03 Stress - /health 3-4
+2026-04-17 12:52:45,408 INFO o.a.j.t.JMeterThread: Thread finished: 03 Stress - /health 3-88
+2026-04-17 12:52:45,600 INFO o.a.j.t.JMeterThread: Stopping because end time detected by thread: 03 Stress - /health 3-43
+2026-04-17 12:52:45,600 INFO o.a.j.t.JMeterThread: Thread finished: 03 Stress - /health 3-43
+2026-04-17 12:52:46,175 INFO o.a.j.t.JMeterThread: Stopping because end time detected by thread: 03 Stress - /health 3-81
+2026-04-17 12:52:46,175 INFO o.a.j.t.JMeterThread: Thread finished: 03 Stress - /health 3-81
+2026-04-17 12:52:47,267 INFO o.a.j.t.JMeterThread: Stopping because end time detected by thread: 03 Stress - /health 3-188
+2026-04-17 12:52:47,267 INFO o.a.j.t.JMeterThread: Thread finished: 03 Stress - /health 3-188
+2026-04-17 12:52:47,406 INFO o.a.j.t.JMeterThread: Stopping because end time detected by thread: 03 Stress - /health 3-33
+2026-04-17 12:52:47,406 INFO o.a.j.t.JMeterThread: Thread finished: 03 Stress - /health 3-33
+2026-04-17 12:52:48,742 INFO o.a.j.t.JMeterThread: Stopping because end time detected by thread: 03 Stress - /health 3-162
+2026-04-17 12:52:48,742 INFO o.a.j.t.JMeterThread: Thread finished: 03 Stress - /health 3-162
+2026-04-17 12:52:48,743 INFO o.a.j.e.StandardJMeterEngine: Notifying test listeners of end of test
+2026-04-17 12:52:48,744 INFO o.a.j.v.b.BackendListener: Worker ended
+2026-04-17 12:52:48,747 INFO o.a.j.v.b.i.InfluxdbBackendListenerClient: Sending last metrics to InfluxDB
+2026-04-17 12:52:48,748 INFO o.a.j.v.b.i.HttpMetricsSender: Destroying 
+2026-04-17 12:52:48,755 INFO o.a.j.r.Summariser: summary +   2361 in 00:00:19 =  125.9/s Avg:  1160 Min:   341 Max: 10293 Err:     0 (0.00%) Active: 0 Started: 260 Finished: 260
+2026-04-17 12:52:48,755 INFO o.a.j.r.Summariser: summary =  24080 in 00:05:21 =   75.0/s Avg:   898 Min:    81 Max: 21068 Err:     0 (0.00%)
+2026-04-17 12:52:48,756 INFO o.a.j.JMeter: Generating Dashboard
+2026-04-17 12:52:48,756 INFO o.a.j.r.d.ReportGenerator: Flushing result collector before report Generation
+2026-04-17 12:52:48,785 INFO o.a.j.r.p.NormalizerSampleConsumer: Using format, 'ms', to parse timeStamp field
+2026-04-17 12:52:48,981 INFO o.a.j.r.p.AbstractSampleConsumer: class org.apache.jmeter.report.processor.AggregateConsumer#stopProducing(): beginDate produced 0 samples
+2026-04-17 12:52:48,981 INFO o.a.j.r.p.AbstractSampleConsumer: class org.apache.jmeter.report.processor.AggregateConsumer#stopProducing(): endDate produced 0 samples
+2026-04-17 12:52:48,982 INFO o.a.j.r.p.AbstractSampleConsumer: class org.apache.jmeter.report.processor.ApdexSummaryConsumer#stopProducing(): apdexSummary produced 0 samples
+2026-04-17 12:52:48,982 INFO o.a.j.r.p.AbstractSampleConsumer: class org.apache.jmeter.report.processor.RequestsSummaryConsumer#stopProducing(): requestsSummary produced 0 samples
+2026-04-17 12:52:48,982 INFO o.a.j.r.p.AbstractSampleConsumer: class org.apache.jmeter.report.processor.StatisticsSummaryConsumer#stopProducing(): statisticsSummary produced 0 samples
+2026-04-17 12:52:48,983 INFO o.a.j.r.p.AbstractSampleConsumer: class org.apache.jmeter.report.processor.Top5ErrorsBySamplerConsumer#stopProducing(): top5ErrorsBySampler produced 0 samples
+2026-04-17 12:52:48,983 INFO o.a.j.r.p.AbstractSampleConsumer: class org.apache.jmeter.report.processor.ErrorsSummaryConsumer#stopProducing(): errorsSummary produced 0 samples
+2026-04-17 12:52:48,983 INFO o.a.j.r.p.AbstractSampleConsumer: class org.apache.jmeter.report.processor.graph.impl.HitsPerSecondGraphConsumer#stopProducing(): hitsPerSecond produced 0 samples
+2026-04-17 12:52:49,030 INFO o.a.j.r.p.AbstractSampleConsumer: class org.apache.jmeter.report.processor.graph.impl.LatencyVSRequestGraphConsumer#stopProducing(): latencyVsRequest produced 0 samples
+2026-04-17 12:52:49,030 INFO o.a.j.r.p.AbstractSampleConsumer: class org.apache.jmeter.report.processor.graph.impl.SyntheticResponseTimeDistributionGraphConsumer#stopProducing(): syntheticResponseTimeDistribution produced 0 samples
+2026-04-17 12:52:49,030 INFO o.a.j.r.p.AbstractSampleConsumer: class org.apache.jmeter.report.processor.graph.impl.BytesThroughputGraphConsumer#stopProducing(): bytesThroughputOverTime produced 0 samples
+2026-04-17 12:52:49,030 INFO o.a.j.r.p.AbstractSampleConsumer: class org.apache.jmeter.report.processor.graph.impl.CodesPerSecondGraphConsumer#stopProducing(): codesPerSecond produced 0 samples
+2026-04-17 12:52:49,060 INFO o.a.j.r.p.AbstractSampleConsumer: class org.apache.jmeter.report.processor.graph.impl.ResponseTimeVSRequestGraphConsumer#stopProducing(): responseTimeVsRequest produced 0 samples
+2026-04-17 12:52:49,060 INFO o.a.j.r.p.AbstractSampleConsumer: class org.apache.jmeter.report.processor.FilterConsumer#stopProducing(): startIntervalControlerFilter produced 168560 samples
+2026-04-17 12:52:49,060 INFO o.a.j.r.p.AbstractSampleConsumer: class org.apache.jmeter.report.processor.graph.impl.TotalTPSGraphConsumer#stopProducing(): totalTPS produced 0 samples
+2026-04-17 12:52:49,060 INFO o.a.j.r.p.AbstractSampleConsumer: class org.apache.jmeter.report.processor.graph.impl.ActiveThreadsGraphConsumer#stopProducing(): activeThreadsOverTime produced 0 samples
+2026-04-17 12:52:49,060 INFO o.a.j.r.p.AbstractSampleConsumer: class org.apache.jmeter.report.processor.graph.impl.TimeVSThreadGraphConsumer#stopProducing(): timeVsThreads produced 0 samples
+2026-04-17 12:52:49,060 INFO o.a.j.r.p.AbstractSampleConsumer: class org.apache.jmeter.report.processor.graph.impl.ResponseTimeDistributionGraphConsumer#stopProducing(): responseTimeDistribution produced 0 samples
+2026-04-17 12:52:49,060 INFO o.a.j.r.p.AbstractSampleConsumer: class org.apache.jmeter.report.processor.graph.impl.TransactionsPerSecondGraphConsumer#stopProducing(): transactionsPerSecond produced 0 samples
+2026-04-17 12:52:49,060 INFO o.a.j.r.p.AbstractSampleConsumer: class org.apache.jmeter.report.processor.graph.impl.ResponseTimePercentilesGraphConsumer#stopProducing(): responseTimePercentiles produced 0 samples
+2026-04-17 12:52:49,062 INFO o.a.j.r.p.AbstractSampleConsumer: class org.apache.jmeter.report.processor.graph.impl.ResponseTimePercentilesOverTimeGraphConsumer#stopProducing(): responseTimePercentilesOverTime produced 0 samples
+2026-04-17 12:52:49,062 INFO o.a.j.r.p.AbstractSampleConsumer: class org.apache.jmeter.report.processor.graph.impl.ResponseTimeOverTimeGraphConsumer#stopProducing(): responseTimesOverTime produced 0 samples
+2026-04-17 12:52:49,062 INFO o.a.j.r.p.AbstractSampleConsumer: class org.apache.jmeter.report.processor.graph.impl.ConnectTimeOverTimeGraphConsumer#stopProducing(): connectTimeOverTime produced 0 samples
+2026-04-17 12:52:49,062 INFO o.a.j.r.p.AbstractSampleConsumer: class org.apache.jmeter.report.processor.graph.impl.LatencyOverTimeGraphConsumer#stopProducing(): latenciesOverTime produced 0 samples
+2026-04-17 12:52:49,062 INFO o.a.j.r.p.AbstractSampleConsumer: class org.apache.jmeter.report.processor.FilterConsumer#stopProducing(): nameFilter produced 361200 samples
+2026-04-17 12:52:49,062 INFO o.a.j.r.p.AbstractSampleConsumer: class org.apache.jmeter.report.processor.FilterConsumer#stopProducing(): dateRangeFilter produced 72240 samples
+2026-04-17 12:52:49,062 INFO o.a.j.r.p.AbstractSampleConsumer: class org.apache.jmeter.report.processor.NormalizerSampleConsumer#stopProducing(): normalizer produced 24080 samples
+2026-04-17 12:52:49,063 INFO o.a.j.r.p.CsvFileSampleSource: produce(): 24080 samples produced in 259ms on channel 0
+2026-04-17 12:52:49,063 INFO o.a.j.r.d.ReportGenerator: Exporting data using exporter:'json' of className:'org.apache.jmeter.report.dashboard.JsonExporter'
+2026-04-17 12:52:49,093 INFO o.a.j.r.d.JsonExporter: Found data for consumer statisticsSummary in context
+2026-04-17 12:52:49,093 INFO o.a.j.r.d.JsonExporter: Creating statistics for overall
+2026-04-17 12:52:49,093 INFO o.a.j.r.d.JsonExporter: Creating statistics for other transactions
+2026-04-17 12:52:49,093 INFO o.a.j.r.d.JsonExporter: Checking output folder
+2026-04-17 12:52:49,093 INFO o.a.j.r.d.JsonExporter: Writing statistics JSON to /Users/hium/.gemini/antigravity/scratch/deep-check/load/report/ec2_20260417_124727/statistics.json
+2026-04-17 12:52:49,105 INFO o.a.j.r.d.ReportGenerator: Exporting data using exporter:'html' of className:'org.apache.jmeter.report.dashboard.HtmlTemplateExporter'
+2026-04-17 12:52:49,106 INFO o.a.j.r.d.HtmlTemplateExporter: Will generate dashboard in folder: /Users/hium/.gemini/antigravity/scratch/deep-check/load/report/ec2_20260417_124727
+2026-04-17 12:52:49,138 INFO o.a.j.r.d.HtmlTemplateExporter: Report will be generated in: /Users/hium/.gemini/antigravity/scratch/deep-check/load/report/ec2_20260417_124727, creating folder structure
+2026-04-17 12:52:49,139 INFO o.a.j.r.d.TemplateVisitor: Copying folder from '/opt/homebrew/Cellar/jmeter/5.6.3/libexec/bin/report-template' to '/Users/hium/.gemini/antigravity/scratch/deep-check/load/report/ec2_20260417_124727', got message: /Users/hium/.gemini/antigravity/scratch/deep-check/load/report/ec2_20260417_124727, found non empty folder with following content [/Users/hium/.gemini/antigravity/scratch/deep-check/load/report/ec2_20260417_124727/statistics.json], will be ignored
+2026-04-17 12:52:49,229 INFO o.a.j.JMeter: Dashboard generated

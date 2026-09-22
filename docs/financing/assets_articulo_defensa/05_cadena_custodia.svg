@@ -1,0 +1,138 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1300 460" width="1300" height="460">
+<rect width="1300" height="460" fill="#ffffff"/>
+
+    <rect x="0" y="0" width="1300" height="70" fill="#0a2540"/>
+    <text x="650" y="42" font-family="Helvetica" font-weight="700" font-size="24"
+          fill="#ffffff" text-anchor="middle">CADENA DE CUSTODIA CRIPTOGRÁFICA</text>
+    <text x="650" y="62" font-family="Helvetica" font-size="13" fill="#00d2ff"
+          text-anchor="middle" letter-spacing="2.5">ISO/IEC 27037:2012  ·  eIDAS Art. 42  ·  UNE 197010:2015</text>
+    
+
+        <g>
+          <rect x="30" y="160" width="160" height="130" rx="8" ry="8"
+                fill="#0a2540" />
+          <circle cx="110" cy="190" r="18" fill="#00d2ff"/>
+          <text x="110" y="197" font-family="Helvetica" font-weight="700"
+                font-size="18" fill="#0a2540" text-anchor="middle">1</text>
+          <text x="110" y="232" font-family="Helvetica" font-weight="700"
+                font-size="14" fill="#ffffff" text-anchor="middle">INGESTA</text>
+        </g>
+        
+<text x="110" y="255" font-family="Helvetica"
+                font-size="11.5" fill="#00d2ff" opacity="0.95" text-anchor="middle">Hash SHA-256</text>
+<text x="110" y="271" font-family="Helvetica"
+                font-size="11.5" fill="#00d2ff" opacity="0.95" text-anchor="middle">Sellado eIDAS</text>
+
+            <path d="M 196 225 L 240 225" stroke="#0a2540" stroke-width="2"
+                  marker-end="url(#arrow)"/>
+            
+
+        <g>
+          <rect x="246" y="160" width="160" height="130" rx="8" ry="8"
+                fill="#0a2540" />
+          <circle cx="326" cy="190" r="18" fill="#00d2ff"/>
+          <text x="326" y="197" font-family="Helvetica" font-weight="700"
+                font-size="18" fill="#0a2540" text-anchor="middle">2</text>
+          <text x="326" y="232" font-family="Helvetica" font-weight="700"
+                font-size="14" fill="#ffffff" text-anchor="middle">REGISTRO</text>
+        </g>
+        
+<text x="326" y="255" font-family="Helvetica"
+                font-size="11.5" fill="#00d2ff" opacity="0.95" text-anchor="middle">Append-only</text>
+<text x="326" y="271" font-family="Helvetica"
+                font-size="11.5" fill="#00d2ff" opacity="0.95" text-anchor="middle">Hashes encadenados</text>
+
+            <path d="M 412 225 L 456 225" stroke="#0a2540" stroke-width="2"
+                  marker-end="url(#arrow)"/>
+            
+
+        <g>
+          <rect x="462" y="160" width="160" height="130" rx="8" ry="8"
+                fill="#0a2540" />
+          <circle cx="542" cy="190" r="18" fill="#00d2ff"/>
+          <text x="542" y="197" font-family="Helvetica" font-weight="700"
+                font-size="18" fill="#0a2540" text-anchor="middle">3</text>
+          <text x="542" y="232" font-family="Helvetica" font-weight="700"
+                font-size="14" fill="#ffffff" text-anchor="middle">ANÁLISIS</text>
+        </g>
+        
+<text x="542" y="255" font-family="Helvetica"
+                font-size="11.5" fill="#00d2ff" opacity="0.95" text-anchor="middle">Modelo + versión</text>
+<text x="542" y="271" font-family="Helvetica"
+                font-size="11.5" fill="#00d2ff" opacity="0.95" text-anchor="middle">Firma del binario</text>
+
+            <path d="M 628 225 L 672 225" stroke="#0a2540" stroke-width="2"
+                  marker-end="url(#arrow)"/>
+            
+
+        <g>
+          <rect x="678" y="160" width="160" height="130" rx="8" ry="8"
+                fill="#0a2540" />
+          <circle cx="758" cy="190" r="18" fill="#00d2ff"/>
+          <text x="758" y="197" font-family="Helvetica" font-weight="700"
+                font-size="18" fill="#0a2540" text-anchor="middle">4</text>
+          <text x="758" y="232" font-family="Helvetica" font-weight="700"
+                font-size="14" fill="#ffffff" text-anchor="middle">SELLADO</text>
+        </g>
+        
+<text x="758" y="255" font-family="Helvetica"
+                font-size="11.5" fill="#00d2ff" opacity="0.95" text-anchor="middle">Merkle root</text>
+<text x="758" y="271" font-family="Helvetica"
+                font-size="11.5" fill="#00d2ff" opacity="0.95" text-anchor="middle">de la cadena</text>
+
+            <path d="M 844 225 L 888 225" stroke="#0a2540" stroke-width="2"
+                  marker-end="url(#arrow)"/>
+            
+
+        <g>
+          <rect x="894" y="160" width="160" height="130" rx="8" ry="8"
+                fill="#0a2540" />
+          <circle cx="974" cy="190" r="18" fill="#00d2ff"/>
+          <text x="974" y="197" font-family="Helvetica" font-weight="700"
+                font-size="18" fill="#0a2540" text-anchor="middle">5</text>
+          <text x="974" y="232" font-family="Helvetica" font-weight="700"
+                font-size="14" fill="#ffffff" text-anchor="middle">INFORME</text>
+        </g>
+        
+<text x="974" y="255" font-family="Helvetica"
+                font-size="11.5" fill="#00d2ff" opacity="0.95" text-anchor="middle">UNE 197010</text>
+<text x="974" y="271" font-family="Helvetica"
+                font-size="11.5" fill="#00d2ff" opacity="0.95" text-anchor="middle">Firma perito</text>
+
+            <path d="M 1060 225 L 1104 225" stroke="#0a2540" stroke-width="2"
+                  marker-end="url(#arrow)"/>
+            
+
+        <g>
+          <rect x="1110" y="160" width="160" height="130" rx="8" ry="8"
+                fill="#0a2540" />
+          <circle cx="1190" cy="190" r="18" fill="#00d2ff"/>
+          <text x="1190" y="197" font-family="Helvetica" font-weight="700"
+                font-size="18" fill="#0a2540" text-anchor="middle">6</text>
+          <text x="1190" y="232" font-family="Helvetica" font-weight="700"
+                font-size="14" fill="#ffffff" text-anchor="middle">VERIFICACIÓN</text>
+        </g>
+        
+<text x="1190" y="255" font-family="Helvetica"
+                font-size="11.5" fill="#00d2ff" opacity="0.95" text-anchor="middle">Pública</text>
+<text x="1190" y="271" font-family="Helvetica"
+                font-size="11.5" fill="#00d2ff" opacity="0.95" text-anchor="middle">Sin auth</text>
+
+    <defs>
+      <marker id="arrow" markerWidth="10" markerHeight="10" refX="6" refY="5"
+              orient="auto" markerUnits="strokeWidth">
+        <path d="M 0 0 L 10 5 L 0 10 Z" fill="#0a2540"/>
+      </marker>
+    </defs>
+    
+
+    <rect x="60" y="320" width="1180" height="80" rx="6" fill="#f3f6fb"/>
+    <text x="80" y="345" font-family="Helvetica" font-weight="700" font-size="14"
+          fill="#0a2540">Validez probatoria</text>
+    <text x="80" y="368" font-family="Helvetica" font-size="13" fill="#4a5568">
+      Cualquier alteración rompe la cadena de forma detectable. Sello de tiempo cualificado eIDAS:
+    </text>
+    <text x="80" y="388" font-family="Helvetica" font-size="13" fill="#4a5568">
+      presunción legal de exactitud temporal en la Unión Europea (Art. 42).
+    </text>
+    </svg>

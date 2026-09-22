@@ -1,0 +1,23 @@
+# Sample BPAS agent configuration for the Docker deployment.
+#
+# Mount this file read-only at /etc/bpas/agent.toml inside the container.
+
+buffer_capacity = 4096
+
+[tpm]
+use_tpm = false
+software_key_path = "/etc/bpas/mtls/ca.key"
+pcr_indices = [0, 2, 7]
+
+[transport]
+endpoint = "https://bpas-worker:8443"
+client_cert = "/etc/bpas/mtls/client.crt"
+client_key  = "/etc/bpas/mtls/client.key"
+server_ca   = "/etc/bpas/mtls/ca.crt"
+flush_interval_ms = 1000
+max_batch = 256
+
+[capture]
+skip_bare_modifiers = true
+capture_mouse_movement = true
+capture_window_events = true

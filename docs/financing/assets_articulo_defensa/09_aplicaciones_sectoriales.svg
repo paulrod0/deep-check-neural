@@ -1,0 +1,70 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 800" width="1200" height="800">
+<rect width="1200" height="800" fill="#ffffff"/>
+
+    <rect x="0" y="0" width="1200" height="70" fill="#0a2540"/>
+    <text x="600" y="44" font-family="Helvetica" font-weight="700" font-size="22" fill="#ffffff"
+          text-anchor="middle">APLICACIÓN A SECTORES SENSIBLES</text>
+    <text x="600" y="62" font-family="Helvetica" font-size="13" fill="#00d2ff" text-anchor="middle"
+          letter-spacing="2">DEFENSA · SEGURIDAD · INFRAESTRUCTURAS CRÍTICAS</text>
+    
+<circle cx="600" cy="430" r="80" fill="#0a2540"/>
+<circle cx="600" cy="430" r="80" fill="none" stroke="#00d2ff" stroke-width="3"/>
+<text x="600" y="422" font-family="Helvetica" font-weight="700" font-size="20" fill="#ffffff" text-anchor="middle">Deep-Check</text>
+<text x="600" y="444" font-family="Helvetica" font-size="11" fill="#00d2ff" text-anchor="middle" letter-spacing="2">VERITAS ENGINE</text>
+<line x1="600.0" y1="300.0" x2="600.0" y2="140.0" stroke="#00d2ff" stroke-width="2"/>
+<rect x="485.0" y="70.0" width="230" height="80" rx="8" fill="#ffffff" stroke="#0a2540" stroke-width="1.5"/>
+<rect x="485.0" y="70.0" width="6" height="80" rx="3" fill="#00d2ff"/>
+<text x="503.0" y="94.0" font-family="Helvetica" font-weight="700" font-size="14" fill="#0a2540">Defensa</text>
+<text x="503.0" y="114.0" font-family="Helvetica" font-size="10.5" fill="#4a5568">· Briefings de mando</text>
+<text x="503.0" y="129.0" font-family="Helvetica" font-size="10.5" fill="#4a5568">· Contrainteligencia</text>
+<text x="503.0" y="144.0" font-family="Helvetica" font-size="10.5" fill="#4a5568">· Acceso remoto</text>
+<line x1="691.9238815542512" y1="338.0761184457488" x2="805.0609665440988" y2="224.93903345590124" stroke="#00d2ff" stroke-width="2"/>
+<rect x="711.2741699796952" y="163.7258300203048" width="230" height="80" rx="8" fill="#ffffff" stroke="#0a2540" stroke-width="1.5"/>
+<rect x="711.2741699796952" y="163.7258300203048" width="6" height="80" rx="3" fill="#00d2ff"/>
+<text x="729.2741699796952" y="187.7258300203048" font-family="Helvetica" font-weight="700" font-size="14" fill="#0a2540">Banca</text>
+<text x="729.2741699796952" y="207.7258300203048" font-family="Helvetica" font-size="10.5" fill="#4a5568">· CEO fraud</text>
+<text x="729.2741699796952" y="222.7258300203048" font-family="Helvetica" font-size="10.5" fill="#4a5568">· KYC reforzado</text>
+<text x="729.2741699796952" y="237.7258300203048" font-family="Helvetica" font-size="10.5" fill="#4a5568">· Operaciones alto importe</text>
+<line x1="730.0" y1="430.0" x2="890.0" y2="430.0" stroke="#00d2ff" stroke-width="2"/>
+<rect x="805.0" y="390.0" width="230" height="80" rx="8" fill="#ffffff" stroke="#0a2540" stroke-width="1.5"/>
+<rect x="805.0" y="390.0" width="6" height="80" rx="3" fill="#00d2ff"/>
+<text x="823.0" y="414.0" font-family="Helvetica" font-weight="700" font-size="14" fill="#0a2540">Sanidad</text>
+<text x="823.0" y="434.0" font-family="Helvetica" font-size="10.5" fill="#4a5568">· Receta electrónica</text>
+<text x="823.0" y="449.0" font-family="Helvetica" font-size="10.5" fill="#4a5568">· Telemedicina</text>
+<text x="823.0" y="464.0" font-family="Helvetica" font-size="10.5" fill="#4a5568">· Historiales VIP</text>
+<line x1="691.9238815542512" y1="521.9238815542511" x2="805.0609665440988" y2="635.0609665440987" stroke="#00d2ff" stroke-width="2"/>
+<rect x="711.2741699796952" y="616.2741699796951" width="230" height="80" rx="8" fill="#ffffff" stroke="#0a2540" stroke-width="1.5"/>
+<rect x="711.2741699796952" y="616.2741699796951" width="6" height="80" rx="3" fill="#00d2ff"/>
+<text x="729.2741699796952" y="640.2741699796951" font-family="Helvetica" font-weight="700" font-size="14" fill="#0a2540">Energía</text>
+<text x="729.2741699796952" y="660.2741699796951" font-family="Helvetica" font-size="10.5" fill="#4a5568">· SCADA</text>
+<text x="729.2741699796952" y="675.2741699796951" font-family="Helvetica" font-size="10.5" fill="#4a5568">· Operadores remotos</text>
+<text x="729.2741699796952" y="690.2741699796951" font-family="Helvetica" font-size="10.5" fill="#4a5568">· Cadena de mantenimiento</text>
+<line x1="600.0" y1="560.0" x2="600.0" y2="720.0" stroke="#00d2ff" stroke-width="2"/>
+<rect x="485.0" y="710.0" width="230" height="80" rx="8" fill="#ffffff" stroke="#0a2540" stroke-width="1.5"/>
+<rect x="485.0" y="710.0" width="6" height="80" rx="3" fill="#00d2ff"/>
+<text x="503.0" y="734.0" font-family="Helvetica" font-weight="700" font-size="14" fill="#0a2540">Telecom</text>
+<text x="503.0" y="754.0" font-family="Helvetica" font-size="10.5" fill="#4a5568">· Centros de datos</text>
+<text x="503.0" y="769.0" font-family="Helvetica" font-size="10.5" fill="#4a5568">· Cambios config núcleo</text>
+<text x="503.0" y="784.0" font-family="Helvetica" font-size="10.5" fill="#4a5568">· Privilegios</text>
+<line x1="508.0761184457488" y1="521.9238815542512" x2="394.93903345590127" y2="635.0609665440988" stroke="#00d2ff" stroke-width="2"/>
+<rect x="258.72583002030484" y="616.2741699796952" width="230" height="80" rx="8" fill="#ffffff" stroke="#0a2540" stroke-width="1.5"/>
+<rect x="258.72583002030484" y="616.2741699796952" width="6" height="80" rx="3" fill="#00d2ff"/>
+<text x="276.72583002030484" y="640.2741699796952" font-family="Helvetica" font-weight="700" font-size="14" fill="#0a2540">AAPP</text>
+<text x="276.72583002030484" y="660.2741699796952" font-family="Helvetica" font-size="10.5" fill="#4a5568">· Firma digital</text>
+<text x="276.72583002030484" y="675.2741699796952" font-family="Helvetica" font-size="10.5" fill="#4a5568">· Licitaciones</text>
+<text x="276.72583002030484" y="690.2741699796952" font-family="Helvetica" font-size="10.5" fill="#4a5568">· Concesiones sensibles</text>
+<line x1="470.0" y1="430.0" x2="310.0" y2="430.00000000000006" stroke="#00d2ff" stroke-width="2"/>
+<rect x="165.0" y="390.00000000000006" width="230" height="80" rx="8" fill="#ffffff" stroke="#0a2540" stroke-width="1.5"/>
+<rect x="165.0" y="390.00000000000006" width="6" height="80" rx="3" fill="#00d2ff"/>
+<text x="183.0" y="414.00000000000006" font-family="Helvetica" font-weight="700" font-size="14" fill="#0a2540">Transporte</text>
+<text x="183.0" y="434.00000000000006" font-family="Helvetica" font-size="10.5" fill="#4a5568">· Torres control</text>
+<text x="183.0" y="449.00000000000006" font-family="Helvetica" font-size="10.5" fill="#4a5568">· Aduanas</text>
+<text x="183.0" y="464.00000000000006" font-family="Helvetica" font-size="10.5" fill="#4a5568">· Documentación oficial</text>
+<line x1="508.0761184457488" y1="338.0761184457488" x2="394.93903345590115" y2="224.93903345590124" stroke="#00d2ff" stroke-width="2"/>
+<rect x="258.7258300203047" y="163.7258300203048" width="230" height="80" rx="8" fill="#ffffff" stroke="#0a2540" stroke-width="1.5"/>
+<rect x="258.7258300203047" y="163.7258300203048" width="6" height="80" rx="3" fill="#00d2ff"/>
+<text x="276.7258300203047" y="187.7258300203048" font-family="Helvetica" font-weight="700" font-size="14" fill="#0a2540">Seguridad</text>
+<text x="276.7258300203047" y="207.7258300203048" font-family="Helvetica" font-size="10.5" fill="#4a5568">· Onboarding</text>
+<text x="276.7258300203047" y="222.7258300203048" font-family="Helvetica" font-size="10.5" fill="#4a5568">· Forense post-incidente</text>
+<text x="276.7258300203047" y="237.7258300203048" font-family="Helvetica" font-size="10.5" fill="#4a5568">· Supply chain</text>
+</svg>

@@ -1,0 +1,51 @@
+# syntax=docker/dockerfile:1.6
+#
+# BPAS inference worker — FastAPI + Torch (CPU by default, CUDA-capable).
+#
+# Stage 1 installs Python dependencies into a virtualenv.
+# Stage 2 is a slim runtime image that copies the venv and the ml package.
+
+FROM python:3.11-slim-bookworm AS deps
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1
+
+WORKDIR /app
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        build-essential gcc \
+    && rm -rf /var/lib/apt/lists/*
+
+# Minimal runtime dependency set.
+COPY docker/bpas/requirements.worker.txt ./requirements.txt
+RUN pip install --prefix=/install -r requirements.txt
+
+
+# ---------------------------------------------------------------------- #
+
+FROM python:3.11-slim-bookworm AS runtime
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    BPAS_HOST=0.0.0.0 \
+    BPAS_PORT=8443
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        libgomp1 ca-certificates curl \
+    && rm -rf /var/lib/apt/lists/* \
+    && useradd --system --home /app --shell /sbin/nologin bpas
+
+COPY --from=deps /install /usr/local
+COPY ml/ /app/ml/
+
+WORKDIR /app
+USER bpas:bpas
+
+EXPOSE 8443
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
+    CMD curl -fksS --cacert /etc/bpas/ca.crt "https://127.0.0.1:${BPAS_PORT}/v1/health" || exit 1
+
+ENTRYPOINT ["python", "-m", "ml.bpas.service.server"]

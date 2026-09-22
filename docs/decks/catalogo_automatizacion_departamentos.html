@@ -1,0 +1,733 @@
+<!doctype html>
+<html lang="es">
+<meta charset="utf-8">
+<title>Catálogo de automatización por departamentos — Pablo López</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+:root{
+  --bg:#0A0E13; --bg2:#0E141B; --panel:#131B24;
+  --line:#26333F; --hair:#1D2833;
+  --text:#EAEEF3; --muted:#8A97A6; --faint:#5D6B7A;
+  --amber:#F2A24B; --amber-2:#F7C27A;
+  --blue:#5B8DEF; --green:#42B884;
+  --accent:var(--amber); --accent-2:var(--amber-2);
+  --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,Roboto,"Helvetica Neue",Arial,sans-serif;
+  --mono:ui-monospace,"SF Mono","JetBrains Mono","Roboto Mono",Menlo,Consolas,monospace;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#05080B;font-family:var(--sans);color:var(--text);-webkit-font-smoothing:antialiased}
+
+.page{
+  position:relative;
+  width:210mm;height:297mm;
+  margin:0 auto 8mm;
+  padding:16mm 15mm 13mm;
+  display:flex;flex-direction:column;
+  overflow:hidden;
+  background:
+    radial-gradient(120% 70% at 88% 4%, color-mix(in srgb,var(--accent) 7%, transparent) 0%, transparent 52%),
+    radial-gradient(130% 80% at 45% 112%, color-mix(in srgb,var(--accent) 12%, transparent) 0%, transparent 58%),
+    linear-gradient(var(--hair) 1px,transparent 1px) 0 0/100% 56px,
+    linear-gradient(90deg,var(--hair) 1px,transparent 1px) 0 0/56px 100%,
+    var(--bg);
+  background-blend-mode:normal,normal,soft-light,soft-light,normal;
+  -webkit-print-color-adjust:exact;print-color-adjust:exact;
+}
+
+h1,h2{font-weight:800;letter-spacing:-.028em;line-height:1.04;text-wrap:balance}
+h1{font-size:40pt}
+h2{font-size:24pt}
+.l2{color:var(--accent)}
+.lede{font-size:11.5pt;color:var(--muted);line-height:1.5;max-width:62ch}
+.lede.sub{margin-top:10px;font-size:10.5pt}
+
+.eyebrow{
+  font-family:var(--mono);font-size:7.6pt;font-weight:500;
+  letter-spacing:.24em;text-transform:uppercase;color:var(--accent);
+  display:flex;align-items:center;gap:9px;
+}
+.eyebrow::before{content:"";width:22px;height:1px;background:var(--accent);display:inline-block}
+.eyebrow.mt{margin-top:22px}
+.eyebrow.sm{margin-top:14px;font-size:7pt}
+.brandmark{font-family:var(--mono);font-size:7.4pt;letter-spacing:.18em;color:var(--faint);text-transform:uppercase}
+.brandmark b{color:var(--muted);font-weight:600}
+.ml{font-family:var(--mono);font-size:6.8pt;letter-spacing:.14em;text-transform:uppercase;color:var(--faint);display:block}
+.mv2{font-family:var(--mono);font-size:9.4pt;color:var(--text);margin-top:5px;display:block}
+
+.pagefoot{
+  position:absolute;left:15mm;right:15mm;bottom:7mm;
+  display:flex;justify-content:space-between;
+  font-family:var(--mono);font-size:6.6pt;letter-spacing:.16em;
+  color:var(--faint);text-transform:uppercase;
+  border-top:1px solid var(--hair);padding-top:5px;
+}
+
+/* ---- portada / cierre ---- */
+.cover{justify-content:space-between}
+.covertop{display:flex;justify-content:space-between;align-items:baseline}
+.coverbody{flex:1 1 auto;display:flex;flex-direction:column;justify-content:center;gap:18px}
+.coverfoot{display:flex;gap:34px;border-top:1px solid var(--line);padding-top:14px}
+.strip{display:flex;flex-wrap:wrap;gap:7px;margin-top:6px}
+.chip{
+  font-family:var(--mono);font-size:7.6pt;letter-spacing:.06em;color:var(--muted);
+  border:1px solid var(--line);border-radius:100px;padding:6px 12px;
+  background:color-mix(in srgb,var(--panel) 60%,transparent);
+}
+.end h1{font-size:34pt}
+
+/* ---- tarjetas ---- */
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:11px;margin-top:14px}
+.grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:11px;margin-top:16px}
+.grid4{display:grid;grid-template-columns:repeat(2,1fr);gap:11px;margin-top:16px}
+.card{
+  border:1px solid var(--line);border-radius:11px;
+  background:linear-gradient(180deg,var(--panel) 0%,var(--bg2) 100%);
+  padding:15px 16px 16px;display:flex;flex-direction:column;gap:7px;
+  position:relative;overflow:hidden;
+}
+.card::before{content:"";position:absolute;top:0;left:0;width:100%;height:2px;
+  background:linear-gradient(90deg,var(--accent),transparent 70%);opacity:.8}
+.card .cn{font-family:var(--mono);font-size:7.4pt;color:var(--accent);letter-spacing:.14em}
+.card h3{font-size:12pt;font-weight:700;letter-spacing:-.01em}
+.card p{color:var(--muted);font-size:9.4pt;line-height:1.48}
+.myth{border-left:2px solid var(--line);padding:4px 0 4px 14px}
+.myth h4{font-size:10.4pt;font-weight:700;color:var(--accent-2)}
+.myth p{color:var(--muted);font-size:9.3pt;line-height:1.5;margin-top:5px}
+
+/* ---- índice ---- */
+.index{list-style:none;margin-top:18px;display:grid;grid-template-columns:1fr 1fr;gap:0 26px}
+.index li{
+  display:grid;grid-template-columns:auto 1fr;gap:3px 11px;
+  align-items:baseline;padding:8px 0;border-bottom:1px solid var(--hair);
+}
+.ix{font-family:var(--mono);font-size:8pt;color:var(--accent);letter-spacing:.1em}
+.ixn{font-size:10.4pt;font-weight:700;letter-spacing:-.01em}
+.ixt{grid-column:2;font-size:8.6pt;color:var(--faint);line-height:1.35}
+
+/* ---- departamento ---- */
+.depbottom{margin-top:auto;display:flex;flex-direction:column;gap:14px}
+.mid{justify-content:center;padding-bottom:20mm}
+.dephead{display:flex;gap:14px;align-items:flex-start}
+.depcode{
+  font-family:var(--mono);font-size:8pt;color:var(--accent);letter-spacing:.12em;
+  border:1px solid color-mix(in srgb,var(--accent) 40%,var(--line));
+  border-radius:6px;padding:5px 8px;margin-top:4px;flex:0 0 auto;
+}
+.deph2{font-size:22pt}
+.deptag{color:var(--accent-2);font-size:10.6pt;margin-top:6px;font-weight:500}
+.hoy{
+  margin-top:16px;border:1px solid var(--line);border-radius:10px;
+  background:color-mix(in srgb,var(--panel) 55%,transparent);
+  padding:14px 16px;display:flex;gap:14px;align-items:flex-start;
+}
+.hoyl{
+  font-family:var(--mono);font-size:6.8pt;letter-spacing:.16em;text-transform:uppercase;
+  color:var(--faint);border-right:1px solid var(--line);padding-right:13px;margin-top:2px;flex:0 0 auto;
+}
+.hoy p{color:var(--muted);font-size:10pt;line-height:1.55}
+.proclist{list-style:none;margin-top:12px;columns:2;column-gap:22px}
+.proclist li{
+  break-inside:avoid;position:relative;padding:0 0 17px 14px;
+  color:var(--text);font-size:10.4pt;line-height:1.5;
+}
+.proclist li::before{content:"";position:absolute;left:0;top:.62em;width:7px;height:1px;background:var(--accent)}
+
+.senales{
+  border:1px solid var(--line);border-left:2px solid var(--accent);
+  border-radius:0 10px 10px 0;padding:12px 16px 13px;
+  background:color-mix(in srgb,var(--panel) 40%,transparent);
+}
+.senales ul{list-style:none;display:grid;grid-template-columns:repeat(3,1fr);gap:9px 18px;margin-top:9px}
+.senales li{
+  color:var(--muted);font-size:9pt;line-height:1.4;
+  position:relative;padding-left:15px;
+}
+.senales li::before{
+  content:"→";position:absolute;left:0;top:0;
+  color:var(--accent);font-size:8.4pt;
+}
+.depfoot{display:flex;gap:24px;align-items:flex-end;border-top:1px solid var(--line);padding-top:13px;margin-bottom:4mm}
+.metrics{display:flex;gap:22px;flex:0 0 auto}
+.metric{display:flex;flex-direction:column;gap:2px}
+.metric .mv{
+  font-family:var(--mono);font-variant-numeric:tabular-nums;
+  font-size:14pt;font-weight:600;color:var(--accent-2);letter-spacing:-.01em;
+}
+.palancas{flex:1 1 auto}
+.tags{display:flex;flex-wrap:wrap;gap:5px;margin-top:6px}
+.tags span{
+  font-family:var(--mono);font-size:7.2pt;color:var(--muted);
+  border:1px solid var(--line);border-radius:6px;padding:4px 7px;
+  background:color-mix(in srgb,var(--panel) 50%,transparent);
+}
+
+/* ---- casos ---- */
+.caso{
+  border:1px solid var(--line);border-radius:11px;background:var(--bg2);
+  padding:15px 15px 16px;display:flex;flex-direction:column;gap:7px;
+}
+.caso .cn{font-family:var(--mono);font-size:7pt;color:var(--faint);letter-spacing:.12em;text-transform:uppercase}
+.caso h3{font-size:11.6pt;font-weight:700;letter-spacing:-.01em;line-height:1.2}
+.caso p{color:var(--muted);font-size:9.2pt;line-height:1.48;flex:1 1 auto}
+.casoK{
+  font-family:var(--mono);font-size:7.6pt;letter-spacing:.06em;color:var(--green);
+  border-top:1px solid var(--hair);padding-top:9px;margin-top:3px;
+}
+
+/* ---- proceso ---- */
+.steps{list-style:none;display:grid;grid-template-columns:repeat(2,1fr);gap:16px 22px;margin-top:20px}
+.steps li{border-top:1px solid var(--line);padding-top:12px}
+.stepn{font-family:var(--mono);font-size:15pt;font-weight:600;color:var(--accent);display:block}
+.steps h3{font-size:12.4pt;font-weight:700;margin-top:7px;letter-spacing:-.01em}
+.steps p{color:var(--muted);font-size:9.4pt;line-height:1.5;margin-top:6px}
+.fine{margin-top:20px;color:var(--faint);font-size:8.8pt;line-height:1.5;font-style:italic}
+
+@page{size:A4;margin:0}
+@media print{
+  body{background:none}
+  .page{margin:0;page-break-after:always;break-after:page}
+  .page:last-child{page-break-after:auto;break-after:auto}
+}
+</style>
+<section class="page cover">
+
+<div class="covertop">
+  <span class="brandmark"><b>PABLO LÓPEZ</b> · GRUPO OPTIMUS / ZEUS ENERGÍA</span>
+  <span class="brandmark">MADRID · 2026</span>
+</div>
+<div class="coverbody">
+  <p class="eyebrow">Catálogo de automatización</p>
+  <h1>Qué se puede<br>automatizar en tu<br><span class="l2">empresa, departamento<br>por departamento.</span></h1>
+  <p class="lede">Dieciocho áreas y 267 procesos concretos. Si un trabajo tiene reglas
+  y se repite, se automatiza. Este documento es el mapa completo para encontrar los tuyos.</p>
+  <div class="strip"><span class='chip'>Automatización de procesos</span><span class='chip'>Apps a medida</span><span class='chip'>IA aplicada</span><span class='chip'>Integraciones</span></div>
+</div>
+<div class="coverfoot">
+  <div><span class="ml">Contacto</span><span class="mv2">pablo.lprdz@gmail.com</span></div>
+  <div><span class="ml">Base</span><span class="mv2">Madrid, España</span></div>
+  <div><span class="ml">Áreas</span><span class="mv2">18 departamentos</span></div>
+</div>
+<div class="pagefoot"><span></span><span></span></div>
+</section>
+<section class="page mid">
+
+<p class="eyebrow">Cómo se decide</p>
+<h2>Casi todo se puede automatizar.<br>La pregunta es por dónde empezar.</h2>
+<p class="lede sub">Un proceso es buen candidato cuando cumple al menos dos de estas cuatro condiciones.
+Cuando cumple las cuatro, se paga solo en semanas.</p>
+<div class="grid4">
+  <article class="card sm"><span class="cn">01</span><h3>Se repite</h3><p>Si se hace más de una vez por semana, cada minuto ahorrado se multiplica por cien al año.</p></article><article class="card sm"><span class="cn">02</span><h3>Tiene reglas</h3><p>Aunque sean reglas complicadas y llenas de excepciones. Las excepciones también se programan.</p></article><article class="card sm"><span class="cn">03</span><h3>Duele el error</h3><p>Un dato mal tecleado que llega a una factura, a un pedido o a Hacienda cuesta mucho más que el minuto que se tardó.</p></article><article class="card sm"><span class="cn">04</span><h3>Depende de una persona</h3><p>Si el proceso se para cuando esa persona se va de vacaciones, es un riesgo, no un proceso.</p></article>
+</div>
+<p class="eyebrow mt">Lo que suele frenar</p>
+<div class="grid2">
+  <article class="myth"><h4>«Mi proceso es demasiado particular»</h4><p>Casi siempre lo particular es el criterio, no la mecánica. El criterio se recoge una vez y se aplica siempre igual.</p></article><article class="myth"><h4>«Habría que cambiar de programa»</h4><p>No. Se automatiza sobre lo que ya usas. Incluso sobre programas cerrados que no permiten integración.</p></article><article class="myth"><h4>«Eso es para empresas grandes»</h4><p>Al revés: cuanto más pequeño es el equipo, más pesa cada hora que se va en tareas repetitivas.</p></article><article class="myth"><h4>«Va a sustituir a mi gente»</h4><p>Sustituye el tecleo, no a las personas. La misma plantilla atiende más clientes y comete menos errores.</p></article>
+</div>
+<div class="pagefoot"><span>PABLO LÓPEZ · GRUPO OPTIMUS / ZEUS ENERGÍA</span><span>01</span></div>
+</section>
+<section class="page mid">
+
+<p class="eyebrow">Índice</p>
+<h2>Los 18 departamentos.</h2>
+<p class="lede sub">Cada uno ocupa una página: lo que pasa hoy, la lista de procesos que se automatizan
+y lo que se gana con ello.</p>
+<ol class="index"><li><span class="ix">D01</span><span class="ixn">Dirección y control de gestión</span><span class="ixt">Decidir sobre el dato de ayer, no sobre el del mes pasado.</span></li><li><span class="ix">D02</span><span class="ixn">Administración y contabilidad</span><span class="ixt">El tecleo de datos lo hace la máquina.</span></li><li><span class="ix">D03</span><span class="ixn">Finanzas y tesorería</span><span class="ixt">Saber lo que va a pasar en la cuenta antes de que pase.</span></li><li><span class="ix">D04</span><span class="ixn">Facturación, cobros y morosidad</span><span class="ixt">Cobrar antes, reclamar solo y sin desgaste.</span></li><li><span class="ix">D05</span><span class="ixn">Ventas y desarrollo de negocio</span><span class="ixt">Que el comercial venda, no que rellene formularios.</span></li><li><span class="ix">D06</span><span class="ixn">Marketing y contenidos</span><span class="ixt">Presencia constante sin una agencia detrás.</span></li><li><span class="ix">D07</span><span class="ixn">Atención al cliente y soporte</span><span class="ixt">Responder siempre, a cualquier hora, con tu criterio.</span></li><li><span class="ix">D08</span><span class="ixn">Compras y proveedores</span><span class="ixt">Comprar al precio pactado, con el proveedor en regla.</span></li><li><span class="ix">D09</span><span class="ixn">Logística, almacén e inventario</span><span class="ixt">Saber qué hay, dónde está y cuándo llega.</span></li><li><span class="ix">D10</span><span class="ixn">Operaciones y producción</span><span class="ixt">La planta se mide sola.</span></li><li><span class="ix">D11</span><span class="ixn">Ingeniería, técnica y proyectos</span><span class="ixt">El cálculo y la memoria técnica, resueltos con los datos del proyecto.</span></li><li><span class="ix">D12</span><span class="ixn">Recursos humanos</span><span class="ixt">Menos papeleo por persona, más personas atendidas.</span></li><li><span class="ix">D13</span><span class="ixn">Calidad, cumplimiento y auditoría</span><span class="ixt">Llegar a la auditoría con todo hecho.</span></li><li><span class="ix">D14</span><span class="ixn">Legal y contratación</span><span class="ixt">Contratos que se revisan, se firman y no se olvidan.</span></li><li><span class="ix">D15</span><span class="ixn">IT y sistemas</span><span class="ixt">Que los programas que ya tienes se hablen entre ellos.</span></li><li><span class="ix">D16</span><span class="ixn">Postventa, mantenimiento y SAT</span><span class="ixt">El técnico cierra el aviso en casa del cliente.</span></li><li><span class="ix">D17</span><span class="ixn">Conocimiento interno y formación</span><span class="ixt">Que lo que sabe la empresa no se vaya con las personas.</span></li><li><span class="ix">D18</span><span class="ixn">Seguridad, identidad y antifraude</span><span class="ixt">Saber que quien está al otro lado es quien dice ser.</span></li></ol>
+<div class="pagefoot"><span>PABLO LÓPEZ · GRUPO OPTIMUS / ZEUS ENERGÍA</span><span>02</span></div>
+</section>
+<section class="page dep">
+
+<div class="dephead">
+  <span class="depcode">D01</span>
+  <div>
+    <h2 class="deph2">Dirección y control de gestión</h2>
+    <p class="deptag">Decidir sobre el dato de ayer, no sobre el del mes pasado.</p>
+  </div>
+</div>
+<div class="hoy"><span class="hoyl">Hoy</span><p>El cuadro de mando se monta a mano en Excel el día 10, con datos de tres sitios que nunca cuadran. Cuando por fin está listo, ya no sirve para decidir.</p></div>
+<p class="eyebrow sm">Procesos que se automatizan</p>
+<ul class="proclist"><li>Cuadro de mando único que se actualiza solo: ventas, margen, caja, cartera y producción</li><li>Consolidación automática de ERP, CRM, banco y hojas de cálculo sueltas</li><li>Informe mensual de dirección redactado y enviado sin que nadie lo toque</li><li>Alertas cuando un indicador se sale de rango: margen, morosidad, stock, desvío de obra</li><li>Previsión de ventas y de tesorería a 3–6 meses con el histórico real</li><li>Comparativa presupuesto contra real por centro de coste, delegación o proyecto</li><li>Ranking automático de clientes, productos, delegaciones y comerciales</li><li>Actas y resúmenes de reunión desde el audio, con las tareas ya repartidas</li><li>Panel propio para socios, consejo o inversores, con su nivel de acceso</li><li>Detección de anomalías y desviaciones antes del cierre, no después</li><li>Informes a medida para cada responsable, solo con lo que le toca</li><li>Consolidación de varias sociedades o delegaciones en un único cierre</li><li>Simulación de escenarios: sube un coste, cae un cliente, abres delegación</li><li>Seguimiento de objetivos por área con semáforo semanal</li><li>Envío del informe por correo o WhatsApp a quien lo necesita, sin pedirlo</li></ul>
+<div class="depbottom">
+<div class="senales">
+  <span class="ml">Señales de que te toca</span>
+  <ul><li>Cierras el mes y el informe llega el día 15</li><li>Cada área trae sus propios números y no cuadran</li><li>Decides con la sensación, no con el dato</li></ul>
+</div>
+<div class="depfoot">
+  <div class="metrics"><div class="metric"><span class="mv">2 min</span><span class="ml">montar el informe</span></div><div class="metric"><span class="mv">1 sola</span><span class="ml">versión de la verdad</span></div><div class="metric"><span class="mv">Diario</span><span class="ml">en vez de mensual</span></div></div>
+  <div class="palancas"><span class="ml">Con qué</span><div class="tags"><span>Integración ERP/CRM</span><span>Almacén de datos</span><span>Paneles web</span><span>Alertas</span><span>Previsión</span></div></div>
+</div>
+</div>
+<div class="pagefoot"><span>PABLO LÓPEZ · GRUPO OPTIMUS / ZEUS ENERGÍA</span><span>03</span></div>
+</section>
+<section class="page dep">
+
+<div class="dephead">
+  <span class="depcode">D02</span>
+  <div>
+    <h2 class="deph2">Administración y contabilidad</h2>
+    <p class="deptag">El tecleo de datos lo hace la máquina.</p>
+  </div>
+</div>
+<div class="hoy"><span class="hoyl">Hoy</span><p>Alguien pica facturas una por una. Cada error se paga dos veces: al detectarlo y al corregirlo. Y el cierre siempre llega tarde.</p></div>
+<p class="eyebrow sm">Procesos que se automatizan</p>
+<ul class="proclist"><li>Lectura automática de facturas de proveedor desde PDF, foto o correo</li><li>Extracción de base, IVA, retención, CIF, vencimiento y cuenta contable</li><li>Casación automática de factura contra albarán y contra pedido</li><li>Conciliación bancaria contra el extracto (norma 43) sin repasar línea a línea</li><li>Archivo documental con nombre normalizado y búsqueda instantánea</li><li>Modelos de Hacienda (303, 111, 130, 347, 349) con los datos ya cuadrados</li><li>Detección de duplicados, importes fuera de contrato y facturas repetidas</li><li>Envío de facturas de venta al cliente y a la plataforma que exija cada uno</li><li>Gastos y tickets de empleados: foto, validación y contabilización</li><li>Cierre mensual asistido con una lista de comprobación que se marca sola</li><li>Remesas y ficheros bancarios generados desde la contabilidad</li><li>Aviso automático al responsable cuando falta una factura o un justificante</li><li>Contabilización automática de nóminas y de seguros sociales</li><li>Control de amortizaciones e inmovilizado</li><li>Circuito de aprobación de facturas por importe y por responsable</li><li>Cuadro para la gestoría o el auditor, montado sin pedir nada a nadie</li></ul>
+<div class="depbottom">
+<div class="senales">
+  <span class="ml">Señales de que te toca</span>
+  <ul><li>Hay una persona dedicada a picar facturas</li><li>El cierre contable siempre se retrasa</li><li>Han aparecido facturas pagadas dos veces</li></ul>
+</div>
+<div class="depfoot">
+  <div class="metrics"><div class="metric"><span class="mv">95 %</span><span class="ml">menos tecleo</span></div><div class="metric"><span class="mv">Días</span><span class="ml">en vez de semanas</span></div><div class="metric"><span class="mv">100 %</span><span class="ml">trazabilidad</span></div></div>
+  <div class="palancas"><span class="ml">Con qué</span><div class="tags"><span>OCR + IA de documentos</span><span>Integración ERP</span><span>Norma 43</span><span>Validación de reglas</span></div></div>
+</div>
+</div>
+<div class="pagefoot"><span>PABLO LÓPEZ · GRUPO OPTIMUS / ZEUS ENERGÍA</span><span>04</span></div>
+</section>
+<section class="page dep">
+
+<div class="dephead">
+  <span class="depcode">D03</span>
+  <div>
+    <h2 class="deph2">Finanzas y tesorería</h2>
+    <p class="deptag">Saber lo que va a pasar en la cuenta antes de que pase.</p>
+  </div>
+</div>
+<div class="hoy"><span class="hoyl">Hoy</span><p>La previsión de caja vive en la cabeza de una persona y en un Excel que solo entiende ella. Las sorpresas llegan el día del vencimiento.</p></div>
+<p class="eyebrow sm">Procesos que se automatizan</p>
+<ul class="proclist"><li>Previsión de caja diaria a partir de cobros y pagos reales, no estimados</li><li>Remesas SEPA de cobro y de pago generadas, validadas y enviadas</li><li>Control de pólizas, líneas de crédito, avales y vencimientos financieros</li><li>Escenarios «qué pasa si»: se retrasa un cobro grande, suben los tipos, cae un cliente</li><li>Conciliación de comisiones bancarias y detección de cargos indebidos</li><li>Seguimiento de subvenciones, hitos y plazos de justificación</li><li>Reporting a banco e inversores con el mismo formato cada mes</li><li>Coste y margen por proyecto en tiempo real, no al terminar</li><li>Alertas de saldo mínimo y de descubierto previsto con días de antelación</li><li>Control de gasto por tarjeta, delegación y responsable</li><li>Cuadre automático entre contabilidad y banco</li><li>Presupuesto anual y su seguimiento mes a mes</li><li>Rentabilidad real por cliente, producto y delegación</li><li>Cálculo de precios y de punto muerto con el coste actualizado</li><li>Aviso de vencimiento de pagarés, confirming y efectos</li></ul>
+<div class="depbottom">
+<div class="senales">
+  <span class="ml">Señales de que te toca</span>
+  <ul><li>La previsión de caja está en un Excel personal</li><li>Te enteras del descubierto el mismo día</li><li>No sabes qué proyecto gana dinero de verdad</li></ul>
+</div>
+<div class="depfoot">
+  <div class="metrics"><div class="metric"><span class="mv">90 días</span><span class="ml">de visibilidad</span></div><div class="metric"><span class="mv">0</span><span class="ml">sorpresas de caja</span></div><div class="metric"><span class="mv">Auto</span><span class="ml">remesas y ficheros</span></div></div>
+  <div class="palancas"><span class="ml">Con qué</span><div class="tags"><span>Agregación bancaria</span><span>SEPA</span><span>Modelos de previsión</span><span>Paneles</span></div></div>
+</div>
+</div>
+<div class="pagefoot"><span>PABLO LÓPEZ · GRUPO OPTIMUS / ZEUS ENERGÍA</span><span>05</span></div>
+</section>
+<section class="page dep">
+
+<div class="dephead">
+  <span class="depcode">D04</span>
+  <div>
+    <h2 class="deph2">Facturación, cobros y morosidad</h2>
+    <p class="deptag">Cobrar antes, reclamar solo y sin desgaste.</p>
+  </div>
+</div>
+<div class="hoy"><span class="hoyl">Hoy</span><p>Reclamar impagos es incómodo, así que se retrasa. Cada semana de retraso es dinero parado y una conversación más difícil.</p></div>
+<p class="eyebrow sm">Procesos que se automatizan</p>
+<ul class="proclist"><li>Emisión automática de facturas recurrentes, por hitos o por parte de trabajo</li><li>Envío, acuse de recibo y reenvío automático si el cliente no la abre</li><li>Escalado de reclamación por tramos: recordatorio, aviso firme, requerimiento legal</li><li>Ficha de riesgo por cliente con histórico de pago y deuda viva</li><li>Bloqueo automático de nuevos pedidos a clientes en riesgo</li><li>Conciliación de cobros con las facturas abiertas, sin repasar el banco</li><li>Enlace de pago dentro de la propia factura</li><li>Informe semanal de cartera vencida por comercial y por antigüedad</li><li>Preparación del expediente completo para reclamación judicial o aseguradora</li><li>Aviso al comercial antes de que su cliente entre en mora</li><li>Recibos domiciliados y gestión automática de devoluciones</li><li>Refacturación de gastos y de suplidos al cliente</li><li>Facturación electrónica obligatoria y su registro (Verifactu, FACe)</li><li>Aviso al cliente antes del cargo, para evitar la devolución</li><li>Planes de pago y fraccionamientos controlados solos</li></ul>
+<div class="depbottom">
+<div class="senales">
+  <span class="ml">Señales de que te toca</span>
+  <ul><li>Reclamar un impago se pospone siempre</li><li>No sabes tu periodo medio de cobro</li><li>Se sigue sirviendo a clientes que ya deben</li></ul>
+</div>
+<div class="depfoot">
+  <div class="metrics"><div class="metric"><span class="mv">−30 %</span><span class="ml">periodo medio de cobro</span></div><div class="metric"><span class="mv">Auto</span><span class="ml">escalado de avisos</span></div><div class="metric"><span class="mv">Semanal</span><span class="ml">foto de cartera</span></div></div>
+  <div class="palancas"><span class="ml">Con qué</span><div class="tags"><span>Facturación electrónica</span><span>Pasarela de pago</span><span>Reglas de escalado</span><span>CRM</span></div></div>
+</div>
+</div>
+<div class="pagefoot"><span>PABLO LÓPEZ · GRUPO OPTIMUS / ZEUS ENERGÍA</span><span>06</span></div>
+</section>
+<section class="page dep">
+
+<div class="dephead">
+  <span class="depcode">D05</span>
+  <div>
+    <h2 class="deph2">Ventas y desarrollo de negocio</h2>
+    <p class="deptag">Que el comercial venda, no que rellene formularios.</p>
+  </div>
+</div>
+<div class="hoy"><span class="hoyl">Hoy</span><p>El comercial pierde media jornada en pasar datos al CRM y en montar ofertas en Word. El lead que no se contesta en una hora, se pierde.</p></div>
+<p class="eyebrow sm">Procesos que se automatizan</p>
+<ul class="proclist"><li>Alta de leads desde web, WhatsApp, correo y llamada directamente en el CRM</li><li>Enriquecimiento del contacto: empresa, sector, tamaño, CIF, actividad</li><li>Cualificación y puntuación automáticas, con reparto al comercial que toca</li><li>Ofertas y presupuestos generados en minutos, con precios y márgenes ya aplicados</li><li>Propuesta en PDF con tu marca, lista para enviar y para firmar</li><li>Seguimiento automático: si no contesta en X días, recordatorio con contenido útil</li><li>Actualización del CRM desde la transcripción de la llamada o de la visita</li><li>Rescate de oportunidades dormidas en la base de datos histórica</li><li>Comisiones calculadas solas y visibles para el comercial</li><li>Previsión de cierre por embudo, con probabilidad basada en el histórico</li><li>Configurador de producto o servicio para cotizaciones complejas</li><li>Respuesta automática a licitaciones y pliegos con documentación reutilizable</li><li>Preparación de la visita: ficha resumida del cliente antes de entrar</li><li>Catálogo y tarifas siempre actualizados en el móvil del comercial</li><li>Firma del pedido en el momento, desde tableta o móvil</li><li>Alta del cliente en el ERP en cuanto firma, sin volver a teclear</li></ul>
+<div class="depbottom">
+<div class="senales">
+  <span class="ml">Señales de que te toca</span>
+  <ul><li>El comercial dedica más tiempo al CRM que a vender</li><li>Una oferta tarda días en salir</li><li>Hay leads de la semana pasada sin contestar</li></ul>
+</div>
+<div class="depfoot">
+  <div class="metrics"><div class="metric"><span class="mv">Minutos</span><span class="ml">para una oferta</span></div><div class="metric"><span class="mv">&lt; 5 min</span><span class="ml">respuesta al lead</span></div><div class="metric"><span class="mv">Más</span><span class="ml">visitas por semana</span></div></div>
+  <div class="palancas"><span class="ml">Con qué</span><div class="tags"><span>CRM</span><span>Generación de PDF</span><span>Transcripción</span><span>Reglas de precio</span></div></div>
+</div>
+</div>
+<div class="pagefoot"><span>PABLO LÓPEZ · GRUPO OPTIMUS / ZEUS ENERGÍA</span><span>07</span></div>
+</section>
+<section class="page dep">
+
+<div class="dephead">
+  <span class="depcode">D06</span>
+  <div>
+    <h2 class="deph2">Marketing y contenidos</h2>
+    <p class="deptag">Presencia constante sin una agencia detrás.</p>
+  </div>
+</div>
+<div class="hoy"><span class="hoyl">Hoy</span><p>Publicar con constancia exige tiempo que nadie tiene. Se publica a rachas y el catálogo online se queda a medias.</p></div>
+<p class="eyebrow sm">Procesos que se automatizan</p>
+<ul class="proclist"><li>Calendario y publicación programada en todos los canales a la vez</li><li>Redacción de contenidos con tu tono, tu argumentario y tus datos</li><li>Un mismo contenido adaptado a cada red, formato e idioma</li><li>Fichas de producto y textos SEO para catálogos de miles de referencias</li><li>Newsletters segmentadas por comportamiento real del contacto</li><li>Clasificación y respuesta de comentarios y reseñas</li><li>Informe de rendimiento por canal, campaña y euro invertido</li><li>Vigilancia de competencia, de precios y de novedades del sector</li><li>Generación de imágenes y de vídeo corto para campaña</li><li>Traducción y localización del catálogo y de la web</li><li>Detección de qué contenido genera contactos de verdad</li><li>Respuesta automática a formularios y a mensajes de redes</li><li>Reutilización del histórico: lo que funcionó se vuelve a lanzar</li><li>Páginas de campaña montadas por producto o por promoción</li><li>Reseñas: se pide al cliente satisfecho y se avisa si llega una negativa</li></ul>
+<div class="depbottom">
+<div class="senales">
+  <span class="ml">Señales de que te toca</span>
+  <ul><li>Se publica a rachas, cuando hay hueco</li><li>El catálogo online lleva meses a medias</li><li>No sabes qué campaña trae clientes</li></ul>
+</div>
+<div class="depfoot">
+  <div class="metrics"><div class="metric"><span class="mv">Diario</span><span class="ml">sin dedicarle el día</span></div><div class="metric"><span class="mv">×10</span><span class="ml">fichas de producto</span></div><div class="metric"><span class="mv">Auto</span><span class="ml">informe de campaña</span></div></div>
+  <div class="palancas"><span class="ml">Con qué</span><div class="tags"><span>IA generativa</span><span>APIs de redes</span><span>SEO técnico</span><span>Analítica</span></div></div>
+</div>
+</div>
+<div class="pagefoot"><span>PABLO LÓPEZ · GRUPO OPTIMUS / ZEUS ENERGÍA</span><span>08</span></div>
+</section>
+<section class="page dep">
+
+<div class="dephead">
+  <span class="depcode">D07</span>
+  <div>
+    <h2 class="deph2">Atención al cliente y soporte</h2>
+    <p class="deptag">Responder siempre, a cualquier hora, con tu criterio.</p>
+  </div>
+</div>
+<div class="hoy"><span class="hoyl">Hoy</span><p>El teléfono y el WhatsApp interrumpen todo el día con las mismas diez preguntas. Fuera de horario, nadie responde.</p></div>
+<p class="eyebrow sm">Procesos que se automatizan</p>
+<ul class="proclist"><li>Asistente 24/7 en web y WhatsApp que responde con TU documentación, no con internet</li><li>Clasificación y priorización automática de tickets y de correos entrantes</li><li>Respuesta propuesta al agente, con todo el histórico del cliente delante</li><li>Escalado inmediato cuando detecta enfado, urgencia o riesgo de fuga</li><li>Consulta de estado de pedido, envío o incidencia sin intervención humana</li><li>Encuestas de satisfacción y análisis de lo que realmente dicen</li><li>Base de conocimiento que se escribe sola con los casos ya resueltos</li><li>Resumen automático de la conversación al cerrar el caso</li><li>Detección de motivos recurrentes y aviso al departamento responsable</li><li>Atención en varios idiomas sin ampliar la plantilla</li><li>Cita previa y agenda gestionadas por el propio asistente</li><li>Reparto de casos por carga de trabajo y por especialidad</li><li>Aviso al cliente en cada cambio de estado, sin que pregunte</li><li>Detección de clientes en riesgo de fuga por su patrón de contacto</li><li>Teléfono, correo, web y WhatsApp en una única bandeja</li></ul>
+<div class="depbottom">
+<div class="senales">
+  <span class="ml">Señales de que te toca</span>
+  <ul><li>Las mismas diez preguntas, todos los días</li><li>Fuera de horario no contesta nadie</li><li>Los correos se pierden entre todos</li></ul>
+</div>
+<div class="depfoot">
+  <div class="metrics"><div class="metric"><span class="mv">24/7</span><span class="ml">sin turno de noche</span></div><div class="metric"><span class="mv">70 %</span><span class="ml">consultas resueltas solas</span></div><div class="metric"><span class="mv">Segundos</span><span class="ml">primera respuesta</span></div></div>
+  <div class="palancas"><span class="ml">Con qué</span><div class="tags"><span>Asistente con tu documentación</span><span>WhatsApp Business</span><span>Clasificación</span><span>Integración con ERP</span></div></div>
+</div>
+</div>
+<div class="pagefoot"><span>PABLO LÓPEZ · GRUPO OPTIMUS / ZEUS ENERGÍA</span><span>09</span></div>
+</section>
+<section class="page dep">
+
+<div class="dephead">
+  <span class="depcode">D08</span>
+  <div>
+    <h2 class="deph2">Compras y proveedores</h2>
+    <p class="deptag">Comprar al precio pactado, con el proveedor en regla.</p>
+  </div>
+</div>
+<div class="hoy"><span class="hoyl">Hoy</span><p>Se pide precio a tres proveedores por correo y la comparativa se hace de memoria. La documentación del proveedor caduca y nadie se entera hasta la auditoría.</p></div>
+<p class="eyebrow sm">Procesos que se automatizan</p>
+<ul class="proclist"><li>Petición de oferta a varios proveedores y comparativa automática en una tabla</li><li>Alta y validación de proveedor: CIF, seguro, certificados, situación con Hacienda</li><li>Control de caducidad de la documentación obligatoria del proveedor</li><li>Pedidos automáticos al llegar al punto de reposición</li><li>Seguimiento de plazos de entrega y aviso anticipado de retrasos</li><li>Verificación de que el precio facturado es el precio pactado</li><li>Histórico de precios por referencia y detección de subidas encubiertas</li><li>Evaluación periódica de proveedores con criterios objetivos</li><li>Gestión de garantías, devoluciones y abonos</li><li>Control de contratos marco y de consumos comprometidos</li><li>Aviso cuando el consumo se sale de lo contratado</li><li>Homologación de proveedores con su expediente completo</li><li>Pedido automático de material recurrente según consumo histórico</li><li>Control de portes, recargos y condiciones especiales</li><li>Reclamación automática de albaranes y de facturas pendientes</li></ul>
+<div class="depbottom">
+<div class="senales">
+  <span class="ml">Señales de que te toca</span>
+  <ul><li>Comparas ofertas de proveedor de memoria</li><li>Tienes documentación de proveedor caducada</li><li>Te han facturado a un precio distinto del pactado</li></ul>
+</div>
+<div class="depfoot">
+  <div class="metrics"><div class="metric"><span class="mv">Auto</span><span class="ml">comparativa de ofertas</span></div><div class="metric"><span class="mv">0</span><span class="ml">documentos caducados</span></div><div class="metric"><span class="mv">Alerta</span><span class="ml">si el precio no cuadra</span></div></div>
+  <div class="palancas"><span class="ml">Con qué</span><div class="tags"><span>Comparadores</span><span>Validación documental</span><span>Punto de reposición</span><span>Integración ERP</span></div></div>
+</div>
+</div>
+<div class="pagefoot"><span>PABLO LÓPEZ · GRUPO OPTIMUS / ZEUS ENERGÍA</span><span>10</span></div>
+</section>
+<section class="page dep">
+
+<div class="dephead">
+  <span class="depcode">D09</span>
+  <div>
+    <h2 class="deph2">Logística, almacén e inventario</h2>
+    <p class="deptag">Saber qué hay, dónde está y cuándo llega.</p>
+  </div>
+</div>
+<div class="hoy"><span class="hoyl">Hoy</span><p>El stock del sistema y el del almacén no coinciden. Las rutas se montan a ojo y el cliente llama para preguntar dónde está su pedido.</p></div>
+<p class="eyebrow sm">Procesos que se automatizan</p>
+<ul class="proclist"><li>Stock en tiempo real y aviso de rotura antes de que se produzca</li><li>Etiquetas, códigos de barras y albaranes generados solos</li><li>Optimización de rutas de reparto por carga, zona y ventana horaria</li><li>Seguimiento de envíos y aviso proactivo al cliente sin que lo pida</li><li>Inventario por escaneo con móvil o pistola, sin listados en papel</li><li>Cuadre automático de inventario y detección de mermas</li><li>Asignación de picking por zonas y por operario</li><li>Documentación de exportación, aduanas e Intrastat</li><li>Previsión de demanda por estacionalidad y por histórico</li><li>Trazabilidad completa por lote, número de serie o matrícula</li><li>Control de ubicaciones y reubicación sugerida por rotación</li><li>Reserva de stock por pedido, por obra o por proyecto</li><li>Devoluciones y logística inversa gestionadas de principio a fin</li><li>Control de material en depósito en casa del cliente</li><li>Aviso de caducidades y de material obsoleto</li></ul>
+<div class="depbottom">
+<div class="senales">
+  <span class="ml">Señales de que te toca</span>
+  <ul><li>El stock del sistema no es el del almacén</li><li>Las rutas se montan a ojo cada mañana</li><li>El cliente llama para saber dónde está su pedido</li></ul>
+</div>
+<div class="depfoot">
+  <div class="metrics"><div class="metric"><span class="mv">Tiempo real</span><span class="ml">stock fiable</span></div><div class="metric"><span class="mv">−20 %</span><span class="ml">km por ruta</span></div><div class="metric"><span class="mv">0</span><span class="ml">llamadas de «¿dónde está?»</span></div></div>
+  <div class="palancas"><span class="ml">Con qué</span><div class="tags"><span>Escaneo móvil</span><span>Optimización de rutas</span><span>Integración con transportistas</span><span>IoT</span></div></div>
+</div>
+</div>
+<div class="pagefoot"><span>PABLO LÓPEZ · GRUPO OPTIMUS / ZEUS ENERGÍA</span><span>11</span></div>
+</section>
+<section class="page dep">
+
+<div class="dephead">
+  <span class="depcode">D10</span>
+  <div>
+    <h2 class="deph2">Operaciones y producción</h2>
+    <p class="deptag">La planta se mide sola.</p>
+  </div>
+</div>
+<div class="hoy"><span class="hoyl">Hoy</span><p>Los partes se rellenan en papel y se pasan a Excel al día siguiente. El coste real de una orden se conoce cuando ya no se puede corregir.</p></div>
+<p class="eyebrow sm">Procesos que se automatizan</p>
+<ul class="proclist"><li>Partes de producción digitales desde tableta o móvil, sin papel</li><li>Planificación de carga de máquina, de turnos y de personal</li><li>Escandallos y coste real por orden de fabricación</li><li>Control de paradas, mermas y eficiencia (OEE) automático</li><li>Mantenimiento preventivo disparado por horas de uso o por ciclos</li><li>Captura directa desde máquinas y sensores, sin intermediarios</li><li>Consumo energético por línea, por turno y por producto</li><li>Detección de defectos por visión artificial en línea</li><li>Trazabilidad de la materia prima hasta el cliente final</li><li>Avisos de cuello de botella y de desvío sobre lo planificado</li><li>Plan de producción recalculado al entrar un pedido urgente</li><li>Instrucciones de trabajo en pantalla, siempre en su última versión</li><li>Registro de tiempos por operario y por fase, sin apuntarlos</li><li>Control de calidad en línea con la evidencia ya archivada</li><li>Aviso al comercial cuando su pedido entra y cuando sale</li></ul>
+<div class="depbottom">
+<div class="senales">
+  <span class="ml">Señales de que te toca</span>
+  <ul><li>Los partes de producción siguen en papel</li><li>El coste real se conoce cuando ya no se puede corregir</li><li>Las paradas de máquina no se registran</li></ul>
+</div>
+<div class="depfoot">
+  <div class="metrics"><div class="metric"><span class="mv">En vivo</span><span class="ml">coste por orden</span></div><div class="metric"><span class="mv">Menos</span><span class="ml">paradas no planificadas</span></div><div class="metric"><span class="mv">0</span><span class="ml">papel en planta</span></div></div>
+  <div class="palancas"><span class="ml">Con qué</span><div class="tags"><span>IoT / sensores</span><span>Visión artificial</span><span>Planificación</span><span>Terminales de planta</span></div></div>
+</div>
+</div>
+<div class="pagefoot"><span>PABLO LÓPEZ · GRUPO OPTIMUS / ZEUS ENERGÍA</span><span>12</span></div>
+</section>
+<section class="page dep">
+
+<div class="dephead">
+  <span class="depcode">D11</span>
+  <div>
+    <h2 class="deph2">Ingeniería, técnica y proyectos</h2>
+    <p class="deptag">El cálculo y la memoria técnica, resueltos con los datos del proyecto.</p>
+  </div>
+</div>
+<div class="hoy"><span class="hoyl">Hoy</span><p>Cada propuesta técnica arranca copiando la anterior. Los cálculos viven en un Excel heredado que solo una persona sabe tocar.</p></div>
+<p class="eyebrow sm">Procesos que se automatizan</p>
+<ul class="proclist"><li>Cálculos y dimensionados que hoy se hacen a mano, con reglas propias</li><li>Memorias técnicas, anexos y pliegos generados con los datos del proyecto</li><li>Diseño preliminar automático (por ejemplo, distribución sobre plano o sobre imagen real)</li><li>Comparativa de soluciones y de escenarios técnico-económicos</li><li>Certificados, fichas técnicas y documentación de entrega</li><li>Control de horas, avance y desviación por proyecto</li><li>Versionado de planos y documentación con el vigente siempre marcado</li><li>Presupuestos técnicos a partir de mediciones o de captura de campo</li><li>Listas de comprobación de puesta en marcha y actas de recepción</li><li>Reutilización del histórico de proyectos como base de la siguiente propuesta</li><li>Captura de datos de campo desde el móvil, con fotos y medidas</li><li>Expediente completo de legalización generado con el proyecto</li><li>Presupuesto y rentabilidad del proyecto calculados en paralelo</li><li>Seguimiento de hitos, certificaciones y facturación por avance</li><li>Biblioteca de soluciones tipo, reutilizable en cada propuesta</li></ul>
+<div class="depbottom">
+<div class="senales">
+  <span class="ml">Señales de que te toca</span>
+  <ul><li>Cada propuesta se copia de la anterior</li><li>El cálculo vive en un Excel heredado</li><li>Nadie tiene claro qué plano es el bueno</li></ul>
+</div>
+<div class="depfoot">
+  <div class="metrics"><div class="metric"><span class="mv">Horas → min</span><span class="ml">propuesta técnica</span></div><div class="metric"><span class="mv">1 fuente</span><span class="ml">de cálculo</span></div><div class="metric"><span class="mv">Auto</span><span class="ml">memoria y anexos</span></div></div>
+  <div class="palancas"><span class="ml">Con qué</span><div class="tags"><span>Motores de cálculo</span><span>Generación documental</span><span>Visión por computador</span><span>Cartografía</span></div></div>
+</div>
+</div>
+<div class="pagefoot"><span>PABLO LÓPEZ · GRUPO OPTIMUS / ZEUS ENERGÍA</span><span>13</span></div>
+</section>
+<section class="page dep">
+
+<div class="dephead">
+  <span class="depcode">D12</span>
+  <div>
+    <h2 class="deph2">Recursos humanos</h2>
+    <p class="deptag">Menos papeleo por persona, más personas atendidas.</p>
+  </div>
+</div>
+<div class="hoy"><span class="hoyl">Hoy</span><p>Cada alta son quince tareas manuales repartidas entre tres departamentos. Los currículums se acumulan sin leer.</p></div>
+<p class="eyebrow sm">Procesos que se automatizan</p>
+<ul class="proclist"><li>Criba y resumen de currículums con ranking por criterios objetivos</li><li>Agendado de entrevistas sin cadena de correos</li><li>Onboarding automático: contrato, alta, accesos, equipo y formación inicial</li><li>Registro horario y control de horas extra conforme a normativa</li><li>Vacaciones, permisos y calendario del equipo con aprobación en un clic</li><li>Preparación de nómina con todas las incidencias ya recogidas</li><li>Avisos de formación, EPIs, reconocimientos médicos y renovaciones</li><li>Encuestas de clima y análisis de las respuestas abiertas</li><li>Documentación laboral firmada digitalmente y archivada por trabajador</li><li>Salida ordenada: baja de accesos y devolución de equipo el mismo día</li><li>Portal del empleado: nóminas, certificados y solicitudes sin preguntar a nadie</li><li>Publicación de ofertas de empleo en varios portales a la vez</li><li>Contratos y anexos generados y enviados a firma</li><li>Coste de personal por área, por proyecto y por obra</li><li>Evaluaciones y planes de carrera con recordatorio automático</li></ul>
+<div class="depbottom">
+<div class="senales">
+  <span class="ml">Señales de que te toca</span>
+  <ul><li>Cada alta son quince tareas manuales</li><li>Los currículums se acumulan sin leer</li><li>El registro horario se lleva en papel</li></ul>
+</div>
+<div class="depfoot">
+  <div class="metrics"><div class="metric"><span class="mv">15 → 1</span><span class="ml">tareas por alta</span></div><div class="metric"><span class="mv">Minutos</span><span class="ml">criba de 200 CV</span></div><div class="metric"><span class="mv">100 %</span><span class="ml">registro horario</span></div></div>
+  <div class="palancas"><span class="ml">Con qué</span><div class="tags"><span>Firma electrónica</span><span>Portal del empleado</span><span>IA de documentos</span><span>Integración con gestoría</span></div></div>
+</div>
+</div>
+<div class="pagefoot"><span>PABLO LÓPEZ · GRUPO OPTIMUS / ZEUS ENERGÍA</span><span>14</span></div>
+</section>
+<section class="page dep">
+
+<div class="dephead">
+  <span class="depcode">D13</span>
+  <div>
+    <h2 class="deph2">Calidad, cumplimiento y auditoría</h2>
+    <p class="deptag">Llegar a la auditoría con todo hecho.</p>
+  </div>
+</div>
+<div class="hoy"><span class="hoyl">Hoy</span><p>La semana antes de la auditoría se para la empresa para reunir papeles. Las no conformidades se pierden en correos.</p></div>
+<p class="eyebrow sm">Procesos que se automatizan</p>
+<ul class="proclist"><li>Registros de calidad digitales, con evidencia y sello de tiempo</li><li>No conformidades: apertura, acción correctiva, seguimiento y cierre</li><li>Carpeta de auditoría ISO montada sola, con la documentación vigente</li><li>Control de caducidad de certificados, calibraciones y homologaciones</li><li>Trazabilidad completa por lote, expediente o instalación</li><li>Cuadro de indicadores de calidad y de reclamaciones</li><li>Gestión documental con control de versiones y firmas</li><li>Auditorías internas programadas, con su informe generado</li><li>Cumplimiento sectorial: PRL, APPCC, RGPD, normativa propia</li><li>Alertas de incumplimiento antes de que sea un hallazgo</li><li>Reclamaciones y encuestas de cliente integradas en el sistema de calidad</li><li>Registro de formación y de competencias del personal</li><li>Control de proveedores críticos y de sus evaluaciones</li><li>Informe de revisión por la dirección generado con los datos del año</li></ul>
+<div class="depbottom">
+<div class="senales">
+  <span class="ml">Señales de que te toca</span>
+  <ul><li>La semana antes de la auditoría se para la empresa</li><li>Las no conformidades viven en cadenas de correo</li><li>Se han caducado certificados sin que nadie avisara</li></ul>
+</div>
+<div class="depfoot">
+  <div class="metrics"><div class="metric"><span class="mv">Días → 0</span><span class="ml">preparar auditoría</span></div><div class="metric"><span class="mv">Sellado</span><span class="ml">en el momento</span></div><div class="metric"><span class="mv">Auto</span><span class="ml">informe interno</span></div></div>
+  <div class="palancas"><span class="ml">Con qué</span><div class="tags"><span>Gestión documental</span><span>Sello de tiempo</span><span>Flujos de aprobación</span><span>Paneles</span></div></div>
+</div>
+</div>
+<div class="pagefoot"><span>PABLO LÓPEZ · GRUPO OPTIMUS / ZEUS ENERGÍA</span><span>15</span></div>
+</section>
+<section class="page dep">
+
+<div class="dephead">
+  <span class="depcode">D14</span>
+  <div>
+    <h2 class="deph2">Legal y contratación</h2>
+    <p class="deptag">Contratos que se revisan, se firman y no se olvidan.</p>
+  </div>
+</div>
+<div class="hoy"><span class="hoyl">Hoy</span><p>Los contratos se revisan a fondo o no se revisan. Las renovaciones automáticas saltan porque nadie vigilaba el preaviso.</p></div>
+<p class="eyebrow sm">Procesos que se automatizan</p>
+<ul class="proclist"><li>Revisión de contratos con las cláusulas de riesgo señaladas en minutos</li><li>Generación de contratos desde plantilla con los datos ya cargados</li><li>Firma electrónica con validez legal y archivo automático</li><li>Control de vencimientos, renovaciones y plazos de preaviso</li><li>Repositorio contractual consultable en lenguaje natural</li><li>Comparación de versiones y de un contrato contra el modelo propio</li><li>RGPD: registro de tratamientos, consentimientos y derechos de los interesados</li><li>Apertura de expedientes y control de plazos procesales</li><li>Reclamaciones, requerimientos y burofax generados y enviados</li><li>Alertas de cambio normativo que afecta a tus contratos tipo</li><li>Plantillas siempre actualizadas a la última versión jurídica</li><li>Control de poderes, apoderamientos y firmas autorizadas</li><li>Propiedad industrial e intelectual con sus renovaciones vigiladas</li><li>Documentación preparada para due diligence o auditoría legal</li></ul>
+<div class="depbottom">
+<div class="senales">
+  <span class="ml">Señales de que te toca</span>
+  <ul><li>Los contratos se firman sin revisar a fondo</li><li>Ha saltado una renovación que no querías</li><li>Cuesta encontrar el contrato firmado de un cliente</li></ul>
+</div>
+<div class="depfoot">
+  <div class="metrics"><div class="metric"><span class="mv">Minutos</span><span class="ml">revisar un contrato</span></div><div class="metric"><span class="mv">0</span><span class="ml">renovaciones no queridas</span></div><div class="metric"><span class="mv">Buscable</span><span class="ml">todo el archivo</span></div></div>
+  <div class="palancas"><span class="ml">Con qué</span><div class="tags"><span>IA de documentos legales</span><span>Firma electrónica</span><span>Control de plazos</span><span>Búsqueda semántica</span></div></div>
+</div>
+</div>
+<div class="pagefoot"><span>PABLO LÓPEZ · GRUPO OPTIMUS / ZEUS ENERGÍA</span><span>16</span></div>
+</section>
+<section class="page dep">
+
+<div class="dephead">
+  <span class="depcode">D15</span>
+  <div>
+    <h2 class="deph2">IT y sistemas</h2>
+    <p class="deptag">Que los programas que ya tienes se hablen entre ellos.</p>
+  </div>
+</div>
+<div class="hoy"><span class="hoyl">Hoy</span><p>Hay cuatro programas y ninguno se comunica, así que las personas hacen de cable: exportan de uno e importan en otro.</p></div>
+<p class="eyebrow sm">Procesos que se automatizan</p>
+<ul class="proclist"><li>Integración entre programas que hoy no se hablan, sin cambiar de ERP</li><li>Migración y sincronización de datos entre sistemas antiguos y nuevos</li><li>Copias de seguridad verificadas de verdad, no solo programadas</li><li>Monitorización con aviso antes de que el usuario note la caída</li><li>Altas, bajas y permisos de usuario centralizados</li><li>Inventario de equipos, licencias y renovaciones</li><li>Despliegues automáticos y entorno de pruebas separado</li><li>Detección de accesos anómalos y de fuga de información</li><li>Portal interno único como puerta de entrada a todo</li><li>Automatización sobre programas cerrados que no tienen conexión (escritorio o web)</li><li>Panel único con el estado de todos los sistemas</li><li>Tareas repetitivas de soporte interno resueltas solas</li><li>Documentación técnica generada por el propio sistema</li><li>Control del coste de licencias y de servicios en la nube</li><li>Plan de continuidad probado de verdad, no solo escrito</li></ul>
+<div class="depbottom">
+<div class="senales">
+  <span class="ml">Señales de que te toca</span>
+  <ul><li>Se exporta de un programa para importar en otro</li><li>Las copias de seguridad no se comprueban nunca</li><li>Alguien que ya no está conserva accesos</li></ul>
+</div>
+<div class="depfoot">
+  <div class="metrics"><div class="metric"><span class="mv">Sin cambiar</span><span class="ml">de ERP</span></div><div class="metric"><span class="mv">Auto</span><span class="ml">altas y bajas</span></div><div class="metric"><span class="mv">Antes</span><span class="ml">de que se note</span></div></div>
+  <div class="palancas"><span class="ml">Con qué</span><div class="tags"><span>APIs e integraciones</span><span>Automatización de escritorio</span><span>Monitorización</span><span>Control de accesos</span></div></div>
+</div>
+</div>
+<div class="pagefoot"><span>PABLO LÓPEZ · GRUPO OPTIMUS / ZEUS ENERGÍA</span><span>17</span></div>
+</section>
+<section class="page dep">
+
+<div class="dephead">
+  <span class="depcode">D16</span>
+  <div>
+    <h2 class="deph2">Postventa, mantenimiento y SAT</h2>
+    <p class="deptag">El técnico cierra el aviso en casa del cliente.</p>
+  </div>
+</div>
+<div class="hoy"><span class="hoyl">Hoy</span><p>El parte se rellena en papel, se pierde por el camino y se factura tres semanas después —si es que se factura.</p></div>
+<p class="eyebrow sm">Procesos que se automatizan</p>
+<ul class="proclist"><li>Parte de trabajo en el móvil del técnico, con fotos y firma del cliente</li><li>Planificación y asignación de avisos por zona, carga y especialidad</li><li>Contratos de mantenimiento con visitas preventivas programadas solas</li><li>Historial completo por equipo instalado y por ubicación</li><li>Presupuesto de reparación emitido en la propia visita</li><li>Facturación del parte sin volver a la oficina</li><li>Control de repuestos en furgoneta y reposición automática</li><li>Encuesta al cliente al cerrar el aviso</li><li>Aviso de garantías y de contratos próximos a vencer</li><li>Diagnóstico asistido a partir del histórico de averías</li><li>Autoservicio del cliente: abre el aviso y ve su estado sin llamar</li><li>Rutas del día calculadas la noche anterior</li><li>Aviso de revisiones obligatorias por normativa</li><li>Rentabilidad por contrato de mantenimiento y por técnico</li></ul>
+<div class="depbottom">
+<div class="senales">
+  <span class="ml">Señales de que te toca</span>
+  <ul><li>El parte llega a oficina tres semanas después</li><li>Se factura tarde, o directamente no se factura</li><li>Nadie sabe el histórico de ese equipo instalado</li></ul>
+</div>
+<div class="depfoot">
+  <div class="metrics"><div class="metric"><span class="mv">Mismo día</span><span class="ml">parte y factura</span></div><div class="metric"><span class="mv">Más</span><span class="ml">avisos por técnico</span></div><div class="metric"><span class="mv">0</span><span class="ml">partes perdidos</span></div></div>
+  <div class="palancas"><span class="ml">Con qué</span><div class="tags"><span>App de campo</span><span>Firma en dispositivo</span><span>Planificación por zona</span><span>Integración con facturación</span></div></div>
+</div>
+</div>
+<div class="pagefoot"><span>PABLO LÓPEZ · GRUPO OPTIMUS / ZEUS ENERGÍA</span><span>18</span></div>
+</section>
+<section class="page dep">
+
+<div class="dephead">
+  <span class="depcode">D17</span>
+  <div>
+    <h2 class="deph2">Conocimiento interno y formación</h2>
+    <p class="deptag">Que lo que sabe la empresa no se vaya con las personas.</p>
+  </div>
+</div>
+<div class="hoy"><span class="hoyl">Hoy</span><p>El conocimiento está en la cabeza de tres personas y en carpetas que nadie encuentra. Cuando una se va, se va con ella.</p></div>
+<p class="eyebrow sm">Procesos que se automatizan</p>
+<ul class="proclist"><li>Buscador que responde con tus documentos, no con internet</li><li>Asistente interno que conoce tus procedimientos, precios y casos</li><li>Manuales y procedimientos que se actualizan al cambiar el proceso</li><li>Itinerario de formación para nuevos, con seguimiento del avance</li><li>Transcripción y resumen de reuniones, visitas y formaciones</li><li>Captura del conocimiento de quien se jubila o cambia de puesto</li><li>Respuestas internas de RRHH, IT y administración sin molestar a nadie</li><li>Control de qué versión de cada documento es la vigente</li><li>Preguntas frecuentes internas que se generan solas con lo que se pregunta</li><li>Buscador único sobre correo, unidad compartida y carpetas antiguas</li><li>Fichas de producto y argumentarios accesibles desde el móvil</li><li>Incorporación técnica guiada paso a paso</li><li>Detección de procedimientos obsoletos o contradictorios entre sí</li><li>Historial de decisiones y del motivo por el que se tomaron</li></ul>
+<div class="depbottom">
+<div class="senales">
+  <span class="ml">Señales de que te toca</span>
+  <ul><li>Todo el conocimiento depende de tres personas</li><li>Nadie encuentra la versión vigente de un documento</li><li>Formar a alguien nuevo cuesta meses</li></ul>
+</div>
+<div class="depfoot">
+  <div class="metrics"><div class="metric"><span class="mv">Segundos</span><span class="ml">encontrar el dato</span></div><div class="metric"><span class="mv">Menos</span><span class="ml">interrupciones internas</span></div><div class="metric"><span class="mv">Retenido</span><span class="ml">el conocimiento</span></div></div>
+  <div class="palancas"><span class="ml">Con qué</span><div class="tags"><span>Búsqueda semántica</span><span>Asistente sobre tu documentación</span><span>Transcripción</span><span>Gestión documental</span></div></div>
+</div>
+</div>
+<div class="pagefoot"><span>PABLO LÓPEZ · GRUPO OPTIMUS / ZEUS ENERGÍA</span><span>19</span></div>
+</section>
+<section class="page dep">
+
+<div class="dephead">
+  <span class="depcode">D18</span>
+  <div>
+    <h2 class="deph2">Seguridad, identidad y antifraude</h2>
+    <p class="deptag">Saber que quien está al otro lado es quien dice ser.</p>
+  </div>
+</div>
+<div class="hoy"><span class="hoyl">Hoy</span><p>Se dan de alta clientes y proveedores con un DNI escaneado que nadie comprueba. Hoy un documento o un vídeo falso se genera en un minuto.</p></div>
+<p class="eyebrow sm">Procesos que se automatizan</p>
+<ul class="proclist"><li>Verificación de identidad de clientes y proveedores a distancia</li><li>Detección de documentos manipulados: DNI, nóminas, facturas, contratos, justificantes</li><li>Detección de deepfakes en foto y en vídeo</li><li>Prueba de vida en el alta que impide suplantaciones</li><li>Control de fraude en la incorporación de nuevos clientes (KYC / AML)</li><li>Verificación de que quien firma es quien dice ser</li><li>Registro forense con sello de tiempo, válido como prueba</li><li>Alerta de intento de fraude en el momento, no en el cierre</li><li>Cumplimiento de normativa de identidad digital</li><li>Comprobación contra listas de sanciones y de riesgo</li><li>Verificación de titularidad de cuenta antes de ordenar un pago</li><li>Detección de correos de suplantación dirigidos a administración</li><li>Doble validación automática para pagos por encima de un importe</li><li>Auditoría de quién accedió a qué documento y cuándo</li></ul>
+<div class="depbottom">
+<div class="senales">
+  <span class="ml">Señales de que te toca</span>
+  <ul><li>Se dan altas con un DNI que nadie comprueba</li><li>Has recibido un justificante que parecía retocado</li><li>No podrías probar quién firmó ni cuándo</li></ul>
+</div>
+<div class="depfoot">
+  <div class="metrics"><div class="metric"><span class="mv">Segundos</span><span class="ml">verificar identidad</span></div><div class="metric"><span class="mv">Prueba</span><span class="ml">con validez forense</span></div><div class="metric"><span class="mv">Antes</span><span class="ml">del alta</span></div></div>
+  <div class="palancas"><span class="ml">Con qué</span><div class="tags"><span>Biometría</span><span>Análisis forense de documentos</span><span>Detección de deepfakes</span><span>Sellado de tiempo</span></div></div>
+</div>
+</div>
+<div class="pagefoot"><span>PABLO LÓPEZ · GRUPO OPTIMUS / ZEUS ENERGÍA</span><span>20</span></div>
+</section>
+<section class="page mid">
+
+<p class="eyebrow">Hecho, no prometido</p>
+<h2>Seis procesos que ya funcionan.</h2>
+<p class="lede sub">Todos en producción, con usuarios reales dentro. Sectores distintos, la misma idea:
+quitar de en medio el trabajo que no aporta.</p>
+<div class="grid3"><article class="caso">
+  <span class="cn">Comercializadora de energía</span>
+  <h3>Oferta fotovoltaica de horas a minutos</h3>
+  <p>La IA lee la factura de luz del cliente, detecta el tejado sobre imagen real de satélite, dimensiona la instalación y devuelve una oferta en PDF de nueve páginas lista para firmar.</p>
+  <span class="casoK">Horas → minutos</span>
+</article><article class="caso">
+  <span class="cn">Distribución industrial</span>
+  <h3>Facturas de proveedor a Excel y al ERP</h3>
+  <p>Se lee cada factura recibida, se extraen todos los campos y se vuelca ya cuadrada. Sin plantillas por proveedor: funciona con cualquier formato.</p>
+  <span class="casoK">Sin tecleo</span>
+</article><article class="caso">
+  <span class="cn">Grupo energético</span>
+  <h3>Intranet y CRM sincronizados solos</h3>
+  <p>Dos procesos programados mantienen los estados de expediente sincronizados entre la intranet antigua y el CRM, y consolidan las facturas del mes en una hoja de control.</p>
+  <span class="casoK">2 sistemas, 0 personas</span>
+</article><article class="caso">
+  <span class="cn">Recambio de automoción</span>
+  <h3>Atención y catálogo por WhatsApp</h3>
+  <p>Un asistente en WhatsApp busca por referencia o por especificación técnica, devuelve precio y disponibilidad y pasa el pedido, integrado con el escáner del almacén.</p>
+  <span class="casoK">24/7</span>
+</article><article class="caso">
+  <span class="cn">Portal de administración pública</span>
+  <h3>Un programa que rellena el portal</h3>
+  <p>Un ejecutable propio inicia sesión y actualiza cientos de expedientes en el portal oficial, que no ofrece ninguna vía de integración.</p>
+  <span class="casoK">Sin API, igualmente automatizado</span>
+</article><article class="caso">
+  <span class="cn">Producto propio · Deep-Check</span>
+  <h3>Verificación de identidad y antifraude</h3>
+  <p>Plataforma de detección de deepfakes y de manipulación documental, con procesado biométrico en el propio navegador. Sin enviar datos biométricos a ningún servidor.</p>
+  <span class="casoK">Producto en producción</span>
+</article></div>
+<div class="pagefoot"><span>PABLO LÓPEZ · GRUPO OPTIMUS / ZEUS ENERGÍA</span><span>22</span></div>
+</section>
+<section class="page mid">
+
+<p class="eyebrow">Cómo se trabaja</p>
+<h2>Un proceso simple, sin sorpresas.</h2>
+<ol class="steps"><li><span class="stepn">01</span><h3>Diagnóstico</h3><p>Una reunión. Me cuentas el proceso, lo cronometro y te digo qué parte se puede automatizar y qué parte no merece la pena. Gratis y sin compromiso.</p></li><li><span class="stepn">02</span><h3>Propuesta cerrada</h3><p>Alcance, plazo y precio por escrito antes de empezar. Sin horas abiertas ni facturas sorpresa.</p></li><li><span class="stepn">03</span><h3>Puesta en marcha</h3><p>Se construye sobre lo que ya tienes. Primera versión funcionando pronto, para corregir con uso real y no con suposiciones.</p></li><li><span class="stepn">04</span><h3>Acompañamiento</h3><p>Formación al equipo, documentación y soporte. El proceso queda documentado y es tuyo: no dependes de mí para seguir usándolo.</p></li></ol>
+<p class="eyebrow mt">Formas de contratar</p>
+<div class="grid3"><article class="card sm"><h3>Proceso a proceso</h3><p>Se elige un proceso concreto, se cierra precio y se entrega funcionando. La forma habitual de empezar: inversión pequeña y resultado visible.</p></article><article class="card sm"><h3>Proyecto completo</h3><p>Varios procesos de un mismo departamento o una aplicación a medida. Por fases, con entregas parciales que ya se pueden usar.</p></article><article class="card sm"><h3>Acompañamiento</h3><p>Cuota mensual de soporte, mejoras y nuevas automatizaciones según vayan apareciendo. Opcional y cancelable.</p></article></div>
+<p class="fine">El diagnóstico inicial no se cobra. Si de esa primera reunión sale que no merece la pena
+automatizarlo, te lo digo igualmente.</p>
+<div class="pagefoot"><span>PABLO LÓPEZ · GRUPO OPTIMUS / ZEUS ENERGÍA</span><span>23</span></div>
+</section>
+<section class="page cover end">
+
+<div class="coverbody">
+  <p class="eyebrow">Siguiente paso</p>
+  <h1>Cuéntame un proceso<br>que te quite tiempo.<br><span class="l2">Te digo qué parte<br>se puede quitar.</span></h1>
+  <p class="lede">Una llamada de treinta minutos. Miramos tu caso concreto y sales con una respuesta
+  clara: qué se automatiza, en cuánto tiempo y qué cuesta. Sin compromiso.</p>
+</div>
+<div class="coverfoot">
+  <div><span class="ml">Email</span><span class="mv2">pablo.lprdz@gmail.com</span></div>
+  <div><span class="ml">Base</span><span class="mv2">Madrid, España</span></div>
+  <div><span class="ml">Áreas</span><span class="mv2">Automatización · Apps · IA</span></div>
+</div>
+<div class="pagefoot"><span></span><span></span></div>
+</section>
+</html>

@@ -1,0 +1,38 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1100 540" width="1100" height="540">
+<rect width="1100" height="540" fill="#ffffff"/>
+
+    <rect x="0" y="0" width="1100" height="70" fill="#0a2540"/>
+    <text x="550" y="44" font-family="Helvetica" font-weight="700" font-size="22" fill="#ffffff"
+          text-anchor="middle">RENDIMIENTO VERIFICADO POR CAPA</text>
+    <text x="550" y="62" font-family="Helvetica" font-size="13" fill="#00d2ff" text-anchor="middle"
+          letter-spacing="2">ÁREA BAJO LA CURVA (AUC) · 1,0 = DETECCIÓN PERFECTA · 0,5 = AZAR</text>
+    
+<text x="60" y="140" font-family="Helvetica" font-weight="700" font-size="14" fill="#0a2540">Forensia documental</text>
+<text x="60" y="157" font-family="Helvetica" font-size="11" fill="#4a5568" font-style="italic">DINOv2 + ELA · CASIA + IDNet-2025</text>
+<rect x="60" y="163" width="800" height="20" rx="5" fill="#cbd5e0"/>
+<rect x="60" y="163" width="798" height="20" rx="5" fill="#00d2ff"/>
+<text x="880" y="177" font-family="Helvetica" font-weight="700" font-size="20" fill="#0a2540">0.998</text>
+<rect x="970" y="160" width="120" height="26" rx="13" fill="#10b981"/>
+<text x="1030" y="177" font-family="Helvetica" font-weight="700" font-size="11" fill="#ffffff" text-anchor="middle">EXCEPCIONAL</text>
+<text x="60" y="220" font-family="Helvetica" font-weight="700" font-size="14" fill="#0a2540">Detección imagen IA</text>
+<text x="60" y="237" font-family="Helvetica" font-size="11" fill="#4a5568" font-style="italic">DINOv3 ViT-L/16 · Flux + SDXL + DALL-E 3</text>
+<rect x="60" y="243" width="800" height="20" rx="5" fill="#cbd5e0"/>
+<rect x="60" y="243" width="756" height="20" rx="5" fill="#00d2ff"/>
+<text x="880" y="257" font-family="Helvetica" font-weight="700" font-size="20" fill="#0a2540">0.945</text>
+<rect x="970" y="240" width="120" height="26" rx="13" fill="#0096c4"/>
+<text x="1030" y="257" font-family="Helvetica" font-weight="700" font-size="11" fill="#ffffff" text-anchor="middle">ALTA</text>
+<text x="60" y="300" font-family="Helvetica" font-weight="700" font-size="14" fill="#0a2540">Bot detection (tecleo)</text>
+<text x="60" y="317" font-family="Helvetica" font-size="11" fill="#4a5568" font-style="italic">Transformer 4-layer · 251 usuarios</text>
+<rect x="60" y="323" width="800" height="20" rx="5" fill="#cbd5e0"/>
+<rect x="60" y="323" width="759" height="20" rx="5" fill="#00d2ff"/>
+<text x="880" y="337" font-family="Helvetica" font-weight="700" font-size="20" fill="#0a2540">0.949</text>
+<rect x="970" y="320" width="120" height="26" rx="13" fill="#0096c4"/>
+<text x="1030" y="337" font-family="Helvetica" font-weight="700" font-size="11" fill="#ffffff" text-anchor="middle">ALTA</text>
+<text x="60" y="380" font-family="Helvetica" font-weight="700" font-size="14" fill="#0a2540">Detección deepfake (V3)</text>
+<text x="60" y="397" font-family="Helvetica" font-size="11" fill="#4a5568" font-style="italic">EfficientNet-B4 + FreqV2 · 7 datasets</text>
+<rect x="60" y="403" width="800" height="20" rx="5" fill="#cbd5e0"/>
+<rect x="60" y="403" width="799" height="20" rx="5" fill="#00d2ff"/>
+<text x="880" y="417" font-family="Helvetica" font-weight="700" font-size="20" fill="#0a2540">0.999</text>
+<rect x="970" y="400" width="120" height="26" rx="13" fill="#10b981"/>
+<text x="1030" y="417" font-family="Helvetica" font-weight="700" font-size="11" fill="#ffffff" text-anchor="middle">EXCEPCIONAL</text>
+</svg>
