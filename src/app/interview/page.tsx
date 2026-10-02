@@ -45,9 +45,45 @@ interface EvidenceEntry {
     reason: string
 }
 
+interface Assessment {
+    id: string
+    candidateName: string
+    role: string
+    date: string
+    score: number
+    status: 'passed' | 'review' | 'flagged'
+    alerts: AlertEntry[]
+    evidence: EvidenceEntry[]
+    lastEvent: string
+    livenessScore: number
+    aiRisk: number
+    keystrokeCount: number
+    tabSwitchCount: number
+    gazeEventCount: number
+    autoFlagged: boolean
+    sessionHash: string
+    certificateIssued: boolean
+    identityMatchScore?: number
+    blinkRate: number
+    blinkCount: number
+    avgBlinkDuration: number
+    headSymmetryScore: number
+    microMovementScore: number
+    gazeStabilityScore: number
+    faceBrightnessDelta: number
+    lightingChallengesPassed: number
+    lightingChallengesFailed: number
+    saccadeScore: number
+    blinkEdgeScore: number
+    ocoloManualScore: number
+    antiCheatFailures: number
+    enrollmentProfileId?: string
+    mlFlags?: unknown
+}
+
 // ─── Session Report ───────────────────────────────────────────────────────────
 
-function SessionReport({ assessment, onRestart }: { assessment: any; onRestart: () => void }) {
+function SessionReport({ assessment, onRestart }: { assessment: Assessment; onRestart: () => void }) {
     const scoreColor = assessment.score > 85 ? 'var(--color-primary)' : assessment.score > 60 ? '#ffd700' : '#ff4d4d'
     const statusLabel = assessment.status === 'passed' ? 'PASSED' : assessment.status === 'review' ? 'UNDER REVIEW' : 'FLAGGED'
     const [exportingPDF, setExportingPDF] = React.useState(false)
@@ -254,7 +290,7 @@ function SessionReport({ assessment, onRestart }: { assessment: any; onRestart: 
                             {assessment.sessionHash}
                         </div>
                         <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginTop: '8px' }}>
-                            Fingerprint criptográfico de esta sesión. Verifica que los datos no han sido alterados.
+                            Cryptographic fingerprint of this session. Verifies the report data has not been tampered with.
                         </div>
                     </div>
                 )}
@@ -262,7 +298,7 @@ function SessionReport({ assessment, onRestart }: { assessment: any; onRestart: 
                 <div style={{ display: 'flex', gap: '16px', paddingTop: '8px', flexWrap: 'wrap' }}>
                     <Link href="/dashboard" className="btn btn-primary">Go to Dashboard</Link>
                     <button onClick={handleExportPDF} className="btn btn-outline" disabled={exportingPDF}>
-                        {exportingPDF ? 'Generando PDF...' : '↓ Exportar Certificado PDF'}
+                        {exportingPDF ? 'Generating PDF...' : '↓ Export Trust Certificate PDF'}
                     </button>
                     <button onClick={onRestart} className="btn btn-outline">Start New Session</button>
                 </div>
@@ -282,7 +318,7 @@ export default function InterviewPage() {
     const [alerts, setAlerts]                     = useState<AlertEntry[]>([])
     const [isSaving, setIsSaving]                 = useState(false)
     const [sessionEnded, setSessionEnded]         = useState(false)
-    const [lastAssessment, setLastAssessment]     = useState<any>(null)
+    const [lastAssessment, setLastAssessment]     = useState<Assessment | null>(null)
     const [evidence, setEvidence]                 = useState<EvidenceEntry[]>([])
     // GDPR consent gate — session cannot start until candidate consents
     const [biometricConsent, setBiometricConsent] = useState(false)
@@ -506,8 +542,53 @@ export default function InterviewPage() {
                 // Gaze-cursor correlation confirmed — small recovery for false oculo desync
                 recoverTrust(4)
                 break
+            case 'blendshape_anomaly':
+                acFailedTotalRef.current++
+                addAlert(
+                    `Bilateral blendshape anomaly — unnatural facial symmetry detected. ${event.detail ?? ''}`,
+                    'medium', 10
+                )
+                break
+            case 'deepfake_cnn_alert':
+                acFailedTotalRef.current++
+                addAlert(
+                    `Deepfake CNN alert — ${event.detail ?? 'model flagged video feed'}`,
+                    'high', 25
+                )
+                setLiveMetrics(prev => ({ ...prev, aiRisk: Math.min(100, prev.aiRisk + 25) }))
+                break
+
+            case 'facs_violation':
+                acFailedTotalRef.current++
+                addAlert(
+                    `Biomechanical anomaly — ${event.detail ?? 'FACS constraint violated'}`,
+                    'medium', 15
+                )
+                setLiveMetrics(prev => ({ ...prev, aiRisk: Math.min(100, prev.aiRisk + 15) }))
+                break
+
+            case 'rppg_decoupling':
+                acFailedTotalRef.current++
+                addAlert(
+                    `Physiological signal absent — ${event.detail ?? 'rPPG-motion coupling not detected'}`,
+                    'high', 20
+                )
+                setLiveMetrics(prev => ({ ...prev, aiRisk: Math.min(100, prev.aiRisk + 20) }))
+                break
+
+            case 'veritas_alert':
+                acFailedTotalRef.current++
+                addAlert(
+                    event.detail ?? `Veritas Engine: synthetic identity detected (${Math.round((event.confidence ?? 0) * 100)}% probability)`,
+                    'high', 30
+                )
+                setLiveMetrics(prev => ({
+                    ...prev,
+                    aiRisk: Math.min(100, prev.aiRisk + 30),
+                }))
+                break
         }
-    }, [addAlert, recoverTrust])
+    }, [addAlert, recoverTrust, setLiveMetrics])
 
     // ── Lighting Challenge scheduler ──────────────────────────────────────────
     // Fires a random bright flash every 45–90 seconds after session start.
@@ -713,7 +794,7 @@ export default function InterviewPage() {
             addAlert('Window focus lost — candidate switched application', 'medium', 3, 'Focus Lost')
         }
 
-        const isExtended = (window.screen as any).isExtended || (window.screen.availWidth > window.screen.width * 1.5)
+        const isExtended = (window.screen as Screen & { isExtended?: boolean }).isExtended || (window.screen.availWidth > window.screen.width * 1.5)
         if (isExtended) {
             addAlert('Extended display detected — dual monitor environment', 'low', 0)
         }
@@ -742,7 +823,7 @@ export default function InterviewPage() {
         const finalScore = Math.max(trustScoreRef.current, Math.max(0, 100 - _wp))
 
         const autoFlagged   = tabSwitches >= 2
-        const status        = autoFlagged ? 'flagged' : finalScore > 85 ? 'passed' : finalScore > 60 ? 'review' : 'flagged'
+        const status: 'passed' | 'review' | 'flagged' = autoFlagged ? 'flagged' : finalScore > 85 ? 'passed' : finalScore > 60 ? 'review' : 'flagged'
 
         const sessionId = Math.random().toString(36).substr(2, 9)
         const sessionDate = new Date().toISOString().split('T')[0]
@@ -891,37 +972,61 @@ export default function InterviewPage() {
     if (!biometricConsent) {
         return (
             <div style={{ minHeight: '100vh', background: 'var(--color-bg)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px' }}>
-                <div style={{ maxWidth: 540, background: '#0d0d1f', border: '1px solid #1e1e3a', borderRadius: 16, padding: '40px 36px', textAlign: 'center' }}>
-                    <div style={{ fontSize: 40, marginBottom: 16 }}>🔒</div>
-                    <h2 style={{ fontSize: '1.3rem', color: '#e0e0e0', marginBottom: 12, fontFamily: 'monospace' }}>
-                        Consentimiento de datos biométricos
-                    </h2>
-                    <p style={{ fontSize: '0.88rem', color: '#666', lineHeight: 1.7, marginBottom: 24 }}>
-                        Esta sesión analiza en tiempo real:
-                        <br /><strong style={{ color: '#aaa' }}>patrones de escritura (dinámica de teclas)</strong> y{' '}
-                        <strong style={{ color: '#aaa' }}>detección facial de vivacidad</strong>.
-                        <br /><br />
-                        Todo el procesamiento ocurre <strong style={{ color: '#00ff9d' }}>localmente en tu navegador</strong>.
-                        Nunca se almacena vídeo, audio ni secuencias brutas de teclado.
-                        Solo se envían vectores numéricos derivados para puntuación.
-                    </p>
-                    <div style={{ background: '#111', border: '1px solid #222', borderRadius: 8, padding: '14px 16px', marginBottom: 24, textAlign: 'left' }}>
-                        <p style={{ fontSize: '0.78rem', color: '#555', margin: 0, lineHeight: 1.6 }}>
-                            Base legal: <strong style={{ color: '#888' }}>Consentimiento explícito</strong> (Art. 6(1)(a) + Art. 9(2)(a) RGPD).<br />
-                            Puedes retirar el consentimiento en cualquier momento cerrando la sesión.<br />
-                            <a href="/privacy" target="_blank" rel="noopener noreferrer" style={{ color: '#00cfff' }}>Ver Política de Privacidad completa →</a>
+                <div style={{ maxWidth: 560, background: '#0d0d1f', border: '1px solid #1e1e3a', borderRadius: 16, padding: '40px 36px' }}>
+                    {/* Header */}
+                    <div style={{ textAlign: 'center', marginBottom: 28 }}>
+                        <div style={{ fontSize: '1.4rem', fontWeight: 800, color: '#fff', marginBottom: 6 }}>
+                            Deep-Check<span style={{ color: 'var(--color-primary)' }}>.</span>
+                        </div>
+                        <div style={{ fontSize: '0.85rem', color: 'var(--color-text-muted)' }}>Identity Verification Session</div>
+                    </div>
+
+                    {/* What happens in this session */}
+                    <div style={{ marginBottom: 24 }}>
+                        <h3 style={{ fontSize: '1rem', color: '#e0e0e0', marginBottom: 16, fontWeight: 600 }}>
+                            What this session monitors:
+                        </h3>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                            {[
+                                { icon: '👁️', label: '6-Layer Liveness Detection', desc: 'Heartbeat signal, facial biomechanics, deepfake AI, micro-saccades, blink physics & lighting reflex' },
+                                { icon: '🧬', label: 'Keystroke DNA', desc: 'Flight times, hold times, rhythm — your typing pattern is as unique as a fingerprint' },
+                                { icon: '🔍', label: 'Code Forensics', desc: 'Detects AI-generated code, clipboard paste, and unnatural typing bursts in real time' },
+                            ].map(({ icon, label, desc }) => (
+                                <div key={label} style={{ display: 'flex', gap: 12, padding: '12px 14px', background: 'rgba(255,255,255,0.03)', borderRadius: 8, border: '1px solid rgba(255,255,255,0.06)' }}>
+                                    <span style={{ fontSize: '1.2rem', flexShrink: 0 }}>{icon}</span>
+                                    <div>
+                                        <div style={{ fontSize: '0.85rem', color: '#e0e0e0', fontWeight: 600, marginBottom: 2 }}>{label}</div>
+                                        <div style={{ fontSize: '0.78rem', color: '#555', lineHeight: 1.5 }}>{desc}</div>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+
+                    {/* Privacy notice */}
+                    <div style={{ background: 'rgba(0,212,127,0.05)', border: '1px solid rgba(0,212,127,0.15)', borderRadius: 8, padding: '12px 14px', marginBottom: 24 }}>
+                        <p style={{ fontSize: '0.8rem', color: '#555', margin: 0, lineHeight: 1.6 }}>
+                            <strong style={{ color: 'var(--color-primary)' }}>🛡️ Privacy-first:</strong> All processing happens{' '}
+                            <strong style={{ color: '#aaa' }}>locally in your browser</strong>. No video, audio, or raw keystrokes are stored.
+                            Only derived numerical vectors are sent for scoring.
+                            <br />
+                            Legal basis: <strong style={{ color: '#888' }}>Explicit Consent</strong> (Art. 6(1)(a) + Art. 9(2)(a) GDPR).
+                            {' '}<a href="/privacy" target="_blank" rel="noopener noreferrer" style={{ color: '#00cfff' }}>Privacy Policy →</a>
                         </p>
                     </div>
+
                     <button
                         className="btn btn-primary"
-                        style={{ width: '100%', marginBottom: 12 }}
+                        style={{ width: '100%', marginBottom: 12, fontSize: '1rem', padding: '14px' }}
                         onClick={() => setBiometricConsent(true)}
                     >
-                        ✓ Acepto — Iniciar sesión verificada
+                        ✓ I Consent — Start Verified Session
                     </button>
-                    <a href="/" style={{ fontSize: '0.8rem', color: '#444', textDecoration: 'none' }}>
-                        Cancelar y volver
-                    </a>
+                    <div style={{ textAlign: 'center' }}>
+                        <Link href="/" style={{ fontSize: '0.8rem', color: '#444', textDecoration: 'none' }}>
+                            Cancel and go back
+                        </Link>
+                    </div>
                 </div>
             </div>
         )

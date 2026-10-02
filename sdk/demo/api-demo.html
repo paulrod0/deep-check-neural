@@ -1,0 +1,833 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Deep-Check API Integration Demo</title>
+<style>
+  :root {
+    --bg: #0a0e17; --surface: #111827; --border: #1e293b;
+    --text: #e2e8f0; --muted: #94a3b8; --accent: #3b82f6;
+    --green: #10b981; --red: #ef4444; --yellow: #f59e0b; --purple: #8b5cf6;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: var(--bg); color: var(--text); font-family: 'Inter', system-ui, -apple-system, sans-serif; min-height: 100vh; }
+
+  .header { padding: 24px 32px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 16px; }
+  .header h1 { font-size: 20px; font-weight: 600; }
+  .header .badge { background: var(--accent); color: white; padding: 2px 10px; border-radius: 12px; font-size: 11px; font-weight: 600; }
+  .header .version { color: var(--muted); font-size: 13px; margin-left: auto; }
+
+  .config-bar { padding: 16px 32px; background: var(--surface); border-bottom: 1px solid var(--border); display: flex; gap: 16px; align-items: center; flex-wrap: wrap; }
+  .config-bar label { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; }
+  .config-bar input { background: var(--bg); border: 1px solid var(--border); color: var(--text); padding: 8px 12px; border-radius: 6px; font-size: 13px; font-family: 'JetBrains Mono', monospace; }
+  .config-bar input:focus { outline: none; border-color: var(--accent); }
+  #apiUrl { width: 280px; }
+  #apiKey { width: 200px; }
+  .status-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+  .status-dot.ok { background: var(--green); box-shadow: 0 0 6px var(--green); }
+  .status-dot.err { background: var(--red); }
+  .status-dot.pending { background: var(--yellow); animation: pulse 1s ease infinite; }
+  @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.4; } }
+  .health-btn { background: var(--accent); color: white; border: none; padding: 8px 16px; border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: 500; }
+  .health-btn:hover { background: #2563eb; }
+
+  .main { display: grid; grid-template-columns: 1fr 1fr; gap: 0; min-height: calc(100vh - 120px); }
+
+  .panel { padding: 24px 32px; }
+  .panel-left { border-right: 1px solid var(--border); }
+
+  .tabs { display: flex; gap: 4px; margin-bottom: 20px; }
+  .tab { padding: 8px 16px; border-radius: 6px; font-size: 13px; font-weight: 500; cursor: pointer; border: 1px solid transparent; color: var(--muted); transition: all 0.15s; }
+  .tab:hover { color: var(--text); background: var(--surface); }
+  .tab.active { background: var(--accent); color: white; border-color: var(--accent); }
+
+  .section { display: none; }
+  .section.active { display: block; }
+
+  h3 { font-size: 14px; font-weight: 600; margin-bottom: 12px; display: flex; align-items: center; gap: 8px; }
+
+  .upload-zone { border: 2px dashed var(--border); border-radius: 8px; padding: 32px; text-align: center; cursor: pointer; transition: all 0.2s; margin-bottom: 16px; }
+  .upload-zone:hover { border-color: var(--accent); background: rgba(59,130,246,0.05); }
+  .upload-zone.dragover { border-color: var(--accent); background: rgba(59,130,246,0.1); }
+  .upload-zone p { color: var(--muted); font-size: 13px; margin-top: 8px; }
+  .upload-zone .big { font-size: 28px; margin-bottom: 8px; }
+  .upload-zone img.preview { max-width: 200px; max-height: 150px; border-radius: 6px; margin-top: 8px; }
+
+  .options { display: flex; gap: 12px; margin-bottom: 16px; flex-wrap: wrap; }
+  .option { display: flex; align-items: center; gap: 6px; font-size: 13px; }
+
+  .run-btn { background: linear-gradient(135deg, var(--accent), var(--purple)); color: white; border: none; padding: 12px 24px; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; width: 100%; transition: all 0.2s; }
+  .run-btn:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(59,130,246,0.3); }
+  .run-btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; box-shadow: none; }
+
+  .keystroke-input { width: 100%; background: var(--bg); border: 1px solid var(--border); color: var(--text); padding: 16px; border-radius: 8px; font-size: 14px; margin-bottom: 8px; resize: none; }
+  .keystroke-input:focus { outline: none; border-color: var(--accent); }
+  .ks-stats { font-size: 12px; color: var(--muted); margin-bottom: 16px; }
+
+  .result-area { font-family: 'JetBrains Mono', monospace; font-size: 12px; }
+
+  .metric-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 16px; }
+  .metric { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 12px; }
+  .metric .label { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; }
+  .metric .value { font-size: 20px; font-weight: 700; margin-top: 4px; }
+  .metric .bar { height: 4px; background: var(--border); border-radius: 2px; margin-top: 6px; overflow: hidden; }
+  .metric .bar-fill { height: 100%; border-radius: 2px; transition: width 0.5s ease; }
+
+  .code-block { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 16px; overflow-x: auto; margin-bottom: 16px; }
+  .code-block pre { font-size: 11px; line-height: 1.6; white-space: pre-wrap; }
+  .code-block .title { font-size: 11px; color: var(--muted); margin-bottom: 8px; display: flex; justify-content: space-between; }
+
+  .spinner { display: inline-block; width: 16px; height: 16px; border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.6s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .lang-tabs { display: flex; gap: 4px; margin-bottom: 12px; }
+  .lang-tab { padding: 4px 12px; border-radius: 4px; font-size: 11px; cursor: pointer; color: var(--muted); border: 1px solid transparent; }
+  .lang-tab.active { background: var(--surface); color: var(--text); border-color: var(--border); }
+
+  .empty-state { text-align: center; padding: 60px 32px; color: var(--muted); }
+  .empty-state p { font-size: 13px; max-width: 300px; margin: 0 auto; }
+
+  .ocr-text { background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 12px; font-size: 12px; max-height: 200px; overflow-y: auto; margin-bottom: 12px; white-space: pre-wrap; }
+
+  .fields-grid { display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; font-size: 12px; margin-bottom: 12px; }
+  .fields-grid .key { color: var(--muted); }
+  .fields-grid .val { font-weight: 500; }
+</style>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+</head>
+<body>
+
+<div class="header">
+  <h1>Deep-Check</h1>
+  <span class="badge">API DEMO</span>
+  <span style="color: var(--muted); font-size: 13px;">Integration testing for CRM &amp; enterprise</span>
+  <span class="version">SDK v1.0 | ML Worker v3</span>
+</div>
+
+<div class="config-bar">
+  <div>
+    <label>API URL</label><br>
+    <input id="apiUrl" type="text" value="http://localhost:8001" placeholder="http://localhost:8001">
+  </div>
+  <div>
+    <label>API Key</label><br>
+    <input id="apiKey" type="password" placeholder="Optional">
+  </div>
+  <div style="display: flex; align-items: flex-end; gap: 8px;">
+    <button class="health-btn" id="healthBtn">Check Health</button>
+    <span id="healthStatus"></span>
+  </div>
+</div>
+
+<div class="main">
+  <div class="panel panel-left">
+    <div class="tabs" id="mainTabs"></div>
+
+    <div id="sec-deepfake" class="section active">
+      <h3>Deepfake Detection</h3>
+      <div class="upload-zone" id="dfUpload">
+        <div class="big">&#128247;</div>
+        <div>Drop image or click to upload</div>
+        <p>Supports JPEG, PNG, WebP (max 10MB)</p>
+        <input type="file" id="dfFile" accept="image/*" hidden>
+      </div>
+      <div class="options">
+        <label class="option"><input type="checkbox" id="dfTta" checked> TTA (5 passes, more accurate)</label>
+      </div>
+      <button class="run-btn" id="dfBtn" disabled>Analyze Image</button>
+    </div>
+
+    <div id="sec-document" class="section">
+      <h3>Document Verification</h3>
+      <div class="upload-zone" id="docUpload">
+        <div class="big">&#128179;</div>
+        <div>Drop document scan or click to upload</div>
+        <p>PDF or image (JPEG, PNG). DNI, passport, payslip, invoice... (195 countries)</p>
+        <input type="file" id="docFile" accept="image/*,.pdf,application/pdf" hidden>
+      </div>
+      <div class="options">
+        <label class="option"><input type="checkbox" id="docFull" checked> Full analysis (OCR + Gemma 4)</label>
+        <label class="option"><input type="checkbox" id="docMrz"> Extract MRZ</label>
+      </div>
+      <button class="run-btn" id="docBtn" disabled>Verify Document</button>
+
+      <div style="margin-top:20px;padding:16px;background:var(--surface);border:1px solid var(--border);border-radius:8px;">
+        <h3 style="font-size:12px;color:var(--accent);margin-bottom:12px;">VERIFICATION PIPELINE</h3>
+        <div style="font-size:11px;font-family:'JetBrains Mono',monospace;line-height:2;">
+          <div style="display:flex;align-items:center;gap:8px;">
+            <span style="background:#1e3a5f;padding:2px 8px;border-radius:4px;">1</span>
+            <span style="color:var(--muted);">Upload</span>
+            <span>PDF or image received</span>
+          </div>
+          <div style="margin-left:16px;color:var(--border);">|</div>
+          <div style="display:flex;align-items:center;gap:8px;">
+            <span style="background:#1e3a5f;padding:2px 8px;border-radius:4px;">2</span>
+            <span style="color:var(--muted);">PDF?</span>
+            <span>Auto-convert page 1 to JPEG 300dpi (PyMuPDF)</span>
+          </div>
+          <div style="margin-left:16px;color:var(--border);">|</div>
+          <div style="display:flex;align-items:center;gap:8px;">
+            <span style="background:#1e3a5f;padding:2px 8px;border-radius:4px;">3</span>
+            <span style="color:var(--muted);">ELA</span>
+            <span>Error Level Analysis (Q90+Q70+Q50 re-compression)</span>
+          </div>
+          <div style="margin-left:16px;color:var(--border);">|</div>
+          <div style="display:flex;align-items:center;gap:8px;">
+            <span style="background:#1e3a5f;padding:2px 8px;border-radius:4px;">4</span>
+            <span style="color:var(--muted);">DINOv2</span>
+            <span>ViT-L/14 pixel forensics (304M params, AUC 0.998)</span>
+          </div>
+          <div style="margin-left:16px;color:var(--border);">|</div>
+          <div style="display:flex;align-items:center;gap:8px;">
+            <span style="background:#1e3a5f;padding:2px 8px;border-radius:4px;">5</span>
+            <span style="color:var(--muted);">Score</span>
+            <span>p_tampered + verdict (authentic / suspicious / tampered)</span>
+          </div>
+          <div style="margin-left:16px;color:var(--border);">|</div>
+          <div style="display:flex;align-items:center;gap:8px;">
+            <span style="background:#2d1f5e;padding:2px 8px;border-radius:4px;">6</span>
+            <span style="color:var(--purple);">Gemma 4</span>
+            <span>OCR + MRZ parse + field coherence + explanation</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div id="sec-keystroke" class="section">
+      <h3>Keystroke Biometrics</h3>
+      <p style="font-size:13px;color:var(--muted);margin-bottom:12px;">Type naturally in the box below. We capture hold time and flight time to detect bots and verify identity.</p>
+      <textarea id="ksInput" class="keystroke-input" rows="4" placeholder="Start typing here... (minimum 10 keystrokes)"></textarea>
+      <div class="ks-stats">Keystrokes: <span id="ksCount">0</span> / 10 minimum | Status: <span id="ksReady">Need more keystrokes</span></div>
+      <div style="margin-bottom:12px;">
+        <input type="text" id="ksUserId" placeholder="User ID (optional)" style="background:var(--bg);border:1px solid var(--border);color:var(--text);padding:6px 10px;border-radius:4px;font-size:12px;width:180px;">
+      </div>
+      <button class="run-btn" id="ksBtn" disabled>Verify Keystroke Pattern</button>
+    </div>
+
+    <div id="sec-code" class="section">
+      <h3>Integration Code Samples</h3>
+      <div class="lang-tabs" id="langTabs"></div>
+      <div id="codeContainer"></div>
+    </div>
+  </div>
+
+  <div class="panel" id="resultsPanel">
+    <div class="empty-state" id="emptyState">
+      <h3 style="margin-bottom:8px;">Ready to verify</h3>
+      <p>Upload an image, scan a document, or type a keystroke sample to see live API results.</p>
+    </div>
+    <div id="resultContent" style="display:none;"></div>
+  </div>
+</div>
+
+<script>
+// ── State ──
+let dfImage = null, docImage = null;
+const collectedKeystrokes = [];
+let lastKeyUpTime = 0;
+
+// ── Helpers ──
+function esc(str) {
+  const div = document.createElement('div');
+  div.textContent = str;
+  return div.innerHTML;
+}
+
+function getConfig() {
+  return {
+    apiUrl: document.getElementById('apiUrl').value.replace(/\/+$/, ''),
+    apiKey: document.getElementById('apiKey').value,
+  };
+}
+
+function apiHeaders() {
+  const h = {};
+  const key = getConfig().apiKey;
+  if (key) h['Authorization'] = 'Bearer ' + key;
+  return h;
+}
+
+// ── Tabs setup ──
+(function initTabs() {
+  const tabData = [
+    { id: 'deepfake', label: 'Deepfake' },
+    { id: 'document', label: 'Document' },
+    { id: 'keystroke', label: 'Keystroke' },
+    { id: 'code', label: 'Code Samples' },
+  ];
+  const container = document.getElementById('mainTabs');
+  tabData.forEach(function(t, i) {
+    const el = document.createElement('div');
+    el.className = 'tab' + (i === 0 ? ' active' : '');
+    el.dataset.tab = t.id;
+    el.textContent = t.label;
+    el.addEventListener('click', function() {
+      container.querySelectorAll('.tab').forEach(function(x) { x.classList.remove('active'); });
+      document.querySelectorAll('.section').forEach(function(x) { x.classList.remove('active'); });
+      el.classList.add('active');
+      document.getElementById('sec-' + t.id).classList.add('active');
+    });
+    container.appendChild(el);
+  });
+})();
+
+// ── Code samples setup ──
+(function initCodeSamples() {
+  const samples = {
+    js: {
+      label: 'JavaScript',
+      code: 'import { DeepCheck } from "@deep-check/sdk";\n\nconst dc = new DeepCheck({\n  apiUrl: "https://verify.your-company.com:8001",\n  apiKey: "your-api-key",\n});\n\n// Single image\nconst result = await dc.detectDeepfake(file);\nconsole.log(result.verdict);   // "real" | "fake"\nconsole.log(result.pFake);     // 0.0 - 1.0\n\n// Document verification with OCR\nconst doc = await dc.verifyDocument(scan, { fullAnalysis: true });\nconsole.log(doc.verdict);      // "authentic" | "tampered"\nconsole.log(doc.ocrText);      // Extracted text\nconsole.log(doc.explanation);  // Gemma 4 explanation\n\n// Keystroke biometrics\nconst ks = await dc.verifyKeystroke(keystrokes, "user-123");\nconsole.log(ks.isBot);         // true | false\nconsole.log(ks.similarity);    // 0.0 - 1.0',
+    },
+    python: {
+      label: 'Python',
+      code: 'from deep_check_sdk import DeepCheck\n\ndc = DeepCheck(\n    api_url="https://verify.your-company.com:8001",\n    api_key="your-api-key",\n)\n\n# Deepfake detection\nresult = dc.detect_deepfake("selfie.jpg", use_tta=True)\nprint(result.verdict)      # "real" | "fake"\nprint(result.p_fake)       # 0.0 - 1.0\n\n# Document verification with full analysis\ndoc = dc.verify_document("dni_scan.jpg", full_analysis=True)\nprint(doc.verdict)         # "authentic" | "tampered"\nprint(doc.ocr_text)        # Extracted text\nprint(doc.explanation)     # Gemma 4 explanation\n\n# Keystroke biometrics\nks = dc.verify_keystroke(keystrokes, user_id="user-123")\nprint(ks.is_bot)           # True | False\nprint(ks.similarity)       # 0.0 - 1.0',
+    },
+    curl: {
+      label: 'cURL',
+      code: '# Health check\ncurl http://localhost:8001/health\n\n# Deepfake detection\ncurl -X POST http://localhost:8001/detect/deepfake \\\n  -H "Authorization: Bearer YOUR_KEY" \\\n  -F "image=@selfie.jpg" -F "use_tta=true"\n\n# Document verification (full pipeline)\ncurl -X POST http://localhost:8001/analyze/document \\\n  -F "image=@dni_scan.jpg"\n\n# Keystroke verification\ncurl -X POST http://localhost:8001/verify/keystroke \\\n  -H "Content-Type: application/json" \\\n  -d \'{"keystrokes":[{"hold_time":80,"flight_time":120}], "user_id":"user-123"}\'',
+    },
+  };
+
+  const langContainer = document.getElementById('langTabs');
+  const codeContainer = document.getElementById('codeContainer');
+  let activeLang = 'js';
+
+  function renderCode() {
+    while (codeContainer.firstChild) codeContainer.removeChild(codeContainer.firstChild);
+    const block = document.createElement('div');
+    block.className = 'code-block';
+    const pre = document.createElement('pre');
+    const code = document.createElement('code');
+    code.textContent = samples[activeLang].code;
+    pre.appendChild(code);
+    block.appendChild(pre);
+    codeContainer.appendChild(block);
+  }
+
+  Object.keys(samples).forEach(function(lang) {
+    const tab = document.createElement('div');
+    tab.className = 'lang-tab' + (lang === activeLang ? ' active' : '');
+    tab.textContent = samples[lang].label;
+    tab.addEventListener('click', function() {
+      langContainer.querySelectorAll('.lang-tab').forEach(function(x) { x.classList.remove('active'); });
+      tab.classList.add('active');
+      activeLang = lang;
+      renderCode();
+    });
+    langContainer.appendChild(tab);
+  });
+
+  renderCode();
+})();
+
+// ── Health Check ──
+document.getElementById('healthBtn').addEventListener('click', async function() {
+  var el = document.getElementById('healthStatus');
+  el.textContent = 'Connecting...';
+  try {
+    var res = await fetch(getConfig().apiUrl + '/health', { headers: apiHeaders(), signal: AbortSignal.timeout(5000) });
+    var j = await res.json();
+    var engines = Object.keys(j.engines || {}).map(function(k) { return k + ': ' + (j.engines[k].loaded ? 'OK' : 'OFF'); }).join(', ');
+    el.textContent = engines;
+    el.style.color = 'var(--green)';
+  } catch(e) {
+    el.textContent = 'Offline: ' + e.message;
+    el.style.color = 'var(--red)';
+  }
+});
+
+// ── File upload handlers ──
+function setupUpload(zoneId, fileId, type) {
+  var zone = document.getElementById(zoneId);
+  var fileInput = document.getElementById(fileId);
+
+  zone.addEventListener('click', function() { fileInput.click(); });
+  zone.addEventListener('dragover', function(e) { e.preventDefault(); zone.classList.add('dragover'); });
+  zone.addEventListener('dragleave', function() { zone.classList.remove('dragover'); });
+  zone.addEventListener('drop', function(e) {
+    e.preventDefault();
+    zone.classList.remove('dragover');
+    var file = e.dataTransfer.files[0];
+    if (!file) return;
+    var isImage = file.type.startsWith('image/');
+    var isPdf = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
+    if (type === 'df' && isImage) {
+      dfImage = file; document.getElementById('dfBtn').disabled = false;
+      showPreview(file, zone);
+    } else if (type === 'doc' && (isImage || isPdf)) {
+      docImage = file; document.getElementById('docBtn').disabled = false;
+      showPreview(file, zone);
+    }
+  });
+  fileInput.addEventListener('change', function() {
+    var file = fileInput.files[0];
+    if (!file) return;
+    if (type === 'df') { dfImage = file; document.getElementById('dfBtn').disabled = false; }
+    else { docImage = file; document.getElementById('docBtn').disabled = false; }
+    showPreview(file, zone);
+  });
+}
+
+function showPreview(file, zone) {
+  while (zone.firstChild) zone.removeChild(zone.firstChild);
+  var isPdf = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
+
+  if (isPdf) {
+    var icon = document.createElement('div');
+    icon.style.cssText = 'font-size:48px;margin-bottom:8px';
+    icon.textContent = '\uD83D\uDCC4';
+    zone.appendChild(icon);
+    var label = document.createElement('div');
+    label.style.cssText = 'font-size:14px;font-weight:600;color:var(--accent)';
+    label.textContent = 'PDF Document';
+    zone.appendChild(label);
+    var p = document.createElement('p');
+    p.textContent = file.name + ' (' + Math.round(file.size/1024) + ' KB)';
+    zone.appendChild(p);
+    var note = document.createElement('p');
+    note.style.cssText = 'font-size:11px;color:var(--muted);margin-top:4px';
+    note.textContent = 'Page 1 will be auto-converted to 300dpi JPEG for analysis';
+    zone.appendChild(note);
+    return;
+  }
+
+  var reader = new FileReader();
+  reader.onload = function(e) {
+    while (zone.firstChild) zone.removeChild(zone.firstChild);
+    var img = document.createElement('img');
+    img.src = e.target.result;
+    img.className = 'preview';
+    zone.appendChild(img);
+    var p = document.createElement('p');
+    p.textContent = file.name + ' (' + Math.round(file.size/1024) + ' KB)';
+    zone.appendChild(p);
+  };
+  reader.readAsDataURL(file);
+}
+
+setupUpload('dfUpload', 'dfFile', 'df');
+setupUpload('docUpload', 'docFile', 'doc');
+
+// ── Keystroke collector ──
+var ksInput = document.getElementById('ksInput');
+var pendingKeys = {};
+
+ksInput.addEventListener('keydown', function(e) {
+  if (e.repeat) return;
+  if (!pendingKeys[e.key]) {
+    pendingKeys[e.key] = { down: performance.now(), cat: categorizeKey(e.key) };
+  }
+});
+
+ksInput.addEventListener('keyup', function(e) {
+  var p = pendingKeys[e.key];
+  if (!p) return;
+  var now = performance.now();
+  collectedKeystrokes.push({
+    hold_time: Math.round((now - p.down) * 100) / 100,
+    flight_time: lastKeyUpTime > 0 ? Math.max(0, Math.round((p.down - lastKeyUpTime) * 100) / 100) : 0,
+    key_category: p.cat,
+  });
+  lastKeyUpTime = now;
+  delete pendingKeys[e.key];
+
+  var cnt = collectedKeystrokes.length;
+  document.getElementById('ksCount').textContent = cnt;
+  var readyEl = document.getElementById('ksReady');
+  if (cnt >= 10) {
+    readyEl.textContent = 'Ready';
+    readyEl.style.color = 'var(--green)';
+    document.getElementById('ksBtn').disabled = false;
+  }
+});
+
+function categorizeKey(key) {
+  if (/^[a-zA-Z]$/.test(key)) return 0;
+  if (/^[0-9]$/.test(key)) return 1;
+  if (key === ' ') return 3;
+  if (key === 'Backspace' || key === 'Delete') return 4;
+  return 2;
+}
+
+// ── Loading/Result display ──
+function showLoading(msg, isPipeline) {
+  document.getElementById('emptyState').style.display = 'none';
+  var rc = document.getElementById('resultContent');
+  rc.style.display = 'block';
+  while (rc.firstChild) rc.removeChild(rc.firstChild);
+
+  if (isPipeline) {
+    var wrapper = document.createElement('div');
+    wrapper.style.cssText = 'padding:24px';
+    wrapper.id = 'pipelineTracker';
+
+    var title = document.createElement('h3');
+    title.textContent = 'Processing Document...';
+    title.style.marginBottom = '16px';
+    wrapper.appendChild(title);
+
+    var steps = [
+      {id: 'step-upload', label: 'Upload received', icon: '\u2B06'},
+      {id: 'step-pdf', label: 'PDF to JPEG 300dpi', icon: '\uD83D\uDCC4'},
+      {id: 'step-ela', label: 'Error Level Analysis (Q90+Q70+Q50)', icon: '\uD83D\uDD0D'},
+      {id: 'step-dino', label: 'DINOv2 ViT-L/14 pixel forensics (304M)', icon: '\uD83E\uDDE0'},
+      {id: 'step-score', label: 'Scoring: p_tampered + verdict', icon: '\uD83C\uDFAF'},
+      {id: 'step-gemma', label: 'Gemma 4 E4B: OCR + MRZ + coherence', icon: '\u2728'},
+    ];
+
+    steps.forEach(function(step, i) {
+      var row = document.createElement('div');
+      row.id = step.id;
+      row.style.cssText = 'display:flex;align-items:center;gap:10px;padding:8px 12px;margin-bottom:4px;border-radius:6px;font-size:13px;font-family:JetBrains Mono,monospace;color:var(--muted);border:1px solid transparent';
+      var dot = document.createElement('span');
+      dot.className = 'pipeline-dot';
+      dot.style.cssText = 'width:24px;height:24px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;background:var(--border);flex-shrink:0';
+      dot.textContent = String(i + 1);
+      row.appendChild(dot);
+      var text = document.createElement('span');
+      text.textContent = step.label;
+      row.appendChild(text);
+      wrapper.appendChild(row);
+
+      if (i < steps.length - 1) {
+        var line = document.createElement('div');
+        line.style.cssText = 'margin-left:11px;width:2px;height:8px;background:var(--border)';
+        wrapper.appendChild(line);
+      }
+    });
+
+    rc.appendChild(wrapper);
+
+    // Animate steps
+    function activateStep(id, delay) {
+      setTimeout(function() {
+        var el = document.getElementById(id);
+        if (el) {
+          el.style.color = 'var(--text)';
+          el.style.borderColor = 'var(--accent)';
+          el.style.background = 'rgba(59,130,246,0.05)';
+          var dot = el.querySelector('.pipeline-dot');
+          if (dot) { dot.style.background = 'var(--accent)'; dot.style.color = 'white'; }
+        }
+      }, delay);
+    }
+    activateStep('step-upload', 100);
+    activateStep('step-pdf', 400);
+    activateStep('step-ela', 800);
+    activateStep('step-dino', 1200);
+    activateStep('step-score', 1800);
+    activateStep('step-gemma', 2400);
+    return;
+  }
+
+  var wrapper = document.createElement('div');
+  wrapper.style.cssText = 'text-align:center;padding:60px';
+  var spinner = document.createElement('div');
+  spinner.className = 'spinner';
+  wrapper.appendChild(spinner);
+  var p = document.createElement('p');
+  p.style.cssText = 'margin-top:12px;color:var(--muted);font-size:13px';
+  p.textContent = msg;
+  wrapper.appendChild(p);
+  rc.appendChild(wrapper);
+}
+
+function buildMetric(label, value, color, pct) {
+  var m = document.createElement('div');
+  m.className = 'metric';
+  var l = document.createElement('div');
+  l.className = 'label';
+  l.textContent = label;
+  m.appendChild(l);
+  var v = document.createElement('div');
+  v.className = 'value';
+  v.style.color = color || 'var(--text)';
+  v.textContent = value;
+  m.appendChild(v);
+  if (pct !== undefined) {
+    var bar = document.createElement('div');
+    bar.className = 'bar';
+    var fill = document.createElement('div');
+    fill.className = 'bar-fill';
+    fill.style.width = Math.min(100, pct) + '%';
+    fill.style.background = color || 'var(--accent)';
+    bar.appendChild(fill);
+    m.appendChild(bar);
+  }
+  return m;
+}
+
+function buildJsonBlock(title, obj) {
+  var block = document.createElement('div');
+  block.className = 'code-block';
+  block.style.marginTop = '16px';
+  var t = document.createElement('div');
+  t.className = 'title';
+  var span = document.createElement('span');
+  span.textContent = title;
+  t.appendChild(span);
+  block.appendChild(t);
+  var pre = document.createElement('pre');
+  pre.textContent = JSON.stringify(obj, null, 2);
+  block.appendChild(pre);
+  return block;
+}
+
+// ── API Calls ──
+document.getElementById('dfBtn').addEventListener('click', async function() {
+  if (!dfImage) return;
+  showLoading('Analyzing image for deepfake artifacts...');
+  var t0 = performance.now();
+  try {
+    var form = new FormData();
+    form.append('image', dfImage);
+    form.append('use_tta', document.getElementById('dfTta').checked ? 'true' : 'false');
+    var res = await fetch(getConfig().apiUrl + '/detect/deepfake', { method: 'POST', headers: apiHeaders(), body: form });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    var j = await res.json();
+    renderDeepfakeResult(j, Math.round(performance.now() - t0));
+  } catch(e) { renderError(e); }
+});
+
+document.getElementById('docBtn').addEventListener('click', async function() {
+  if (!docImage) return;
+  var full = document.getElementById('docFull').checked;
+  var wantMrz = document.getElementById('docMrz').checked;
+  showLoading('Analyzing document (forensics + AI)...', true);
+  var t0 = performance.now();
+  try {
+    var form = new FormData();
+    form.append('image', docImage);
+    var endpoint = full ? '/analyze/document' : '/detect/document';
+    var res = await fetch(getConfig().apiUrl + endpoint, { method: 'POST', headers: apiHeaders(), body: form });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    var j = await res.json();
+    var mrzData = null;
+    if (wantMrz) {
+      var form2 = new FormData();
+      form2.append('image', docImage);
+      var mrzRes = await fetch(getConfig().apiUrl + '/analyze/mrz', { method: 'POST', headers: apiHeaders(), body: form2 });
+      if (mrzRes.ok) mrzData = await mrzRes.json();
+    }
+    renderDocumentResult(j, mrzData, Math.round(performance.now() - t0));
+  } catch(e) { renderError(e); }
+});
+
+document.getElementById('ksBtn').addEventListener('click', async function() {
+  if (collectedKeystrokes.length < 10) return;
+  showLoading('Analyzing keystroke pattern...');
+  var t0 = performance.now();
+  try {
+    var payload = { keystrokes: collectedKeystrokes, user_id: document.getElementById('ksUserId').value || null };
+    var res = await fetch(getConfig().apiUrl + '/verify/keystroke', {
+      method: 'POST',
+      headers: Object.assign({}, apiHeaders(), { 'Content-Type': 'application/json' }),
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    var j = await res.json();
+    renderKeystrokeResult(j, Math.round(performance.now() - t0));
+  } catch(e) { renderError(e); }
+});
+
+// ── Renderers ──
+function renderDeepfakeResult(j, ms) {
+  var rc = document.getElementById('resultContent');
+  while (rc.firstChild) rc.removeChild(rc.firstChild);
+
+  var v = j.verdict || 'unknown';
+  var pf = j.p_fake != null ? j.p_fake : 0.5;
+  var auth = j.authenticity_score != null ? j.authenticity_score : 50;
+
+  var header = document.createElement('div');
+  header.style.cssText = 'display:flex;align-items:center;gap:8px;margin-bottom:16px;padding-bottom:12px;border-bottom:1px solid var(--border)';
+  var verdict = document.createElement('span');
+  verdict.style.cssText = 'font-size:24px;font-weight:700;color:' + (v === 'real' ? 'var(--green)' : v === 'suspicious' ? 'var(--yellow)' : 'var(--red)');
+  verdict.textContent = v.toUpperCase();
+  header.appendChild(verdict);
+  var meta = document.createElement('span');
+  meta.style.cssText = 'color:var(--muted);font-size:12px;margin-left:auto';
+  meta.textContent = ms + 'ms | ' + (j.model || 'ensemble') + ' | TTA: ' + (j.tta_passes || 1);
+  header.appendChild(meta);
+  rc.appendChild(header);
+
+  var grid = document.createElement('div');
+  grid.className = 'metric-grid';
+  grid.appendChild(buildMetric('P(Fake)', (pf * 100).toFixed(1) + '%', pf > 0.5 ? 'var(--red)' : 'var(--green)', pf * 100));
+  grid.appendChild(buildMetric('Authenticity', auth + '/100', auth > 50 ? 'var(--green)' : 'var(--red)', auth));
+  grid.appendChild(buildMetric('Confidence', (j.confidence || 'low').toUpperCase(), 'var(--text)'));
+  grid.appendChild(buildMetric('Processing', (j.processing_ms || ms) + 'ms', 'var(--text)'));
+  rc.appendChild(grid);
+
+  rc.appendChild(buildJsonBlock('Raw JSON Response', j));
+}
+
+function renderDocumentResult(j, mrzData, ms) {
+  var rc = document.getElementById('resultContent');
+  while (rc.firstChild) rc.removeChild(rc.firstChild);
+
+  var forensics = j.forensics || j;
+  var analysis = j.analysis || {};
+  var v = forensics.verdict || 'unknown';
+  var pt = forensics.p_tampered != null ? forensics.p_tampered : (forensics.p_fake != null ? forensics.p_fake : 0.5);
+
+  var header = document.createElement('div');
+  header.style.cssText = 'display:flex;align-items:center;gap:8px;margin-bottom:16px;padding-bottom:12px;border-bottom:1px solid var(--border)';
+  var verdict = document.createElement('span');
+  verdict.style.cssText = 'font-size:24px;font-weight:700;color:' + (v === 'authentic' ? 'var(--green)' : v === 'suspicious' ? 'var(--yellow)' : 'var(--red)');
+  verdict.textContent = v.toUpperCase();
+  header.appendChild(verdict);
+  var meta = document.createElement('span');
+  meta.style.cssText = 'color:var(--muted);font-size:12px;margin-left:auto';
+  meta.textContent = ms + 'ms | DINOv2 + Gemma 4';
+  header.appendChild(meta);
+  rc.appendChild(header);
+
+  var grid = document.createElement('div');
+  grid.className = 'metric-grid';
+  grid.appendChild(buildMetric('P(Tampered)', (pt * 100).toFixed(1) + '%', pt > 0.5 ? 'var(--red)' : 'var(--green)', pt * 100));
+  grid.appendChild(buildMetric('Processing', (j.processing_ms || ms) + 'ms', 'var(--text)'));
+  rc.appendChild(grid);
+
+  if (analysis.ocr_text) {
+    var ocrTitle = document.createElement('h3');
+    ocrTitle.textContent = 'OCR Text';
+    rc.appendChild(ocrTitle);
+    var ocrDiv = document.createElement('div');
+    ocrDiv.className = 'ocr-text';
+    ocrDiv.textContent = analysis.ocr_text;
+    rc.appendChild(ocrDiv);
+  }
+
+  if (analysis.fields && Object.keys(analysis.fields).length > 0) {
+    var fTitle = document.createElement('h3');
+    fTitle.textContent = 'Extracted Fields';
+    fTitle.style.marginTop = '16px';
+    rc.appendChild(fTitle);
+    var fGrid = document.createElement('div');
+    fGrid.className = 'fields-grid';
+    Object.keys(analysis.fields).forEach(function(k) {
+      var keyEl = document.createElement('div');
+      keyEl.className = 'key';
+      keyEl.textContent = k;
+      fGrid.appendChild(keyEl);
+      var valEl = document.createElement('div');
+      valEl.className = 'val';
+      valEl.textContent = analysis.fields[k];
+      fGrid.appendChild(valEl);
+    });
+    rc.appendChild(fGrid);
+  }
+
+  if (analysis.coherence_issues) {
+    var cTitle = document.createElement('h3');
+    cTitle.textContent = 'Coherence Issues';
+    cTitle.style.marginTop = '16px';
+    rc.appendChild(cTitle);
+    var cP = document.createElement('p');
+    cP.style.cssText = 'font-size:13px;color:var(--yellow);margin-bottom:12px';
+    cP.textContent = analysis.coherence_issues;
+    rc.appendChild(cP);
+  }
+
+  if (analysis.explanation) {
+    var eTitle = document.createElement('h3');
+    eTitle.textContent = 'AI Explanation';
+    eTitle.style.marginTop = '16px';
+    rc.appendChild(eTitle);
+    var eP = document.createElement('p');
+    eP.style.cssText = 'font-size:13px;line-height:1.6;margin-bottom:12px';
+    eP.textContent = analysis.explanation;
+    rc.appendChild(eP);
+  }
+
+  if (mrzData) {
+    var mTitle = document.createElement('h3');
+    mTitle.textContent = 'MRZ Data';
+    mTitle.style.marginTop = '16px';
+    rc.appendChild(mTitle);
+    var mGrid = document.createElement('div');
+    mGrid.className = 'fields-grid';
+    Object.keys(mrzData).forEach(function(k) {
+      if (k === 'raw') return;
+      var keyEl = document.createElement('div');
+      keyEl.className = 'key';
+      keyEl.textContent = k;
+      mGrid.appendChild(keyEl);
+      var valEl = document.createElement('div');
+      valEl.className = 'val';
+      valEl.textContent = String(mrzData[k]);
+      mGrid.appendChild(valEl);
+    });
+    rc.appendChild(mGrid);
+  }
+
+  rc.appendChild(buildJsonBlock('Raw JSON Response', j));
+}
+
+function renderKeystrokeResult(j, ms) {
+  var rc = document.getElementById('resultContent');
+  while (rc.firstChild) rc.removeChild(rc.firstChild);
+
+  var isBot = j.is_bot;
+  var bs = j.bot_score != null ? j.bot_score : 0;
+  var sim = j.similarity != null ? j.similarity : 0;
+
+  var header = document.createElement('div');
+  header.style.cssText = 'display:flex;align-items:center;gap:8px;margin-bottom:16px;padding-bottom:12px;border-bottom:1px solid var(--border)';
+  var verdict = document.createElement('span');
+  verdict.style.cssText = 'font-size:24px;font-weight:700;color:' + (isBot ? 'var(--red)' : 'var(--green)');
+  verdict.textContent = isBot ? 'BOT DETECTED' : 'HUMAN';
+  header.appendChild(verdict);
+  var meta = document.createElement('span');
+  meta.style.cssText = 'color:var(--muted);font-size:12px;margin-left:auto';
+  meta.textContent = ms + 'ms | Transformer 3.3M | ' + collectedKeystrokes.length + ' keystrokes';
+  header.appendChild(meta);
+  rc.appendChild(header);
+
+  var grid = document.createElement('div');
+  grid.className = 'metric-grid';
+  grid.appendChild(buildMetric('Bot Score', (bs * 100).toFixed(1) + '%', bs > 0.5 ? 'var(--red)' : 'var(--green)', bs * 100));
+  grid.appendChild(buildMetric('User Similarity', (sim * 100).toFixed(1) + '%', sim > 0.7 ? 'var(--green)' : 'var(--yellow)', sim * 100));
+  rc.appendChild(grid);
+
+  var sTitle = document.createElement('h3');
+  sTitle.textContent = 'Keystroke Timing Stats';
+  sTitle.style.marginTop = '16px';
+  rc.appendChild(sTitle);
+
+  var sGrid = document.createElement('div');
+  sGrid.className = 'metric-grid';
+  var avgHold = collectedKeystrokes.reduce(function(s,k) { return s + k.hold_time; }, 0) / collectedKeystrokes.length;
+  var flights = collectedKeystrokes.filter(function(k) { return k.flight_time > 0; });
+  var avgFlight = flights.length > 0 ? flights.reduce(function(s,k) { return s + k.flight_time; }, 0) / flights.length : 0;
+  sGrid.appendChild(buildMetric('Avg Hold Time', Math.round(avgHold) + 'ms', 'var(--text)'));
+  sGrid.appendChild(buildMetric('Avg Flight Time', Math.round(avgFlight) + 'ms', 'var(--text)'));
+  rc.appendChild(sGrid);
+
+  rc.appendChild(buildJsonBlock('Raw JSON Response', j));
+}
+
+function renderError(e) {
+  var rc = document.getElementById('resultContent');
+  while (rc.firstChild) rc.removeChild(rc.firstChild);
+  var wrapper = document.createElement('div');
+  wrapper.style.cssText = 'padding:32px;text-align:center';
+  var title = document.createElement('h3');
+  title.style.cssText = 'color:var(--red);margin-bottom:8px';
+  title.textContent = 'Request Failed';
+  wrapper.appendChild(title);
+  var msg = document.createElement('p');
+  msg.style.cssText = 'color:var(--muted);font-size:13px';
+  msg.textContent = e.message;
+  wrapper.appendChild(msg);
+  var hint = document.createElement('p');
+  hint.style.cssText = 'color:var(--muted);font-size:12px;margin-top:12px';
+  hint.textContent = 'Make sure the ML Worker is running at the configured API URL.';
+  wrapper.appendChild(hint);
+  rc.appendChild(wrapper);
+}
+</script>
+</body>
+</html>

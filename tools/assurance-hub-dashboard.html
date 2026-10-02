@@ -1,0 +1,541 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Assurance Hub — Dashboard</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+  body { font-family: 'Inter', sans-serif; }
+  .drop-zone { transition: all 0.2s; }
+  .drop-zone.dragover { border-color: #6366f1; background: #eef2ff; }
+</style>
+</head>
+<body class="bg-gray-50 min-h-screen">
+
+<!-- Header -->
+<header class="bg-white border-b border-gray-200 shadow-sm">
+  <div class="max-w-7xl mx-auto px-6 py-4 flex items-center gap-3">
+    <div class="w-10 h-10 bg-indigo-600 rounded-lg flex items-center justify-center">
+      <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+    </div>
+    <div>
+      <h1 class="text-xl font-bold text-gray-900">Assurance Hub</h1>
+      <p class="text-sm text-gray-500">Dashboard de Incidencias, Consultas y Otros</p>
+    </div>
+  </div>
+</header>
+
+<main class="max-w-7xl mx-auto px-6 py-8">
+
+  <!-- Upload zone -->
+  <div id="uploadSection">
+    <div id="dropZone" class="drop-zone border-2 border-dashed border-gray-300 rounded-2xl p-12 text-center cursor-pointer hover:border-indigo-400 hover:bg-indigo-50/30 bg-white">
+      <svg class="mx-auto w-16 h-16 text-gray-400 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/></svg>
+      <p class="text-lg font-semibold text-gray-700 mb-1">Arrastra tu CSV aqui</p>
+      <p class="text-sm text-gray-500 mb-4">o haz clic para seleccionar archivo</p>
+      <p class="text-xs text-gray-400">Formato: CSV separado por punto y coma (;) con codificacion Latin-1 / UTF-8</p>
+      <input type="file" id="fileInput" accept=".csv" class="hidden">
+    </div>
+  </div>
+
+  <!-- Dashboard (hidden until CSV loaded) -->
+  <div id="dashboard" class="hidden">
+
+    <!-- Controls -->
+    <div class="flex flex-wrap items-center gap-4 mb-6 bg-white rounded-xl p-4 shadow-sm border border-gray-100">
+      <div>
+        <label class="text-sm font-medium text-gray-600 block mb-1">Filtrar por mes</label>
+        <select id="monthFilter" class="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"></select>
+      </div>
+      <div class="ml-auto">
+        <button id="resetBtn" class="text-sm text-indigo-600 hover:text-indigo-800 font-medium flex items-center gap-1">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/></svg>
+          Cargar otro CSV
+        </button>
+      </div>
+    </div>
+
+    <!-- KPI Cards -->
+    <div id="kpiCards" class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8"></div>
+
+    <!-- Charts -->
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+      <div class="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
+        <h3 class="text-sm font-semibold text-gray-700 mb-4">Distribucion por Tipologia</h3>
+        <canvas id="tipologiaChart" height="220"></canvas>
+      </div>
+      <div class="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
+        <h3 class="text-sm font-semibold text-gray-700 mb-4">Estado de Resolucion</h3>
+        <canvas id="estadoChart" height="220"></canvas>
+      </div>
+    </div>
+
+    <!-- Report tables -->
+    <div id="reportTables"></div>
+
+    <!-- Summary -->
+    <div id="summaryTable" class="mt-8"></div>
+  </div>
+</main>
+
+<script>
+// ── CSV Parsing ──
+function parseCSV(text) {
+  const rows = [];
+  let current = '';
+  let inQuotes = false;
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (ch === '"') {
+      inQuotes = !inQuotes;
+      current += ch;
+    } else if (ch === '\n' && !inQuotes) {
+      rows.push(current);
+      current = '';
+    } else {
+      current += ch;
+    }
+  }
+  if (current.trim()) rows.push(current);
+  return rows.map(r => r.replace(/\r$/, '').split(';').map(c => c.replace(/^"|"$/g, '').trim()));
+}
+
+// ── Categorization logic (mirrors the Python script) ──
+function normalizeTipo(tipo) {
+  const t = tipo.toLowerCase();
+  if (t === 'incidencia') return 'Incidencia';
+  if (t === 'consulta') return 'Consulta';
+  if (t === 'otros') return 'Otros';
+  return null;
+}
+
+function normalizeTipologia(tipologia, titulo, desc) {
+  const tl = tipologia.toLowerCase();
+  if (tl.includes('datos') && tl.includes('prueba')) return 'Datos de Pruebas';
+  if (tl.includes('entorno') && tl.includes('prueba')) return 'Entornos de Pruebas';
+  if (tl === 'otros') return 'Otros';
+  if (!tl) {
+    const combined = (titulo + ' ' + desc).toLowerCase();
+    const datosKw = ['datos de prueba', 'tdm', 'casos de prueba', 'datapool', 'datanow'];
+    const entornosKw = ['entorno', 'tst', 'pre ', 'eden', 'eepp', 'deploy', 'healthy upstream', 'error 4', 'error 5', 'pipeline', 'distribuci', 'firma'];
+    if (datosKw.some(k => combined.includes(k))) return 'Datos de Pruebas';
+    if (entornosKw.some(k => combined.includes(k))) return 'Entornos de Pruebas';
+    return 'Otros';
+  }
+  return 'Otros';
+}
+
+function normalizeEstado(estado) {
+  const e = estado.toLowerCase().trim();
+  if (['resuelta', 'cerrada', 'completada'].includes(e)) return 'Resuelta';
+  if (['abierta', 'pendiente'].includes(e)) return 'Abierta';
+  return 'Sin estado';
+}
+
+function parseDate(dateStr) {
+  const m = dateStr.match(/^(\d{1,2})\/(\d{2})\/(\d{4})$/);
+  if (!m) return null;
+  return { day: parseInt(m[1]), month: parseInt(m[2]), year: parseInt(m[3]) };
+}
+
+const MONTH_NAMES = ['', 'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
+
+// ── Process CSV data ──
+let allEntries = [];
+
+function processCSV(text) {
+  const rows = parseCSV(text);
+  if (rows.length < 2) return;
+
+  allEntries = [];
+  for (let i = 1; i < rows.length; i++) {
+    const cols = rows[i];
+    if (cols.length < 20) continue;
+
+    const tipo = cols[6] || '';
+    const fecha = cols[7] || '';
+    const estado = cols[15] || '';
+    const tipologia = cols[19] || '';
+    const titulo = cols[12] || '';
+    const desc = cols[13] || '';
+    const petId = cols[4] || '';
+    const ambito = cols[0] || '';
+    const proyecto = cols[1] || '';
+
+    const d = parseDate(fecha);
+    if (!d) continue;
+
+    const tipoNorm = normalizeTipo(tipo);
+    if (!tipoNorm) continue;
+
+    allEntries.push({
+      month: d.month,
+      year: d.year,
+      monthKey: d.year + '-' + String(d.month).padStart(2, '0'),
+      monthLabel: MONTH_NAMES[d.month] + ' ' + d.year,
+      tipo: tipoNorm,
+      tipologia: normalizeTipologia(tipologia, titulo, desc),
+      estado: normalizeEstado(estado),
+      petId, titulo, ambito, proyecto, fecha
+    });
+  }
+
+  populateFilters();
+  renderDashboard();
+}
+
+// ── Filters ──
+function populateFilters() {
+  const months = [...new Set(allEntries.map(e => e.monthKey))].sort();
+  const sel = document.getElementById('monthFilter');
+  while (sel.firstChild) sel.removeChild(sel.firstChild);
+  const allOpt = document.createElement('option');
+  allOpt.value = 'all';
+  allOpt.textContent = 'Todos los meses';
+  sel.appendChild(allOpt);
+  months.forEach(mk => {
+    const entry = allEntries.find(e => e.monthKey === mk);
+    const opt = document.createElement('option');
+    opt.value = mk;
+    opt.textContent = entry.monthLabel;
+    sel.appendChild(opt);
+  });
+}
+
+function getFilteredEntries() {
+  const monthVal = document.getElementById('monthFilter').value;
+  if (monthVal === 'all') return allEntries;
+  return allEntries.filter(e => e.monthKey === monthVal);
+}
+
+// ── Safe DOM helpers ──
+function el(tag, attrs, children) {
+  const node = document.createElement(tag);
+  if (attrs) {
+    Object.keys(attrs).forEach(k => {
+      if (k === 'className') node.className = attrs[k];
+      else if (k === 'style') node.style.cssText = attrs[k];
+      else node.setAttribute(k, attrs[k]);
+    });
+  }
+  if (children !== undefined) {
+    if (typeof children === 'string') node.textContent = children;
+    else if (Array.isArray(children)) children.forEach(c => { if (c) node.appendChild(c); });
+    else if (children instanceof Node) node.appendChild(children);
+  }
+  return node;
+}
+
+function span(text, className) {
+  return el('span', { className }, text);
+}
+
+function td(text, className) {
+  return el('td', { className }, text);
+}
+
+function tdChild(child, className) {
+  const cell = el('td', { className });
+  cell.appendChild(child);
+  return cell;
+}
+
+function badge(text, colorClass) {
+  return el('span', { className: 'inline-flex items-center px-2 py-0.5 rounded-full font-medium ' + colorClass }, text);
+}
+
+function progressBar(pct, barColor) {
+  const wrap = el('div', { className: 'flex items-center gap-2 justify-center' });
+  const track = el('div', { className: 'w-16 bg-gray-200 rounded-full h-2' });
+  const fill = el('div', { className: barColor + ' h-2 rounded-full', style: 'width:' + pct + '%' });
+  track.appendChild(fill);
+  wrap.appendChild(track);
+  wrap.appendChild(el('span', { className: 'text-xs font-semibold text-gray-600' }, pct + '%'));
+  return wrap;
+}
+
+// ── Render ──
+let tipologiaChartInstance = null;
+let estadoChartInstance = null;
+
+function renderDashboard() {
+  const entries = getFilteredEntries();
+  const months = [...new Set(entries.map(e => e.monthKey))].sort();
+
+  // KPI Cards
+  const total = entries.length;
+  const resueltas = entries.filter(e => e.estado === 'Resuelta').length;
+  const abiertas = entries.filter(e => e.estado === 'Abierta').length;
+  const sinEstado = entries.filter(e => e.estado === 'Sin estado').length;
+  const pctRes = total ? Math.round(resueltas / total * 100) : 0;
+
+  const kpiContainer = document.getElementById('kpiCards');
+  while (kpiContainer.firstChild) kpiContainer.removeChild(kpiContainer.firstChild);
+  kpiContainer.appendChild(buildKpiCard('Total', total, 'text-indigo-700', 'border-indigo-200'));
+  kpiContainer.appendChild(buildKpiCard('Resueltas', resueltas, 'text-emerald-700', 'border-emerald-200', pctRes + '%', 'bg-emerald-50 text-emerald-700'));
+  kpiContainer.appendChild(buildKpiCard('Abiertas', abiertas, 'text-amber-700', 'border-amber-200'));
+  kpiContainer.appendChild(buildKpiCard('Sin estado', sinEstado, 'text-gray-600', 'border-gray-200'));
+
+  // Charts
+  renderTipologiaChart(entries);
+  renderEstadoChart(entries);
+
+  // Tables per month
+  const tablesContainer = document.getElementById('reportTables');
+  while (tablesContainer.firstChild) tablesContainer.removeChild(tablesContainer.firstChild);
+  months.forEach(mk => {
+    const monthEntries = entries.filter(e => e.monthKey === mk);
+    const label = monthEntries[0].monthLabel;
+    tablesContainer.appendChild(buildMonthReport(label, monthEntries));
+  });
+
+  // Summary table
+  const summaryContainer = document.getElementById('summaryTable');
+  while (summaryContainer.firstChild) summaryContainer.removeChild(summaryContainer.firstChild);
+  summaryContainer.appendChild(buildSummary(entries));
+}
+
+function buildKpiCard(label, value, textColor, borderColor, badgeText, badgeColor) {
+  const card = el('div', { className: 'bg-white rounded-xl p-5 shadow-sm border ' + borderColor });
+  card.appendChild(el('p', { className: 'text-sm font-medium text-gray-500 mb-1' }, label));
+  const row = el('div', { className: 'flex items-end gap-2' });
+  row.appendChild(el('span', { className: 'text-3xl font-bold ' + textColor }, String(value)));
+  if (badgeText) {
+    row.appendChild(el('span', { className: 'text-sm font-semibold px-2 py-0.5 rounded-full mb-1 ' + badgeColor }, badgeText));
+  }
+  card.appendChild(row);
+  return card;
+}
+
+function buildMonthReport(label, entries) {
+  const tipologias = ['Datos de Pruebas', 'Entornos de Pruebas', 'Otros'];
+  const tipos = ['Incidencia', 'Consulta', 'Otros'];
+  const colorMap = {
+    'Datos de Pruebas': { dot: 'bg-blue-500', text: 'text-blue-700', bg: 'bg-blue-50' },
+    'Entornos de Pruebas': { dot: 'bg-purple-500', text: 'text-purple-700', bg: 'bg-purple-50' },
+    'Otros': { dot: 'bg-gray-500', text: 'text-gray-700', bg: 'bg-gray-50' }
+  };
+
+  const card = el('div', { className: 'bg-white rounded-xl shadow-sm border border-gray-100 mb-6 overflow-hidden' });
+
+  // Header
+  const header = el('div', { className: 'px-6 py-4 bg-gray-50 border-b border-gray-100' });
+  const h2 = el('h2', { className: 'text-lg font-bold text-gray-800' });
+  h2.appendChild(document.createTextNode(label + ' '));
+  h2.appendChild(el('span', { className: 'text-sm font-normal text-gray-500' }, '(' + entries.length + ' entradas)'));
+  header.appendChild(h2);
+  card.appendChild(header);
+
+  const body = el('div', { className: 'p-6 space-y-6' });
+
+  tipologias.forEach(tip => {
+    const tipEntries = entries.filter(e => e.tipologia === tip);
+    if (tipEntries.length === 0) return;
+    const c = colorMap[tip];
+
+    const section = el('div');
+
+    // Section header
+    const sectionHeader = el('div', { className: 'flex items-center gap-2 mb-3' });
+    sectionHeader.appendChild(el('span', { className: 'w-3 h-3 rounded-full ' + c.dot }));
+    sectionHeader.appendChild(el('h3', { className: 'font-semibold ' + c.text }, tip));
+    sectionHeader.appendChild(el('span', { className: 'text-xs px-2 py-0.5 rounded-full font-medium ' + c.bg + ' ' + c.text }, String(tipEntries.length)));
+    section.appendChild(sectionHeader);
+
+    // Table
+    const table = el('table', { className: 'w-full' });
+
+    // Thead
+    const thead = el('thead');
+    const headRow = el('tr', { className: 'border-b border-gray-200' });
+    ['Tipo', 'Total', 'Resueltas', 'Abiertas', 'Sin estado'].forEach((h, i) => {
+      headRow.appendChild(el('th', { className: 'px-4 py-2 text-xs font-semibold text-gray-500 uppercase ' + (i === 0 ? 'text-left' : 'text-center') }, h));
+    });
+    thead.appendChild(headRow);
+    table.appendChild(thead);
+
+    // Tbody
+    const tbody = el('tbody', { className: 'divide-y divide-gray-100' });
+    let totalRes = 0, totalAb = 0, totalSin = 0;
+
+    tipos.forEach(tipo => {
+      const filtered = tipEntries.filter(e => e.tipo === tipo);
+      if (filtered.length === 0) return;
+      const res = filtered.filter(e => e.estado === 'Resuelta').length;
+      const ab = filtered.filter(e => e.estado === 'Abierta').length;
+      const sin = filtered.filter(e => e.estado === 'Sin estado').length;
+      totalRes += res; totalAb += ab; totalSin += sin;
+
+      const tr = el('tr', { className: 'hover:bg-gray-50' });
+      tr.appendChild(td(tipo, 'px-4 py-2.5 text-sm text-gray-700'));
+      tr.appendChild(td(String(filtered.length), 'px-4 py-2.5 text-sm text-center font-semibold'));
+      tr.appendChild(tdChild(badge(String(res), 'bg-emerald-100 text-emerald-800'), 'px-4 py-2.5 text-sm text-center'));
+      tr.appendChild(tdChild(badge(String(ab), 'bg-amber-100 text-amber-800'), 'px-4 py-2.5 text-sm text-center'));
+      tr.appendChild(td(sin ? String(sin) : '-', 'px-4 py-2.5 text-sm text-center text-gray-400'));
+      tbody.appendChild(tr);
+    });
+    table.appendChild(tbody);
+
+    // Tfoot
+    const tfoot = el('tfoot');
+    const footRow = el('tr', { className: 'border-t-2 border-gray-200 font-bold' });
+    footRow.appendChild(td('Subtotal', 'px-4 py-2.5 text-sm'));
+    footRow.appendChild(td(String(tipEntries.length), 'px-4 py-2.5 text-sm text-center'));
+    footRow.appendChild(td(String(totalRes), 'px-4 py-2.5 text-sm text-center text-emerald-700'));
+    footRow.appendChild(td(String(totalAb), 'px-4 py-2.5 text-sm text-center text-amber-700'));
+    footRow.appendChild(td(totalSin ? String(totalSin) : '-', 'px-4 py-2.5 text-sm text-center text-gray-500'));
+    tfoot.appendChild(footRow);
+    table.appendChild(tfoot);
+
+    section.appendChild(table);
+    body.appendChild(section);
+  });
+
+  card.appendChild(body);
+  return card;
+}
+
+function buildSummary(entries) {
+  const tipologias = ['Datos de Pruebas', 'Entornos de Pruebas', 'Otros'];
+
+  const card = el('div', { className: 'bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden' });
+  const header = el('div', { className: 'px-6 py-4 bg-gray-50 border-b border-gray-100' });
+  header.appendChild(el('h2', { className: 'text-lg font-bold text-gray-800' }, 'Resumen Global'));
+  card.appendChild(header);
+
+  const table = el('table', { className: 'w-full' });
+
+  // Thead
+  const thead = el('thead');
+  const headRow = el('tr', { className: 'border-b border-gray-200' });
+  ['Tipologia', 'Total', 'Resueltas', 'Abiertas', 'Sin estado', '% Resolucion'].forEach((h, i) => {
+    headRow.appendChild(el('th', { className: 'px-4 py-3 text-xs font-semibold text-gray-500 uppercase ' + (i === 0 ? 'text-left' : 'text-center') }, h));
+  });
+  thead.appendChild(headRow);
+  table.appendChild(thead);
+
+  // Tbody
+  const tbody = el('tbody', { className: 'divide-y divide-gray-100' });
+  let gTotal = 0, gRes = 0, gAb = 0, gSin = 0;
+
+  tipologias.forEach(tip => {
+    const f = entries.filter(e => e.tipologia === tip);
+    if (f.length === 0) return;
+    const res = f.filter(e => e.estado === 'Resuelta').length;
+    const ab = f.filter(e => e.estado === 'Abierta').length;
+    const sin = f.filter(e => e.estado === 'Sin estado').length;
+    const pct = f.length ? Math.round(res / f.length * 100) : 0;
+    gTotal += f.length; gRes += res; gAb += ab; gSin += sin;
+
+    const tr = el('tr', { className: 'hover:bg-gray-50' });
+    tr.appendChild(td(tip, 'px-4 py-3 text-sm font-medium text-gray-700'));
+    tr.appendChild(td(String(f.length), 'px-4 py-3 text-sm text-center font-semibold'));
+    tr.appendChild(tdChild(span(String(res), 'text-emerald-700 font-medium'), 'px-4 py-3 text-sm text-center'));
+    tr.appendChild(tdChild(span(String(ab), 'text-amber-700 font-medium'), 'px-4 py-3 text-sm text-center'));
+    tr.appendChild(td(sin ? String(sin) : '-', 'px-4 py-3 text-sm text-center text-gray-500'));
+    tr.appendChild(tdChild(progressBar(pct, 'bg-emerald-500'), 'px-4 py-3 text-sm text-center'));
+    tbody.appendChild(tr);
+  });
+  table.appendChild(tbody);
+
+  // Tfoot
+  const gPct = gTotal ? Math.round(gRes / gTotal * 100) : 0;
+  const tfoot = el('tfoot');
+  const footRow = el('tr', { className: 'border-t-2 border-gray-300 bg-gray-50 font-bold' });
+  footRow.appendChild(td('TOTAL', 'px-4 py-3 text-sm'));
+  footRow.appendChild(td(String(gTotal), 'px-4 py-3 text-sm text-center'));
+  footRow.appendChild(td(String(gRes), 'px-4 py-3 text-sm text-center text-emerald-700'));
+  footRow.appendChild(td(String(gAb), 'px-4 py-3 text-sm text-center text-amber-700'));
+  footRow.appendChild(td(gSin ? String(gSin) : '-', 'px-4 py-3 text-sm text-center text-gray-500'));
+
+  const totalBar = el('div', { className: 'flex items-center gap-2 justify-center' });
+  const totalTrack = el('div', { className: 'w-16 bg-gray-200 rounded-full h-2' });
+  const totalFill = el('div', { className: 'bg-indigo-500 h-2 rounded-full', style: 'width:' + gPct + '%' });
+  totalTrack.appendChild(totalFill);
+  totalBar.appendChild(totalTrack);
+  totalBar.appendChild(el('span', { className: 'text-xs font-bold text-indigo-700' }, gPct + '%'));
+  footRow.appendChild(tdChild(totalBar, 'px-4 py-3 text-sm text-center'));
+
+  tfoot.appendChild(footRow);
+  table.appendChild(tfoot);
+  card.appendChild(table);
+
+  return card;
+}
+
+// ── Charts ──
+function renderTipologiaChart(entries) {
+  const tipologias = ['Datos de Pruebas', 'Entornos de Pruebas', 'Otros'];
+  const data = tipologias.map(t => entries.filter(e => e.tipologia === t).length);
+  const colors = ['#3b82f6', '#8b5cf6', '#6b7280'];
+
+  if (tipologiaChartInstance) tipologiaChartInstance.destroy();
+  tipologiaChartInstance = new Chart(document.getElementById('tipologiaChart'), {
+    type: 'doughnut',
+    data: { labels: tipologias, datasets: [{ data, backgroundColor: colors, borderWidth: 0, hoverOffset: 8 }] },
+    options: { responsive: true, plugins: { legend: { position: 'bottom', labels: { padding: 16, usePointStyle: true, pointStyleWidth: 10 } } } }
+  });
+}
+
+function renderEstadoChart(entries) {
+  const tipologias = ['Datos de Pruebas', 'Entornos de Pruebas', 'Otros'];
+  const resueltas = tipologias.map(t => entries.filter(e => e.tipologia === t && e.estado === 'Resuelta').length);
+  const abiertas = tipologias.map(t => entries.filter(e => e.tipologia === t && e.estado === 'Abierta').length);
+  const sinEstado = tipologias.map(t => entries.filter(e => e.tipologia === t && e.estado === 'Sin estado').length);
+
+  if (estadoChartInstance) estadoChartInstance.destroy();
+  estadoChartInstance = new Chart(document.getElementById('estadoChart'), {
+    type: 'bar',
+    data: {
+      labels: ['Datos Pruebas', 'Entornos Pruebas', 'Otros'],
+      datasets: [
+        { label: 'Resueltas', data: resueltas, backgroundColor: '#10b981', borderRadius: 4 },
+        { label: 'Abiertas', data: abiertas, backgroundColor: '#f59e0b', borderRadius: 4 },
+        { label: 'Sin estado', data: sinEstado, backgroundColor: '#d1d5db', borderRadius: 4 }
+      ]
+    },
+    options: {
+      responsive: true,
+      scales: { x: { stacked: true }, y: { stacked: true, beginAtZero: true } },
+      plugins: { legend: { position: 'bottom', labels: { padding: 16, usePointStyle: true, pointStyleWidth: 10 } } }
+    }
+  });
+}
+
+// ── File handling ──
+const dropZone = document.getElementById('dropZone');
+const fileInput = document.getElementById('fileInput');
+
+dropZone.addEventListener('click', function() { fileInput.click(); });
+dropZone.addEventListener('dragover', function(e) { e.preventDefault(); dropZone.classList.add('dragover'); });
+dropZone.addEventListener('dragleave', function() { dropZone.classList.remove('dragover'); });
+dropZone.addEventListener('drop', function(e) {
+  e.preventDefault();
+  dropZone.classList.remove('dragover');
+  if (e.dataTransfer.files.length) handleFile(e.dataTransfer.files[0]);
+});
+fileInput.addEventListener('change', function(e) { if (e.target.files.length) handleFile(e.target.files[0]); });
+
+function handleFile(file) {
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    processCSV(e.target.result);
+    document.getElementById('uploadSection').classList.add('hidden');
+    document.getElementById('dashboard').classList.remove('hidden');
+  };
+  reader.readAsText(file, 'windows-1252');
+}
+
+document.getElementById('monthFilter').addEventListener('change', renderDashboard);
+document.getElementById('resetBtn').addEventListener('click', function() {
+  document.getElementById('dashboard').classList.add('hidden');
+  document.getElementById('uploadSection').classList.remove('hidden');
+  fileInput.value = '';
+  allEntries = [];
+});
+</script>
+</body>
+</html>

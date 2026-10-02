@@ -8,9 +8,10 @@ export default function InvestmentDeck() {
     const [activeSlide, setActiveSlide] = useState(0)
 
     useEffect(() => {
-        const handleScroll = (e: any) => {
+        const handleScroll = (e: Event) => {
             const slideHeight = window.innerHeight
-            const index = Math.round(e.target.scrollTop / slideHeight)
+            const target = e.target as HTMLElement | null
+            const index = Math.round((target?.scrollTop ?? 0) / slideHeight)
             setActiveSlide(index)
         }
 
@@ -61,7 +62,7 @@ export default function InvestmentDeck() {
                 <div className={styles.content}>
                     <span className={styles.tag}>The Solution</span>
                     <h2 className={styles.title} style={{ fontSize: '3.5rem' }}>Continuous <span className="text-gradient">Verification.</span></h2>
-                    <p className={styles.subtitle}>Deep-Check doesn't just verify at the gates. We monitor behavior, biometrics, and code integrity throughout the entire lifecycle.</p>
+                    <p className={styles.subtitle}>Deep-Check doesn&apos;t just verify at the gates. We monitor behavior, biometrics, and code integrity throughout the entire lifecycle.</p>
                     <div className={styles.grid}>
                         <div className={styles.card}>
                             <h3>Liveness Signature</h3>
@@ -86,7 +87,7 @@ export default function InvestmentDeck() {
                     <h2 className={styles.title} style={{ fontSize: '3.5rem' }}>Behavioral <span className="text-gradient">Biometrics.</span></h2>
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '60px', alignItems: 'center' }}>
                         <div>
-                            <p className={styles.subtitle}>Our proprietary Z-Score algorithm monitors the unique rhythm of a candidate's interaction.</p>
+                            <p className={styles.subtitle}>Our proprietary Z-Score algorithm monitors the unique rhythm of a candidate&apos;s interaction.</p>
                             <ul style={{ listStyle: 'none', padding: 0, marginTop: '24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
                                 <li style={{ display: 'flex', gap: '12px' }}>
                                     <span style={{ color: 'var(--color-primary)' }}>✓</span> Flight-time consistency analysis
@@ -122,7 +123,7 @@ export default function InvestmentDeck() {
                     <div className={styles.grid}>
                         <div className={styles.card}>
                             <h3>41%</h3>
-                            <p style={{ opacity: 0.6 }}>Of all code written in 2024 was AI-generated, creating an "Engineered Trust" vacuum.</p>
+                            <p style={{ opacity: 0.6 }}>Of all code written in 2024 was AI-generated, creating an &quot;Engineered Trust&quot; vacuum.</p>
                         </div>
                         <div className={styles.card}>
                             <h3>$16.6B</h3>

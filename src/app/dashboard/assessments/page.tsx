@@ -22,7 +22,7 @@ export default function AssessmentsPage() {
             try {
                 const res = await fetch('/api/assessments')
                 const data = await res.json()
-                setCandidates(data.map((a: any) => ({
+                setCandidates(data.map((a: Record<string, unknown>) => ({
                     id: a.id,
                     name: a.candidateName,
                     role: a.role,

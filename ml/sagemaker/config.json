@@ -1,0 +1,44 @@
+{
+  "sagemaker": {
+    "region": "eu-west-1",
+    "role_arn": "arn:aws:iam::role/DeepCheckSageMakerRole",
+    "training": {
+      "instance_type": "ml.g4dn.xlarge",
+      "instance_count": 1,
+      "volume_size_gb": 50,
+      "max_runtime_seconds": 7200,
+      "hyperparameters": {
+        "warmup-epochs": "5",
+        "finetune-epochs": "15",
+        "mining-epochs": "5",
+        "batch-size": "32"
+      }
+    },
+    "inference": {
+      "instance_type": "ml.g4dn.xlarge",
+      "instance_count": 1,
+      "endpoint_name": "deep-check-doc-fraud"
+    },
+    "data": {
+      "s3_bucket": "deep-check-ml",
+      "training_prefix": "training-data/combined",
+      "feedback_prefix": "feedback-data",
+      "models_prefix": "models",
+      "retrain_threshold": 100
+    },
+    "continuous_learning": {
+      "enabled": true,
+      "min_samples_for_retrain": 100,
+      "retrain_schedule": "weekly",
+      "auto_deploy": true,
+      "rollback_if_auc_drops": true,
+      "min_auc_threshold": 0.80
+    }
+  },
+  "onpremise": {
+    "inference_mode": "onnx_local",
+    "model_path": "public/models/efficientnet_doc_fraud.onnx",
+    "metadata_path": "public/models/efficientnet_doc_fraud_metadata.json",
+    "no_external_calls": true
+  }
+}

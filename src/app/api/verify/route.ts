@@ -13,7 +13,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
-import { getAssessmentById, initDb } from '@/lib/db'
+import { getAssessmentByIdUnscoped, initDb } from '@/lib/db'
 import crypto from 'crypto'
 
 function cors(res: NextResponse) {
@@ -40,7 +40,7 @@ export async function GET(req: NextRequest) {
         }, { status: 400 }))
     }
 
-    const assessment = await getAssessmentById(id)
+    const assessment = await getAssessmentByIdUnscoped(id)
 
     if (!assessment) {
         return cors(NextResponse.json({
@@ -77,7 +77,7 @@ export async function GET(req: NextRequest) {
         hashMatch = assessment.sessionHash.toLowerCase() === expectedHash.toLowerCase()
     }
 
-    const isValid = assessment.status !== undefined
+    const isValid = !!assessment.status && ['passed', 'review', 'flagged'].includes(assessment.status)
     const isPassed = assessment.status === 'passed'
     const isFlagged = assessment.status === 'flagged'
 

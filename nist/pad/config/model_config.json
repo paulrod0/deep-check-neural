@@ -1,0 +1,43 @@
+{
+  "provider": "deepcheck",
+  "model": "deepfake_pixel_v1",
+  "version": "2.0.0",
+  "architecture": "EfficientNet-B4 + FrequencyBranch (Laplacian convolution)",
+  "input": {
+    "name": "face_image",
+    "shape": [1, 3, 224, 224],
+    "normalization": "ImageNet (mean=[0.485,0.456,0.406], std=[0.229,0.224,0.225])"
+  },
+  "output": {
+    "name": "logit",
+    "shape": [1],
+    "activation": "sigmoid → P(attack)"
+  },
+  "training": {
+    "datasets": [
+      "FaceForensics++ C23 (182K extracted faces)",
+      "DFDC (124K extracted faces)",
+      "CelebDF v2 (130K extracted faces)"
+    ],
+    "attack_types": [
+      "Face2Face",
+      "FaceSwap",
+      "NeuralTextures",
+      "DeepFaceLab",
+      "Video replay",
+      "GAN generation"
+    ],
+    "metrics": {
+      "faceforensics_auc": 0.9602,
+      "dfdc_auc": 0.9434,
+      "celebdf_auc": 0.9913,
+      "celebdf_eer": 0.0455
+    }
+  },
+  "onnx": {
+    "opset": 17,
+    "runtime": "onnxruntime >= 1.15",
+    "size_mb": 68.6
+  },
+  "note": "Copy deepfake_pixel_v1.onnx to this directory before building"
+}

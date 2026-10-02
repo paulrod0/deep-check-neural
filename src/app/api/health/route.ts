@@ -5,6 +5,8 @@
  * Returns 200 + JSON payload when the Next.js server is up.
  * Optionally probes Supabase/PostgREST connectivity so the orchestrator
  * knows the whole stack is ready, not just the Node process.
+ *
+ * Note: Does NOT expose version, deploy mode, or uptime to avoid fingerprinting.
  */
 
 import { NextResponse } from 'next/server'
@@ -15,18 +17,12 @@ export const dynamic = 'force-dynamic'
 export async function GET() {
     const start = Date.now()
 
-    const status: {
+    const result: {
         status: 'ok' | 'degraded'
-        version: string
-        deployMode: string
-        uptime: number
         db?: 'ok' | 'error'
         latencyMs: number
     } = {
         status: 'ok',
-        version: process.env.npm_package_version ?? '0.0.0',
-        deployMode: process.env.NEXT_PUBLIC_DEPLOY_MODE ?? 'saas',
-        uptime: Math.floor(process.uptime()),
         latencyMs: 0,
     }
 
@@ -38,18 +34,18 @@ export async function GET() {
                 const res = await fetch(`${supabaseUrl}/`, {
                     signal: AbortSignal.timeout(3000),
                 })
-                status.db = res.ok ? 'ok' : 'error'
-                if (!res.ok) status.status = 'degraded'
+                result.db = res.ok ? 'ok' : 'error'
+                if (!res.ok) result.status = 'degraded'
             }
         } catch {
-            status.db = 'error'
-            status.status = 'degraded'
+            result.db = 'error'
+            result.status = 'degraded'
         }
     }
 
-    status.latencyMs = Date.now() - start
+    result.latencyMs = Date.now() - start
 
-    const httpStatus = status.status === 'ok' ? 200 : 503
+    const httpStatus = result.status === 'ok' ? 200 : 503
 
-    return NextResponse.json(status, { status: httpStatus })
+    return NextResponse.json(result, { status: httpStatus })
 }

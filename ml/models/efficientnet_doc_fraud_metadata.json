@@ -1,0 +1,168 @@
+{
+  "model": "efficientnet_b4_real_data",
+  "backbone": "efficientnet_b4",
+  "img_size": 380,
+  "pretrained_backbone": "imagenet",
+  "finetune_mode": "2_phase_real_data",
+  "training_phases": [
+    {
+      "phase": 1,
+      "name": "head_warmup",
+      "epochs": 5,
+      "backbone_frozen": true
+    },
+    {
+      "phase": 2,
+      "name": "partial_backbone_finetune",
+      "epochs": 8,
+      "unfrozen_layers": 84,
+      "backbone_lr": "5e-5",
+      "head_lr": "3e-4"
+    }
+  ],
+  "total_epochs": 13,
+  "real_data_sources": [
+    "ud-biometrics/passport-dataset",
+    "ud-biometrics/Selfie-and-ID-Dataset",
+    "UniDataPro/synthetic-passports",
+    "sugiv/synthetic_cards",
+    "TrainingDataPro/generated-passports-segmentation"
+  ],
+  "training_samples": 1568,
+  "test_samples": 392,
+  "augmentation": "crop, flip, rotate, color_jitter",
+  "test_auc": 0.8535,
+  "test_accuracy": 0.8418,
+  "test_f1": 0.8987,
+  "best_auc": 0.8535,
+  "threshold": 0.5,
+  "calibration": {
+    "method": "platt_real",
+    "coef": 1.0,
+    "intercept": 0.0
+  },
+  "parameters": 18467145,
+  "model_size_mb": 70.3,
+  "training_history": [
+    {
+      "phase": 1,
+      "epoch": 1,
+      "train_loss": 0.5523,
+      "train_acc": 0.7436,
+      "test_auc": 0.7497,
+      "test_acc": 0.801,
+      "test_f1": 0.8713
+    },
+    {
+      "phase": 1,
+      "epoch": 2,
+      "train_loss": 0.5104,
+      "train_acc": 0.7577,
+      "test_auc": 0.7344,
+      "test_acc": 0.6837,
+      "test_f1": 0.7729
+    },
+    {
+      "phase": 1,
+      "epoch": 3,
+      "train_loss": 0.4734,
+      "train_acc": 0.7691,
+      "test_auc": 0.7632,
+      "test_acc": 0.7628,
+      "test_f1": 0.8388
+    },
+    {
+      "phase": 1,
+      "epoch": 4,
+      "train_loss": 0.4551,
+      "train_acc": 0.7749,
+      "test_auc": 0.7929,
+      "test_acc": 0.7908,
+      "test_f1": 0.861
+    },
+    {
+      "phase": 1,
+      "epoch": 5,
+      "train_loss": 0.4466,
+      "train_acc": 0.7812,
+      "test_auc": 0.7696,
+      "test_acc": 0.7577,
+      "test_f1": 0.8348
+    },
+    {
+      "phase": 2,
+      "epoch": 1,
+      "train_loss": 0.4689,
+      "train_acc": 0.7666,
+      "test_auc": 0.8197,
+      "test_acc": 0.8036,
+      "test_f1": 0.871
+    },
+    {
+      "phase": 2,
+      "epoch": 2,
+      "train_loss": 0.4146,
+      "train_acc": 0.8029,
+      "test_auc": 0.8377,
+      "test_acc": 0.8291,
+      "test_f1": 0.89
+    },
+    {
+      "phase": 2,
+      "epoch": 3,
+      "train_loss": 0.3967,
+      "train_acc": 0.8061,
+      "test_auc": 0.8431,
+      "test_acc": 0.8163,
+      "test_f1": 0.8857
+    },
+    {
+      "phase": 2,
+      "epoch": 4,
+      "train_loss": 0.38,
+      "train_acc": 0.8202,
+      "test_auc": 0.8406,
+      "test_acc": 0.8189,
+      "test_f1": 0.8819
+    },
+    {
+      "phase": 2,
+      "epoch": 5,
+      "train_loss": 0.3665,
+      "train_acc": 0.8233,
+      "test_auc": 0.8293,
+      "test_acc": 0.8138,
+      "test_f1": 0.8824
+    },
+    {
+      "phase": 2,
+      "epoch": 6,
+      "train_loss": 0.3512,
+      "train_acc": 0.8297,
+      "test_auc": 0.8468,
+      "test_acc": 0.8214,
+      "test_f1": 0.886
+    },
+    {
+      "phase": 2,
+      "epoch": 7,
+      "train_loss": 0.3398,
+      "train_acc": 0.8316,
+      "test_auc": 0.8507,
+      "test_acc": 0.8265,
+      "test_f1": 0.8889
+    },
+    {
+      "phase": 2,
+      "epoch": 8,
+      "train_loss": 0.3554,
+      "train_acc": 0.824,
+      "test_auc": 0.8535,
+      "test_acc": 0.8418,
+      "test_f1": 0.8987
+    }
+  ],
+  "export_date": "2026-03-17T11:59:53",
+  "training_time_s": 4289.5,
+  "data_source": "Real documents (1568 train + 392 test) from 5 HuggingFace sources"
+}

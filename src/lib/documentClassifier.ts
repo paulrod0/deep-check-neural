@@ -124,7 +124,7 @@ export function classifyDocument(img: HTMLImageElement): DocumentClassification 
     const edgeFrac = edgeCount / (sw * sh)
 
     // --- Scoring ---
-    let scores: Partial<Record<DocumentType, number>> = {
+    const scores: Partial<Record<DocumentType, number>> = {
         dni: 0, factura: 0, foto_persona: 0, captura_pantalla: 0, documento_generico: 0,
     }
 
